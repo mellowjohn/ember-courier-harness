@@ -10,17 +10,17 @@ This repository is **documentation only**: architecture, contracts, pipeline, co
 - **Architecture (merged source of truth):** [`docs/architecture/ARCHITECTURE_DRAFT_v4.md`](docs/architecture/ARCHITECTURE_DRAFT_v4.md)
 - **Contracts (reading order):** [`docs/contracts/README.md`](docs/contracts/README.md)
 
+Optional area skills (stubs): `.agents/skills/{contracts,pipeline,concepts,triage}/`.
+
 ## Documentation tree
 
-| Path | Contents | Agent guide |
-|------|----------|-------------|
-| `docs/architecture/` | Architecture draft v4 | [`docs/architecture/AGENTS.md`](docs/architecture/AGENTS.md) |
-| `docs/contracts/` | Contract system, schema decisions, fixes, addenda, approval/PR notes | [`docs/contracts/AGENTS.md`](docs/contracts/AGENTS.md) |
-| `docs/pipeline/` | Pipeline subsystem and iteration addenda | [`docs/pipeline/AGENTS.md`](docs/pipeline/AGENTS.md) |
-| `docs/concepts/` | Concept step spec and art direction | [`docs/concepts/AGENTS.md`](docs/concepts/AGENTS.md) |
-| `docs/triage/` | Triage and code step specs | [`docs/triage/AGENTS.md`](docs/triage/AGENTS.md) |
-
-Cursor merges root [`AGENTS.md`](AGENTS.md) with the nearest nested `AGENTS.md`; the closest file wins on conflict.
+| Path | Contents |
+|------|----------|
+| `docs/architecture/` | Architecture draft v4 |
+| `docs/contracts/` | Contract system, schema decisions, fixes, addenda, approval/PR notes |
+| `docs/pipeline/` | Pipeline subsystem and iteration addenda |
+| `docs/concepts/` | Concept step spec and art direction |
+| `docs/triage/` | Triage and code step specs |
 
 ## Conventions
 
