@@ -1,0 +1,200 @@
+{
+  "agent.propose": {
+    "class": "compute",
+    "args": ["source", "model", "binary_sha256"],
+    "paths": {"source": "read"}
+  },
+  "concept.select": {
+    "class": "direction_selection",
+    "args": ["manifest", "review_ref", "choice"],
+    "paths": {"manifest": "read"}
+  },
+  "triage.inspect": {
+    "class": "read",
+    "args": [
+      "path"
+    ],
+    "paths": {
+      "path": "read"
+    }
+  },
+  "triage.ingest": {
+    "class": "write",
+    "args": [
+      "source",
+      "dest"
+    ],
+    "paths": {
+      "source": "read",
+      "dest": "write"
+    }
+  },
+  "triage.confirm_duplicate": {
+    "class": "write",
+    "args": [
+      "path",
+      "target",
+      "note"
+    ],
+    "paths": {
+      "path": "write",
+      "target": "write"
+    }
+  },
+  "triage.review_severity": {
+    "class": "write",
+    "args": [
+      "path",
+      "severity",
+      "demo_impact",
+      "note"
+    ],
+    "paths": {
+      "path": "write"
+    }
+  },
+  "test.run": {
+    "class": "compute",
+    "args": [
+      "script"
+    ],
+    "paths": {
+      "script": "read"
+    }
+  },
+  "git.add": {
+    "class": "local_commit",
+    "args": [
+      "branch",
+      "path"
+    ],
+    "paths": {
+      "path": "write"
+    }
+  },
+  "git.commit": {
+    "class": "local_commit",
+    "args": [
+      "branch",
+      "message"
+    ],
+    "paths": {}
+  },
+  "fs.read": {
+    "class": "read",
+    "args": [
+      "path"
+    ],
+    "paths": {
+      "path": "read"
+    }
+  },
+  "fs.sha256": {
+    "class": "read",
+    "args": [
+      "path"
+    ],
+    "paths": {
+      "path": "read"
+    }
+  },
+  "fs.write": {
+    "class": "write",
+    "args": [
+      "path",
+      "content",
+      "expected_sha256"
+    ],
+    "paths": {
+      "path": "write"
+    }
+  },
+  "fs.copy": {
+    "class": "write",
+    "args": [
+      "src",
+      "dest",
+      "expected_sha256"
+    ],
+    "paths": {
+      "src": "read",
+      "dest": "write"
+    }
+  },
+  "image.convert_png": {
+    "class": "write",
+    "args": [
+      "src",
+      "dest",
+      "expected_sha256"
+    ],
+    "paths": {
+      "src": "read",
+      "dest": "write"
+    }
+  },
+  "git.open_pr": {
+    "class": "push",
+    "args": [
+      "branch",
+      "base",
+      "force",
+      "commit"
+    ],
+    "paths": {}
+  },
+  "scope.select": {
+    "class": "direction_selection",
+    "args": [
+      "selection"
+    ],
+    "paths": {}
+  },
+  "asset.accept": {
+    "class": "asset_acceptance",
+    "args": [
+      "path",
+      "sha256"
+    ],
+    "paths": {
+      "path": "read"
+    }
+  },
+  "triage.close": {
+    "class": "bug_close",
+    "args": [
+      "bug_id",
+      "severity"
+    ],
+    "paths": {}
+  },
+  "triage.reopen": {
+    "class": "write",
+    "args": [
+      "path",
+      "reason"
+    ],
+    "paths": {
+      "path": "write"
+    }
+  },
+  "review.inspect": {
+    "class": "read",
+    "args": [
+      "path"
+    ],
+    "paths": {
+      "path": "read"
+    }
+  },
+  "review.muse": {
+    "class": "compute",
+    "args": [
+      "request",
+      "provider"
+    ],
+    "paths": {
+      "request": "read"
+    }
+  }
+}

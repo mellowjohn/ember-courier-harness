@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source",
+    "summary"
+  ],
+  "properties": {
+    "source": {
+      "enum": [
+        "vision_qa",
+        "playtest",
+        "log",
+        "code_review"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "timestamp": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "build_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256
+    },
+    "build_family": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256
+    },
+    "area": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    },
+    "symptom_tag": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 128
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      },
+      "maxItems": 50
+    },
+    "expected": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4000
+    },
+    "actual": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4000
+    },
+    "frequency": {
+      "enum": [
+        null,
+        "always",
+        "often",
+        "sometimes",
+        "once"
+      ]
+    },
+    "severity": {
+      "enum": [
+        "S0",
+        "S1",
+        "S2",
+        "S3"
+      ]
+    },
+    "impact": {
+      "enum": [
+        "crash",
+        "hang",
+        "data_loss",
+        "blocks_demo",
+        "core_loop_broken",
+        "degraded",
+        "cosmetic"
+      ]
+    },
+    "demo_impact": {
+      "type": "boolean"
+    },
+    "log_excerpt": {
+      "type": "string",
+      "maxLength": 16000
+    },
+    "subsystem": {
+      "type": "string",
+      "maxLength": 128
+    },
+    "error_code": {
+      "type": "string",
+      "maxLength": 256
+    },
+    "stack_frames": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "string",
+        "maxLength": 2000
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "review_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "capture_ref",
+        "label"
+      ],
+      "properties": {
+        "provider": {
+          "enum": [
+            "echo",
+            "manual"
+          ]
+        },
+        "capture_ref": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "label": {
+          "enum": [
+            "fixture_echo",
+            "self_reported"
+          ]
+        }
+      }
+    }
+  }
+}

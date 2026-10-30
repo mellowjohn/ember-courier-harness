@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:ember-courier:contract:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "agent", "intent_text", "goal", "inputs", "allowed_actions", "forbidden_actions", "allowed_paths", "limits", "required_evidence", "requires_approval", "status", "approved_by", "approved_at", "content_hash"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^ct-[a-z]+(-[a-z0-9]+)*-[0-9]+$"},
+    "version": {"type": "integer", "minimum": 1},
+    "agent": {"type": "string", "minLength": 1},
+    "intent_text": {"type": "string", "minLength": 1},
+    "goal": {"type": "string", "minLength": 1},
+    "inputs": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["name"], "properties": {"name": {"type": "string"}, "path": {"type": "string"}, "value": {}, "sha256": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]}, "late_bind": {"type": "boolean"}}, "oneOf": [{"required": ["path"], "not": {"required": ["value"]}}, {"required": ["value"], "not": {"required": ["path"]}}]}},
+    "allowed_actions": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["action_id", "tool", "class", "args_constraints"], "properties": {"action_id": {"type": "string", "minLength": 1}, "tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"}, "class": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}, "args_constraints": {"$ref": "#/$defs/constraints"}, "allow_extra_args": {"type": "boolean"}, "allow_no_evidence": {"type": "boolean"}}}},
+    "forbidden_actions": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["tool"], "properties": {"tool": {"type": "string", "pattern": "^[a-z][a-z0-9_]*\\.[a-z*][a-z0-9_*]*$"}, "args_constraints": {"$ref": "#/$defs/constraints"}}}},
+    "allowed_paths": {"type": "object", "additionalProperties": false, "required": ["read", "write"], "properties": {"read": {"$ref": "#/$defs/paths"}, "write": {"$ref": "#/$defs/paths"}}},
+    "limits": {"type": "object", "additionalProperties": false, "required": ["spend_usd", "max_calls", "time_window"], "properties": {"spend_usd": {"const": 0}, "max_calls": {"type": "integer", "minimum": 1}, "time_window": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["not_before", "not_after", "ttl_hours"], "properties": {"not_before": {"type": "null"}, "not_after": {"type": "null"}, "ttl_hours": {"type": "integer", "minimum": 1, "maximum": 24}}}, {"type": "object", "additionalProperties": false, "required": ["not_before", "not_after"], "properties": {"not_before": {"type": "string", "format": "date-time"}, "not_after": {"type": "string", "format": "date-time"}}}]}}},
+    "required_evidence": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["kind", "params"], "properties": {"kind": {"enum": ["file_hash", "file_list", "source_dest_hash", "url", "output_snippet", "reviewer_note", "checklist", "art_score"]}, "params": {"type": "object"}}}}},
+    "requires_approval": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}, "allOf": [{"contains": {"const": "live"}}, {"contains": {"const": "publish"}}, {"contains": {"const": "spend"}}, {"contains": {"const": "push"}}, {"contains": {"const": "submit"}}, {"contains": {"const": "send_message"}}]},
+    "extensions": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_]*$"}, "additionalProperties": {"type": "object"}},
+    "approval_mode": {"enum": ["each", "approve_all"], "default": "each"},
+    "art_direction": {"type": "object", "additionalProperties": false, "required": ["style", "palette", "mood", "references", "do", "dont"], "properties": {"style": {"type": "string"}, "palette": {"type": "array", "items": {"type": "string"}}, "mood": {"type": "string"}, "references": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "note"], "properties": {"path": {"type": "string"}, "sha256": {"$ref": "#/$defs/hash"}, "note": {"type": "string"}}}}, "do": {"type": "array", "items": {"type": "string"}}, "dont": {"type": "array", "items": {"type": "string"}}}},
+    "status": {"enum": ["draft", "approved", "revoked", "superseded"]},
+    "approved_by": {"enum": [null, "johnathan"]},
+    "approved_at": {"type": ["string", "null"], "format": "date-time"},
+    "content_hash": {"anyOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]}
+  },
+  "allOf": [{"if": {"properties": {"status": {"const": "approved"}}}, "then": {"properties": {"approved_by": {"const": "johnathan"}, "approved_at": {"type": "string"}, "content_hash": {"$ref": "#/$defs/hash"}, "limits": {"properties": {"time_window": {"not": {"required": ["ttl_hours"]}}}}}}}],
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "paths": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^(/|[A-Za-z]:/).*[*?].*$"}},
+    "constraints": {"type": "object", "additionalProperties": {"type": "object", "minProperties": 1, "additionalProperties": false, "properties": {"equals": {}, "one_of": {"type": "array", "minItems": 1}, "pattern": {"type": "string"}, "min": {"type": "number"}, "max": {"type": "number"}, "path_within": {"type": "string"}, "no_overwrite_unless_same_hash": {"const": true}}}}
+  }
+}
