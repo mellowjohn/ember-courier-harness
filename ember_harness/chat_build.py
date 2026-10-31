@@ -392,6 +392,45 @@ def status(root, folder):
                 project=str(project(root, folder)))
 
 
+def proposal_preview(root, folder, ref):
+    """Render exact pending bytes without deciding, applying or recording evidence."""
+    with exclusive(Path(folder) / 'build.lock'):
+        h = harness(folder)
+        entries = h._entries()
+        validate_history(h, entries)
+        payload = load_request(h, ref)
+        _target(root, folder, payload)
+        if any(e['kind'] == 'owner_decision' and e['request_ref'] == ref for e in entries):
+            raise ValueError('Choose a pending proposal to preview')
+        build = payload['body']['build']
+        current = context(root, folder)
+        before = build.get('before_manifest', {'index.html': build['before_sha256']} if build['before_sha256'] else {})
+        if current['manifest'] != before:
+            raise ValueError('Project changed since this proposal; request fresh changes before previewing')
+        files = {row['path']: row['content'] for row in current['files']}
+        child = payload['body']['contracts'][1]['contract']
+        actions = {a['action_id']: a for a in child['allowed_actions']}
+        rows = build.get('files', [dict(name='index.html', path=build['path'], action_id='write', after_sha256=build['after_sha256'])])
+        for row in rows:
+            action = actions[row['action_id']]
+            content = action['args_constraints']['content']['equals']
+            expected_path = (project(root, folder) / row['name']).as_posix()
+            if (not re.fullmatch(PATH_PATTERN, row['name']) or row['path'] != expected_path or
+                    action['tool'] != 'fs.write' or action['args_constraints']['path']['equals'] != expected_path or
+                    sha256(content.encode('utf-8')).hexdigest() != row['after_sha256']):
+                raise ValueError('Proposed bytes do not match the reviewed files')
+            files[row['name']] = content
+        manifest = {name: sha256(content.encode('utf-8')).hexdigest() for name, content in files.items()}
+        if manifest != build.get('manifest', {'index.html': build['after_sha256']}):
+            raise ValueError('Proposed project manifest does not match the reviewed files')
+        validate_files(files)
+        parser = ResourcePreview(files)
+        parser.feed(files['index.html'])
+        parser.close()
+        return dict(html=''.join(parser.output), request_ref=ref, manifest=manifest,
+                    basis='Unapproved proposal preview; current game and approval history unchanged')
+
+
 def preview(root, folder):
     state = status(root, folder)
     if state['resumable']:

@@ -70,9 +70,22 @@ function renderReview(s){
     for(const check of body.build.checks)el('p',check,permissions);
     detail('Exact contracts and audit reference',{ref:r.ref,contracts:body.contracts},permissions);
     const actions=el('div',undefined,p);actions.className='actions';
+    const tryBuild=el('button','Try proposed changes',actions);tryBuild.className='button';
     decision(actions,body.build.restore_from?'Approve restore & play':'Approve & play',r.ref,'approve','primary');
     const change=el('button','Request changes',actions);change.className='button';change.disabled=busy||sending;
     decision(actions,'Discard',r.ref,'decline');
+    const trial=el('section',undefined,p);trial.hidden=true;trial.setAttribute('aria-label','Proposal preview');
+    tryBuild.onclick=async()=>{
+      if(trial.querySelector('iframe')){trial.hidden=!trial.hidden;tryBuild.textContent=trial.hidden?'Try proposed changes':'Hide proposal preview';return}
+      const sid=s.session.id;tryBuild.disabled=true;
+      try{const result=await api('proposal-preview?'+new URLSearchParams({session_id:sid,ref:r.ref}));
+        if(activeSession?.id!==sid||!trial.isConnected||result.request_ref!==r.ref)return;
+        el('h4','Proposal preview · not applied',trial);el('p','Try the controls and compare with your current game. Approve & play saves these changes; Request changes sends your feedback.',trial);
+        prototypeFrame(trial,'Proposed browser prototype · not applied').srcdoc=previewDocument(result.html);
+        trial.hidden=false;tryBuild.textContent='Hide proposal preview';$('error').textContent='';
+      }catch(error){if(trial.isConnected)$('error').textContent=error.message}
+      finally{tryBuild.disabled=false}
+    };
     const edit=el('div',undefined,p);edit.hidden=true;
     const label=el('label','What should change?',edit),note=el('textarea',undefined,label);note.maxLength=2000;
     const send=el('button','Send changes to Muse',edit);send.className='button primary';const turnId=crypto.randomUUID();

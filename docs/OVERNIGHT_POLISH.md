@@ -19,7 +19,9 @@ as design guidance. Changes to the brief after preparation do not change this ru
 5. **Review exact changes** prepares an ordinary build proposal. Only your later
    **Approve & play** applies those exact bytes to the current game and adds a
    saved version. The existing ZIP export is then available. Discarding that final
-   proposal leaves the game unchanged.
+   proposal leaves the game unchanged. **Try proposed changes** in the final
+   review plays the exact proposed result alongside the current game before
+   approval, without a Muse call or another saved version.
 
 ## What the worker does
 

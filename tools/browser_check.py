@@ -90,7 +90,7 @@ def main(argv=None):
     unchanged = source_manifest() == before
     report = dict(passed=error is None and unchanged, error=error, source_unchanged=unchanged,
                   source_manifest=before, basis='Synthetic fixture decisions and real Chromium automation. No Muse calls or credit use.',
-                  initial_version=first, checks='startup failure → report → reviewed fix → clean smoke → reviewed restore → clean smoke; history, preview isolation, keyboard/button input and ZIP export')
+                  initial_version=first, checks='startup failure → report → try pending fix without applying → approved fix → clean smoke → try pending restore → approved restore → clean smoke; independent preview state, history, isolation, keyboard/button input and ZIP export')
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     (output / 'REPORT.md').write_text('# Browser QA and restore rehearsal\n\n**' + ('PASS' if report['passed'] else 'FAIL') + '**\n\n' +
         report['basis'] + '\n\n' + report['checks'] + '\n\nSource unchanged: ' + str(unchanged) +

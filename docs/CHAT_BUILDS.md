@@ -47,6 +47,20 @@ review packets, before snapshots and evidence are saved under the session's
 `build-authority` folder. These are ignored local artifacts. No changes are
 written into the Ember source checkout.
 
+Choose **Try proposed changes** to play the pending revision before approving it.
+The card labels this **Proposal preview · not applied**. Your current game stays
+in the adjacent workspace, so both versions can be tried independently. Hiding
+and reopening the proposal preserves its game state while the card remains open.
+This also works for first builds, restoration proposals and final polish proposals.
+
+The preview reconstructs the exact reviewed project, including unchanged files,
+and uses the same opaque-origin sandbox and blocked-network policy as saved builds.
+It makes no Muse call, writes no project files, records no approval or playtest,
+and adds no saved version. A changed project, decided proposal or damaged review
+packet stops a new preview. An already open frame is a snapshot; approval still
+rechecks the current project. Use **Request changes** for feedback or **Approve &
+play** to apply the reviewed bytes.
+
 ## Preview and revision
 
 After approval and completion, **Open prototype preview** renders the verified

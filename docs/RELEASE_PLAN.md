@@ -20,6 +20,8 @@ Implemented in the local app:
 - One reviewed proposal for up to eight HTML/CSS/JavaScript files; exact gated
   writes, file evidence, changed-input rejection and interrupted-build recovery.
 - Compact review, Approve & play, direct revision requests, and feedback-to-fix.
+- Playable pending-proposal previews alongside the current game, before exact
+  approval, including restoration and final polish proposals.
 - Opaque-origin game previews with blocked network access, browser diagnostics,
   version-bound playtest reports and proposed fixes that still need approval.
 - Observed agent activity: context preparation, provider startup and output
@@ -46,13 +48,16 @@ in the bounded integrated sample. Engine work remains paused. See
 
 ## Remaining priorities
 
-1. **Reproducible checkpoint and clean installation.** The October 30 offline
-   gate passed all 330 tests and twelve demos with tested source unchanged. The
-   gate also caught and led to a fix for transient writer-lock contention during
-   recovery. The session-brief and preview-workspace baseline then passed 335
-   tests and twelve demos and was checkpointed locally as `b77e32e`. Retain logs
-   and hashes, rerun after code changes, and repeat the clean wheel installation
-   check. A harness PASS does not establish generated-game quality.
+1. **Reproducible checkpoint and clean installation — verified October 30.**
+   The current proposal-preview source passed all 370 tests and twelve demos
+   from a clean-installed wheel, plus the browser QA/restore and overnight-polish
+   Chromium rehearsals. A separate Chromium rehearsal also passed against the
+   installed wheel without checkout package source. Retained reports bind the
+   source and wheel hashes; source remained unchanged during the final gates.
+   Model replies and owner decisions were synthetic, with no live Muse calls.
+   Repeat these gates after code changes; the clean-checkout launch rehearsal
+   below remains outstanding. A harness PASS does not establish generated-game
+   quality.
 2. **Browser QA and safe restoration (October 31–November 1).** Implemented:
    bounded browser smoke checks, clearly labeled observations, user-requested
    reviewed fixes and exact approved restoration as a new version. Run the

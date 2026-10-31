@@ -303,6 +303,12 @@ class App:
                 raise ValueError('Select a session first')
             return playtests.record(self.root, self.sessions_dir / self.session['id'], **body)
 
+    def proposal_preview(self, session_id, ref):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before previewing its proposal')
+            return chat_build.proposal_preview(self.root, self.sessions_dir / session_id, ref)
+
     def version_preview(self, ref):
         with self.lock:
             if not self.session:
@@ -438,6 +444,9 @@ def server(app, port=0):
                     return self.reply(200, app.snapshot())
                 if url.path == '/api/build-preview':
                     return self.reply(200, app.build_preview(diagnostics=True))
+                if url.path == '/api/proposal-preview':
+                    q = parse_qs(url.query)
+                    return self.reply(200, app.proposal_preview(q['session_id'][0], q['ref'][0]))
                 if url.path == '/api/version-preview':
                     q = parse_qs(url.query)
                     return self.reply(200, app.version_preview(q['ref'][0]))

@@ -75,6 +75,87 @@ class ChatBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'changed'):
             fresh.build_preview()
 
+    def test_proposal_preview_does_not_approve_write_or_call_muse(self):
+        ref = self.propose_project()
+        h = chat_build.harness(self.folder)
+        before = h._entries()
+        with patch('ember_harness.session_chat.run_muse') as muse:
+            for _ in range(2):
+                preview = self.app.proposal_preview(self.sid, ref)
+                self.assertEqual(preview['request_ref'], ref)
+                self.assertEqual(set(preview['manifest']), set(PROJECT))
+                self.assertIn('data:text/javascript;base64,', preview['html'])
+                self.assertIn('data:text/css;base64,', preview['html'])
+            muse.assert_not_called()
+        self.assertFalse(self.target.exists())
+        self.assertEqual(h._entries(), before)
+        self.assertEqual(self.app.snapshot()['build']['completed'], [])
+        with self.assertRaisesRegex(ValueError, 'approval'):
+            self.app.resume_build(ref)
+
+    def test_proposal_preview_carries_unchanged_files_and_survives_restart(self):
+        original = self.propose_project()
+        self.app.respond(original, 'approve', 'SYNTHETIC TEST: original project')
+        updated = {**PROJECT, 'style.css': 'body { background: red; }'}
+        ref = self.propose_project(updated, 'b' * 24)
+        fresh = App(self.root)
+        fresh.resume(self.sid)
+        before = chat_build.harness(self.folder)._entries()
+        preview = fresh.proposal_preview(self.sid, ref)
+        self.assertEqual(preview['manifest'], {name: chat_build.sha256(value.encode()).hexdigest() for name, value in updated.items()})
+        for name, value in PROJECT.items():
+            self.assertEqual((self.target.parent / name).read_text(encoding='utf-8'), value)
+        self.assertEqual(chat_build.harness(self.folder)._entries(), before)
+        self.assertEqual(len(fresh.snapshot()['build']['completed']), 1)
+
+    def test_proposal_preview_rejects_changed_inputs_and_decided_proposals(self):
+        ref = self.propose()
+        self.app.respond(ref, 'decline', 'SYNTHETIC TEST: discard preview')
+        with self.assertRaisesRegex(ValueError, 'pending proposal'):
+            self.app.proposal_preview(self.sid, ref)
+        ref = self.propose('b' * 24)
+        self.app.respond(ref, 'approve', 'SYNTHETIC TEST: approve fixture')
+        with self.assertRaisesRegex(ValueError, 'pending proposal'):
+            self.app.proposal_preview(self.sid, ref)
+        ref = self.propose('c' * 24, HTML.replace('Start', 'New start'))
+        self.target.write_text('Externally changed', encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'changed|HTML'):
+            self.app.proposal_preview(self.sid, ref)
+        self.assertIsNone(self.app.snapshot()['build']['requests'][-1]['decision'])
+
+    def test_proposal_preview_rejects_modified_review_packet(self):
+        ref = self.propose()
+        request = chat_build.harness(self.folder).root / 'owner-review' / ref / 'request.json'
+        payload = json.loads(request.read_bytes())
+        payload['body']['build']['title'] = 'Tampered proposal'
+        request.write_text(json.dumps(payload), encoding='utf-8')
+        with self.assertRaisesRegex(ValueError, 'hash|mismatch'):
+            self.app.proposal_preview(self.sid, ref)
+        self.assertFalse(self.target.exists())
+
+    def test_proposal_preview_http_requires_authentication_and_intended_session(self):
+        ref = self.propose()
+        http = server(self.app)
+        worker = threading.Thread(target=http.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(worker.join)
+        self.addCleanup(http.server_close)
+        self.addCleanup(http.shutdown)
+        url = f'http://127.0.0.1:{http.server_port}/api/proposal-preview?session_id={self.sid}&ref={ref}'
+        with self.assertRaises(HTTPError) as denied:
+            urlopen(url, timeout=10)
+        self.assertEqual(denied.exception.code, 403)
+        headers = {'X-Ember-Token': self.app.token}
+        with urlopen(Request(url, headers=headers), timeout=10) as response:
+            self.assertIn('<button>Start</button>', json.load(response)['html'])
+        self.app.start('Different session', chat_only=True)
+        with self.assertRaises(HTTPError) as stale:
+            urlopen(Request(url, headers=headers), timeout=10)
+        self.assertEqual(stale.exception.code, 400)
+        with self.assertRaisesRegex(ValueError, 'intended session'):
+            self.app.proposal_preview(self.sid, ref)
+        self.assertFalse(self.target.exists())
+
     def test_multifile_partial_write_resumes_without_repeating_actions(self):
         ref = self.propose_project()
         replace = chat_build.os.replace
