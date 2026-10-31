@@ -61,6 +61,12 @@ packet stops a new preview. An already open frame is a snapshot; approval still
 rechecks the current project. Use **Request changes** for feedback or **Approve &
 play** to apply the reviewed bytes.
 
+With a saved gameplay plan, **Check proposed changes** compares the current and
+proposed files before approval and shows preserved behavior, regressions and
+fixes. **Ask Muse to fix proposed gameplay** sends a failed proposal back with its
+complete source and checked observations, retaining the intended improvements
+for a new review. See [proposal gameplay comparisons](GAMEPLAY_CHECKS.md#check-proposed-changes-before-approval).
+
 ## Preview and revision
 
 After approval and completion, **Open prototype preview** renders the verified

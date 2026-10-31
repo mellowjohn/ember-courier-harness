@@ -11,6 +11,8 @@
 @media(max-width:620px){.content{padding:20px 16px}.brief-grid{grid-template-columns:1fr}.preview-column{padding:14px}.preview-column iframe{height:360px!important}.heading{flex-wrap:wrap}}
 .polish-limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}@media(max-width:620px){.polish-limits{grid-template-columns:1fr}}
 #gameplay-editor fieldset{min-width:0;border:1px solid #405344;border-radius:8px;margin:16px 0}#gameplay-editor select{max-width:100%;background:#1d3024;color:inherit;border:1px solid #48604e;border-radius:7px;padding:8px}
+#proposal-gameplay-review table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px}#proposal-gameplay-review th,#proposal-gameplay-review td{text-align:left;vertical-align:top;padding:8px 5px;border-bottom:1px solid #344439;overflow-wrap:anywhere}#proposal-gameplay-review th:first-child{width:40%}
+@media(max-width:620px){#proposal-gameplay-review table{font-size:11px}#proposal-gameplay-review th,#proposal-gameplay-review td{padding:7px 2px}#proposal-gameplay-review th:first-child{width:34%}}
 </style></head><body>
 <div class="layout"><aside class="sidebar" aria-label="Sessions">
 <div class="logo"><span class="mark" aria-hidden="true">◈</span><div><strong>Ember Harness</strong><small>LOCAL WORKSPACE</small></div></div>
@@ -55,7 +57,7 @@ function decision(parent,text,ref,choice,cls=''){
 function renderReview(s){
   const pending=s.requests.filter(r=>!r.decision);
   const key=JSON.stringify([s.session?.id,s.status,pending.map(r=>r.ref),s.requests.length]);
-  if(key===current)return;current=key;urls.splice(0).forEach(URL.revokeObjectURL);
+  if(key===current){renderProposalCheck(s);return;}current=key;urls.splice(0).forEach(URL.revokeObjectURL);
   $('review').replaceChildren();$('review').hidden=!pending.length;buildReviewRef=null;
   if(!pending.length)return;
   const r=pending[0],body=r.payload.body,p=el('div',undefined,$('review'));p.className='panel';
@@ -65,6 +67,7 @@ function renderReview(s){
     const files=body.build.files||[{name:'index.html',before_sha256:body.build.before_sha256}];
     el('p',files.map(file=>(file.before_sha256?'Update ':'Create ')+file.name).join(' · '),p);
     el('small','One approval applies all of these exact file changes and opens the preview.',p);
+    const checks=el('section',undefined,p);checks.id='proposal-gameplay-review';checks.setAttribute('aria-label','Proposal gameplay comparison');
     const code=el('details',undefined,p);el('summary','View code changes',code);el('pre',body.build.diff,code);
     const permissions=el('details',undefined,p);el('summary','Permissions and checks',permissions);
     el('p',body.build.restore_from?'Restoration stays in this session and does not call Muse.':'Changes are limited to this session project. Muse uses the shared credit budget.',permissions);
@@ -99,6 +102,7 @@ function renderReview(s){
       catch(e){$('error').textContent=e.message}
       finally{sending=false;localRequest=null;current='';chatKey='';await refresh()}
     };
+    renderProposalCheck(s);
     return;
   }
   el('small','SAMPLE WORKFLOW',p).className='brand';
@@ -116,6 +120,51 @@ function renderReview(s){
   if(r.payload.kind!=='choice')decision(actions,body.action?.tool==='asset.accept'?'Accept asset':'Approve this step',r.ref,'approve','primary');
   decision(actions,'Decline and stop',r.ref,'decline');detail('Complete review packet',r.payload,p);
   if(s.status!=='running')p.querySelectorAll('.decision').forEach(button=>button.disabled=true);
+}
+const proposalCheckRuns=new Map();
+function renderProposalCheck(s){
+  const area=$('proposal-gameplay-review'),check=s.build?.proposal_check;if(!area||!check||check.request_ref!==buildReviewRef)return;
+  const sid=s.session.id,ref=check.request_ref,local=proposalCheckRuns.get(ref),dirty=gameplayDraft?.sid===sid&&gameplayDraft.dirty;
+  const key=JSON.stringify([ref,check.state,check.reason,check.revision,check.report?.report_id,local,!!dirty,s.polish_available?.ready]);
+  if(area.dataset.key===key)return;area.dataset.key=key;area.replaceChildren();
+  el('h4','Test before approval',area);
+  const labels={not_configured:'No gameplay plan configured',not_run:'Proposal checks have not run',stale:'Previous comparison is stale',passed:'Proposed gameplay checks passed',regressions_observed:'Gameplay regressions found',checks_failed:'Proposed gameplay checks failed'};
+  el('p',local?.running?'Comparing fresh copies of the current and proposed game…':labels[check.state]||'Comparison unavailable',area).setAttribute('role','status');
+  el('small',dirty?'Save or reload your gameplay plan draft before comparing.':check.reason,area);
+  if(local?.error)el('p',local.error,area);
+  if(!check.configured){
+    const setup=el('button','Set up gameplay checks',area);setup.className='button';setup.onclick=()=>{$('gameplay-plan').open=true;$('gameplay-plan').scrollIntoView({block:'start'})};return;
+  }
+  const run=el('button',local?.running?'Checking proposal…':'Check proposed changes',area);run.className='button';
+  run.disabled=!!local?.running||!!dirty||!s.polish_available?.ready;
+  if(!s.polish_available?.ready)el('p',s.polish_available?.reason||'Browser tooling is unavailable',area);
+  run.onclick=async()=>{
+    if(proposalCheckRuns.get(ref)?.running||gameplayDraft?.dirty)return;
+    proposalCheckRuns.set(ref,{running:true});renderProposalCheck(lastState);
+    let failure=null;
+    try{await api('proposal-check',{session_id:sid,revision:check.revision,request_ref:ref,report_id:crypto.randomUUID()})}
+    catch(error){failure=error.message}
+    finally{proposalCheckRuns.set(ref,{running:false,error:failure});await refresh()}
+  };
+  const report=check.report;
+  if(report){
+    if(check.state==='stale')el('p','Saved observations below are historical. Run a fresh comparison before relying on them.',area);
+    const table=el('table',undefined,area),header=el('tr',undefined,table);
+    for(const title of ['Scenario','Current','Proposed','Change'])el('th',title,header);
+    const changes={preserved:'Preserved',regression:'Regressed',fixed:'Fixed',still_failing:'Still failing',new_coverage:'First build'};
+    for(const row of report.comparison){const tr=el('tr',undefined,table);for(const value of [row.name+' · '+row.viewport,row.before==='not_run'?'No current game':row.before,row.proposed,changes[row.change]])el('td',value,tr)}
+    detail('Gameplay steps and observations',{plan:report.plan,current:report.before,proposed:report.proposed},area);
+    if(!['stale','not_configured'].includes(check.state)&&report.proposed.outcome!=='passed'){
+      const fix=el('button','Ask Muse to fix proposed gameplay',area);fix.className='button';fix.disabled=sending||busy||!!local?.running;
+      const id=crypto.randomUUID(),note='Fix the failed gameplay checks for this proposal while preserving its intended improvements. Return a revised proposal for my review.';
+      fix.onclick=async()=>{if(sending||busy||briefSaving)return;sending=true;beginChatRequest(note,id);fix.disabled=true;
+        try{await api('request-changes',{ref,note,id,gameplay_report_id:report.report_id});$('error').textContent=''}
+        catch(error){$('error').textContent=error.message}
+        finally{sending=false;localRequest=null;current='';chatKey='';await refresh()}
+      };
+    }
+  }
+  el('p','Checks inform your review. Your current game stays unchanged until you approve the exact proposal.',area).className='subtitle';
 }
 
 function showTab(id){for(const view of ['chat','polish','activity','report'])if($(view))$(view).hidden=view!==id;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)))}

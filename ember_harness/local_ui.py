@@ -150,6 +150,13 @@ class App:
             folder = self.sessions_dir / session_id
         return gameplay.run_current(self.root, folder, revision, request_ref, report_id)
 
+    def check_proposal(self, session_id, revision, request_ref, report_id):
+        with self.lock:
+            if not self.session or session_id != self.session['id']:
+                raise ValueError('Reopen the intended session before checking its proposal')
+            folder = self.sessions_dir / session_id
+        return gameplay.run_proposal(self.root, folder, revision, request_ref, report_id)
+
     def choose_model(self, provider):
         with self.lock:
             if provider != 'muse':
@@ -249,6 +256,7 @@ class App:
                 result['build']['versions'] = project_versions.history(session_folder)
                 result['build']['smoke_checks'] = browser_checks.reports(session_folder)
                 result['build']['gameplay_checks'] = gameplay.reports(session_folder)
+                result['build']['proposal_check'] = gameplay.proposal_status(self.root, session_folder)
                 result['polish_runs'] = polish.history(self.root, session_folder)
                 try:
                     polish_runtime.discover(self.root, fingerprints=False)
@@ -281,7 +289,7 @@ class App:
                 raise ValueError('Select a session first')
             return chat_build.resume(self.root, self.sessions_dir / self.session['id'], ref)
 
-    def request_changes(self, ref, note, turn_id):
+    def request_changes(self, ref, note, turn_id, gameplay_report_id=None):
         """One human gesture discards an exact proposal and requests a replacement."""
         if not isinstance(note, str) or not note.strip() or len(note) > 2000:
             raise ValueError('Describe the changes you want in at most 2000 characters')
@@ -294,16 +302,28 @@ class App:
             request = next((r for r in chat_build.list_requests(folder) if r['ref'] == ref), None)
             if request is None:
                 raise ValueError('Select a pending build proposal')
+            text = ('Revise the proposed build "' + request['payload']['body']['build']['title'] +
+                    '" with these changes:\n' + note.strip())
+            previous = next((m for m in transcript(folder) if m['id'] == turn_id), None)
+            if previous and (previous['text'] != text or previous['provider'] != 'muse'):
+                raise ValueError('Message ID already belongs to another prompt')
+            revision = None
+            if gameplay_report_id is not None:
+                if previous:
+                    revision = previous.get('proposal_context')
+                    if not revision or revision['report_id'] != gameplay_report_id or revision['request_ref'] != ref:
+                        raise ValueError('Message ID already belongs to another proposal report')
+                else:
+                    revision = gameplay.revision_context(self.root, folder, ref, gameplay_report_id,
+                                                         allow_declined=bool(request['decision']))
             quote = 'Request changes: ' + note.strip()
             if request['decision']:
                 if request['decision']['choice'] != 'decline' or request['decision']['quote'] != quote:
                     raise ValueError('This proposal already has a different decision')
             else:
                 chat_build.respond(self.root, folder, ref, 'decline', quote)
-            text = ('Revise the proposed build "' + request['payload']['body']['build']['title'] +
-                    '" with these changes:\n' + note.strip())
         # Keep this bound to its original session while allowing UI polling during inference.
-        return dict(messages=send(folder, text, turn_id, 'muse', root=self.root))
+        return dict(messages=send(folder, text, turn_id, 'muse', root=self.root, proposal_context=revision))
 
     def build_preview(self, diagnostics=False):
         with self.lock:
@@ -430,8 +450,12 @@ def server(app, port=0):
             if download:
                 self.send_header('Content-Disposition', 'attachment; filename="' + download + '"')
             self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; frame-ancestors 'none'")
-            self.end_headers()
-            self.wfile.write(raw)
+            try:
+                self.end_headers()
+                self.wfile.write(raw)
+            except ConnectionError:
+                # A closed tab must not trigger a second response or undo saved work.
+                self.close_connection = True
 
         def authorized(self):
             host = f'127.0.0.1:{self.server.server_port}'
@@ -486,6 +510,23 @@ def server(app, port=0):
 
         def do_POST(self):
             if not self.authorized() or self.headers.get('Content-Type') != 'application/json':
+                # Closing with unread request bytes can reset the socket on Windows,
+                # hiding the 403 from the caller. Drain only bounded bodies; never parse
+                # or dispatch them, and do not wait indefinitely for a missing body.
+                try:
+                    size = int(self.headers.get('Content-Length', '0'))
+                except ValueError:
+                    size = 0
+                if 0 < size <= 64000:
+                    timeout = self.connection.gettimeout()
+                    try:
+                        self.connection.settimeout(1)
+                        self.rfile.read(size)
+                    except OSError:
+                        pass
+                    finally:
+                        self.connection.settimeout(timeout)
+                self.close_connection = True
                 return self.reply(403, {'error': 'Local app authorization required'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
@@ -501,7 +542,7 @@ def server(app, port=0):
                 elif self.path == '/api/build-resume':
                     result = app.resume_build(body['ref'])
                 elif self.path == '/api/request-changes':
-                    result = app.request_changes(body['ref'], body['note'], body['id'])
+                    result = app.request_changes(body['ref'], body['note'], body['id'], body.get('gameplay_report_id'))
                 elif self.path == '/api/playtest':
                     result = app.record_playtest(**body)
                 elif self.path == '/api/smoke-check':
@@ -516,6 +557,8 @@ def server(app, port=0):
                     result = app.save_gameplay(body['session_id'], body['plan'], body['revision'])
                 elif self.path == '/api/gameplay-run':
                     result = app.run_gameplay(body['session_id'], body['revision'], body['request_ref'], body['report_id'])
+                elif self.path == '/api/proposal-check':
+                    result = app.check_proposal(body['session_id'], body['revision'], body['request_ref'], body['report_id'])
                 elif self.path == '/api/model':
                     result = app.choose_model(body['provider'])
                 elif self.path == '/api/workflow':

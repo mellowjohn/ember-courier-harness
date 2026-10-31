@@ -133,6 +133,27 @@ def reports(folder):
     return [e for e in chat_build.harness(folder)._entries() if e['kind'] == 'chat_gameplay_recorded'][-20:]
 
 
+def _capture(files, saved, output, runtime):
+    from . import polish_runtime
+    output = Path(output)
+    if output.resolve() != output.absolute():
+        raise ValueError('Gameplay output path changed')
+    output.mkdir(parents=True, exist_ok=True)
+    source = output / 'input.json'
+    parser = chat_build.ResourcePreview(files)
+    parser.feed(files['index.html']); parser.close()
+    data = dict(html=''.join(parser.output), gameplay_plan=saved['plan'], gameplay_plan_sha256=saved['sha256'], runtime=runtime)
+    if source.is_symlink():
+        raise ValueError('Gameplay input path changed')
+    if source.exists() and read_json(source) != data:
+        raise ValueError('Interrupted gameplay input changed; start a new check')
+    if not source.exists():
+        atomic_json(source, data)
+    result = polish_runtime.inspect(runtime, source, output / 'output', check=lambda: None)
+    validate_result(saved['plan'], result.get('gameplay'))
+    return result
+
+
 def run_current(root, folder, revision, request_ref, report_id):
     """Explicit human-host inspection, no model inference or project writes."""
     from . import polish_runtime
@@ -157,21 +178,7 @@ def run_current(root, folder, revision, request_ref, report_id):
                 return previous
         runtime = polish_runtime.discover(root)
         output = folder / 'gameplay-runs' / report_id
-        if output.resolve() != output.absolute():
-            raise ValueError('Gameplay output path changed')
-        output.mkdir(parents=True, exist_ok=True)
-        source = output / 'input.json'
-        parser = chat_build.ResourcePreview(snapshot['files'])
-        parser.feed(snapshot['files']['index.html']); parser.close()
-        data = dict(html=''.join(parser.output), gameplay_plan=saved['plan'], gameplay_plan_sha256=saved['sha256'], runtime=runtime)
-        if source.is_symlink():
-            raise ValueError('Gameplay input path changed')
-        if source.exists() and read_json(source) != data:
-            raise ValueError('Interrupted gameplay input changed; start a new check')
-        if not source.exists():
-            atomic_json(source, data)
-        result = polish_runtime.inspect(runtime, source, output / 'output', check=lambda: None)
-        validate_result(saved['plan'], result.get('gameplay'))
+        result = _capture(snapshot['files'], saved, output, runtime)
         with exclusive(folder / 'build.lock'):
             verified = chat_build.verify(root, folder)
             if (chat_build.status(root, folder)['completed'][-1]['request_ref'] != request_ref or
@@ -183,6 +190,132 @@ def run_current(root, folder, revision, request_ref, report_id):
                     outcome=result['gameplay']['outcome'], gameplay=result['gameplay'],
                     report_path=(output / 'output/report.json').as_posix(),
                     report_sha256=polish_runtime.file_digest(output / 'output/report.json'), basis='host_chromium_assertions', limit=LIMIT)
+
+
+def proposal_reports(folder):
+    if not (Path(folder) / 'build-authority').exists():
+        return []
+    return [e for e in chat_build.harness(folder)._entries() if e['kind'] == 'chat_proposal_gameplay_recorded'][-20:]
+
+
+def compare(plan, before, proposed):
+    validate_result(plan, before) if before is not None else None
+    validate_result(plan, proposed)
+    rows = []
+    for index, scenario in enumerate(proposed['scenarios']):
+        old = before['scenarios'][index]['outcome'] if before else 'not_run'
+        new = scenario['outcome']
+        change = ('new_coverage' if not before else 'preserved' if old == new == 'passed' else
+                  'regression' if old == 'passed' else 'fixed' if new == 'passed' else 'still_failing')
+        rows.append(dict(name=scenario['name'], viewport=scenario['viewport'], before=old, proposed=new, change=change))
+    return rows
+
+
+def _verified_proposal_report(folder, report):
+    from . import polish_runtime
+    for label, proof in report['artifacts'].items():
+        if label not in ('before', 'proposed'):
+            raise ValueError('Unexpected proposal capture')
+        output = Path(folder) / 'proposal-checks' / report['report_id'] / label
+        source, artifact = output / 'input.json', output / 'output/report.json'
+        if (polish_runtime.file_digest(source) != proof['input_sha256'] or
+                polish_runtime.file_digest(artifact) != proof['report_sha256']):
+            raise ValueError('Proposal gameplay evidence changed')
+        observed = polish_runtime.verified_report(source, artifact.parent)
+        if observed.get('gameplay') != report[label]:
+            raise ValueError('Proposal gameplay observations changed')
+        validate_result(report['plan'], report[label])
+    if set(report['artifacts']) != ({'before', 'proposed'} if report['before'] is not None else {'proposed'}):
+        raise ValueError('Proposal gameplay captures are incomplete')
+    if report['comparison'] != compare(report['plan'], report['before'], report['proposed']):
+        raise ValueError('Proposal gameplay comparison changed')
+    return report
+
+
+def run_proposal(root, folder, revision, request_ref, report_id):
+    """Compare untouched current and pending projects with one frozen saved plan."""
+    from . import polish_runtime
+    if not isinstance(report_id, str) or not re.fullmatch('[a-zA-Z0-9-]{16,64}', report_id):
+        raise ValueError('A stable proposal check ID is required')
+    folder = Path(folder)
+    with exclusive(folder / 'gameplay.lock'):
+        with exclusive(folder / 'build.lock'):
+            saved = load(folder)
+            if type(revision) is not int or saved['revision'] != revision or not saved['plan']['scenarios']:
+                raise ValueError('Save a nonempty current gameplay plan before checking a proposal')
+            snapshot = chat_build.proposal_snapshot(root, folder, request_ref)
+            previous = next((r for r in chat_build.harness(folder)._entries()
+                             if r['kind'] == 'chat_proposal_gameplay_recorded' and r['report_id'] == report_id), None)
+            if previous:
+                if (previous['request_ref'] != request_ref or previous['plan_revision'] != revision or
+                        previous['plan_sha256'] != saved['sha256']):
+                    raise ValueError('Proposal check ID belongs to another proposal or plan')
+                return _verified_proposal_report(folder, previous)
+        runtime = polish_runtime.discover(root)
+        work = folder / 'proposal-checks' / report_id
+        captures, artifacts = {}, {}
+        for label, files in [('before', snapshot['before_files']), ('proposed', snapshot['files'])]:
+            if not files:
+                captures[label] = None
+                continue
+            observed = _capture(files, saved, work / label, runtime)
+            captures[label] = observed['gameplay']
+            artifacts[label] = dict(input_sha256=polish_runtime.file_digest(work / label / 'input.json'),
+                                   report_sha256=polish_runtime.file_digest(work / label / 'output/report.json'))
+        comparisons = compare(saved['plan'], captures['before'], captures['proposed'])
+        outcome = ('regressions_observed' if any(r['change'] == 'regression' for r in comparisons) else
+                   'passed' if captures['proposed']['outcome'] == 'passed' else 'checks_failed')
+        with exclusive(folder / 'build.lock'):
+            if chat_build.proposal_snapshot(root, folder, request_ref) != snapshot or load(folder) != saved:
+                raise ValueError('The game, proposal or plan changed during inspection; retained captures are stale')
+            h = chat_build.harness(folder)
+            with h._lock():
+                return h._append('chat_proposal_gameplay_recorded', report_id=report_id, request_ref=request_ref,
+                    plan_revision=revision, plan_sha256=saved['sha256'], plan=saved['plan'],
+                    manifest=snapshot['manifest'], before_manifest=snapshot['before_manifest'],
+                    before=captures['before'], proposed=captures['proposed'], comparison=comparisons, outcome=outcome,
+                    artifacts=artifacts, basis='host_chromium_proposal_comparison', limit=LIMIT)
+
+
+def proposal_status(root, folder):
+    pending = next((r for r in chat_build.list_requests(folder) if not r['decision']), None)
+    if not pending:
+        return None
+    saved = load(folder)
+    report = next((r for r in reversed(proposal_reports(folder)) if r['request_ref'] == pending['ref']), None)
+    result = dict(request_ref=pending['ref'], configured=bool(saved['plan']['scenarios']),
+                  revision=saved['revision'], plan_sha256=saved['sha256'], report=report)
+    if not result['configured']:
+        return dict(result, state='not_configured', reason='Save a gameplay plan to test proposed changes')
+    if report is None:
+        return dict(result, state='not_run', reason='This proposal has not been checked against the saved plan')
+    try:
+        with exclusive(Path(folder) / 'build.lock'):
+            _current_proposal_report(root, folder, report)
+        return dict(result, state=report['outcome'], reason='Observations of the exact current and proposed files')
+    except (ValueError, OSError, KeyError) as error:
+        return dict(result, state='stale', reason=str(error))
+
+
+def _current_proposal_report(root, folder, report, *, allow_declined=False):
+    snapshot = chat_build.proposal_snapshot(root, folder, report['request_ref'], allow_declined=allow_declined)
+    saved = load(folder)
+    if (snapshot['manifest'] != report['manifest'] or snapshot['before_manifest'] != report['before_manifest'] or
+            saved['sha256'] != report['plan_sha256'] or saved['revision'] != report['plan_revision']):
+        raise ValueError('The gameplay plan or proposal changed; run a fresh comparison')
+    _verified_proposal_report(folder, report)
+    return snapshot
+
+
+def revision_context(root, folder, ref, report_id, *, allow_declined=False):
+    with exclusive(Path(folder) / 'build.lock'):
+        report = next((r for r in proposal_reports(folder) if r['report_id'] == report_id), None)
+        if report is None or report['request_ref'] != ref:
+            raise ValueError('Choose a gameplay report for this proposal')
+        snapshot = _current_proposal_report(root, folder, report, allow_declined=allow_declined)
+        return dict(request_ref=ref, report_id=report_id, title=snapshot['title'], files=snapshot['files'],
+                    plan=report['plan'], before=report['before'], proposed=report['proposed'],
+                    comparison=report['comparison'], basis=report['basis'], limit=LIMIT)
 
 
 def context(root, folder):

@@ -76,9 +76,12 @@ class LocalUITest(unittest.TestCase):
                     error.msg = error.read().decode()
                     raise
             try:
-                with self.assertRaises(HTTPError) as denied:
-                    request('/api/start', {}, token=False)
-                self.assertEqual(denied.exception.code, 403)
+                # A rejected request must deliver its 403 even while a body is sent.
+                # Windows can reset the connection when unread bytes are discarded.
+                for _ in range(20):
+                    with self.assertRaises(HTTPError) as denied:
+                        request('/api/start', {'padding': 'x' * 1024}, token=False)
+                    self.assertEqual(denied.exception.code, 403)
                 for route in ('/api/state', '/api/sessions'):
                     with self.assertRaises(HTTPError):
                         request(route, token=False)

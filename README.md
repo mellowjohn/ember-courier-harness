@@ -16,7 +16,7 @@ py -3.12 -m ember_harness.local_ui
 On Windows, you can also run **Start Ember.cmd**. Open the printed private launch link, create or reopen a named session, and describe an original browser game. Muse chat requires an installed, signed-in Muse CLI and the configured promotional-credit allowance.
 
 1. Save a **Project brief** with the goal, controls, visual direction and constraints.
-2. Review the proposal and choose **Try proposed changes** to play it beside the current game.
+2. Review the proposal and choose **Try proposed changes** to play it beside the current game. With a saved gameplay plan, **Check proposed changes** compares both versions before approval; a failed proposal can be sent back for a reviewed fix.
 3. Choose **Approve & play** to apply those exact changes, or **Request changes** to send feedback.
 4. Revisit saved versions, review a restore, or download a verified game ZIP.
 

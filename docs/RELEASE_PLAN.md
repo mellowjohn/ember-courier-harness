@@ -5,7 +5,7 @@ This is Johnathan's delivery target. Official event eligibility, rules, dates an
 submission requirements remain unverified. This plan does not authorize
 submission, deployment, publishing, paid fallback or cash spending.
 
-## Product status — October 30
+## Product status — October 31
 
 Ember now builds browser games through a saved Muse conversation. Johnathan
 reported that the first generated game was playable. This is a human playtest
@@ -24,6 +24,9 @@ Implemented in the local app:
   approval, including restoration and final polish proposals.
 - Saved desktop/touch gameplay plans with fixed actions and observable assertions,
   version-bound reports and frozen required checks for overnight candidates.
+- Before-approval comparisons of current and proposed gameplay, with exact source
+  bindings, stale-evidence rejection and explicit repair requests preserving the
+  unapplied proposal for a new review.
 - Opaque-origin game previews with blocked network access, browser diagnostics,
   version-bound playtest reports and proposed fixes that still need approval.
 - Observed agent activity: context preparation, provider startup and output
@@ -50,16 +53,20 @@ in the bounded integrated sample. Engine work remains paused. See
 
 ## Remaining priorities
 
-1. **Reproducible checkpoint and clean installation — verified October 30.**
-   The current gameplay-plan source passed all 381 tests and twelve demos
+1. **Reproducible checkpoint and clean installation — verified October 31.**
+   The current proposal-comparison source passed all 390 tests and twelve demos
    from a clean-installed wheel, plus the browser QA/restore and overnight-polish
    Chromium rehearsals. A separate Chromium rehearsal also passed against the
    installed wheel without checkout package source, including UI-authored desktop
-   and touch scenarios and rejection of an error-free scoring regression. A
+   and touch scenarios, rejection of an error-free scoring regression, and
+   pre-approval repair that preserves the proposal's intended visual changes. A
    starter plan on an existing saved game also passed real keyboard/touch loss
    and restart checks without changing its files; canvas-only score coverage
    still needs a separately reviewed accessible HUD. Retained reports bind the
    source and wheel hashes; source remained unchanged during the final gates.
+   The gate also caught a Windows socket reset on rejected POST bodies; bounded
+   draining now preserves the 403 response and twenty consecutive denial checks
+   pass without starting a workflow.
    Model replies and owner decisions were synthetic, with no live Muse calls.
    Repeat these gates after code changes; the clean-checkout launch rehearsal
    below remains outstanding. A harness PASS does not establish generated-game

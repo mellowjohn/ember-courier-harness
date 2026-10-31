@@ -64,6 +64,43 @@ in a separately reviewed build. Muse receives the saved plan and current reports
 as data when you explicitly request a reply, with a frozen snapshot for retries.
 There is no automatic model call or fix when a check fails.
 
+## Check proposed changes before approval
+
+Every pending build review now has **Test before approval**. With a saved plan,
+choose **Check proposed changes** to run the same frozen scenarios against fresh,
+isolated copies of both the current files and the complete proposed project.
+This also works for restores and final polish proposals. It does not write game
+files, change approvals, add a completed version, or call Muse. The existing
+workspace preview keeps its game state while the comparison runs.
+
+The scenario table distinguishes **Preserved**, **Regressed**, **Fixed** and
+**Still failing**. A first build has no current game to compare; it is labeled
+**First build** and only the proposed project is tested. No baseline pass is
+invented. Expand **Gameplay steps and observations** for the actual expectations,
+observed text, browser errors and skipped steps on each side.
+
+Reports bind to the exact pending review reference, complete before/proposed
+manifests, saved-plan hash/revision, runner inputs and capture hashes. Changed
+files, a changed plan, a decided proposal or damaged captures cannot receive a
+new current result. Previous comparisons become stale and cannot supply a fix
+request until a fresh valid comparison exists. Captures and reports remain under
+the session's ignored `proposal-checks/` directory and in its build audit.
+
+For a failing proposal, **Ask Muse to fix proposed gameplay** explicitly discards
+that exact proposal and requests a replacement. Muse receives the complete
+unapplied proposal, frozen plan and before/after observations, so it can preserve
+the intended improvements while repairing the failure. This is a normal bounded
+Muse request using the existing credit ledger. It never approves the proposal.
+A saved request can be retried after interruption with the same source, report
+context and stable prompt serialization. Run a fresh comparison on the replacement;
+applying it still requires your own exact-diff approval.
+
+These comparisons inform your review; they do not automatically apply changes or
+remove your ability to approve a proposal after inspecting its results. Overnight
+automatic recommendations continue to require the frozen gameplay checks to
+pass. With no saved plan, the review offers **Set up gameplay checks** instead
+of claiming the proposal passed.
+
 ## Overnight polish
 
 Preparing an overnight scope freezes the saved gameplay plan in both reviewed
@@ -80,10 +117,19 @@ says no gameplay plan was configured. A failed original can remain the fallback
 when no candidate passes; it is not labeled a passing result. Final application
 still requires the existing exact-diff approval.
 
+Run `py -3.12 tools/browser_check.py` with the tooling flags from
+[browser setup](CHAT_BUILDS.md#browser-smoke-checks) for the proposal comparison
+rehearsal: a healthy current game, an unapplied scoring regression, explicit
+repair preserving the proposal's visual changes, a passing replacement, and a
+checked restoration. It also checks that the player's preview keeps its state
+and the comparison table fits mobile screens. Deterministic model replies and
+synthetic owner decisions are separate from the real Chromium observations.
+
 Run `py -3.12 tools/polish_check.py` for the extended real-Chromium rehearsal. It
 edits and saves desktop/touch checks through the UI, tests scoring, retains them
 across a reload, and rejects a higher-rated candidate with a broken keyboard
-scoring path despite clean startup. Owner decisions and model replies are
+scoring path despite clean startup, then checks the final proposal before exact
+approval. Owner decisions and model replies are
 synthetic; browser input and assertions are real. Evidence stays under ignored
 `.harness/polish-checks/`. Unit tests separately cover validation, stale reports,
 session binding, frozen scopes and missing/tampered results.
