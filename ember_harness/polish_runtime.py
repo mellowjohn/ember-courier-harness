@@ -72,6 +72,7 @@ def inspect(runtime, source, output, *, check):
 
 
 def verified_report(source, output):
+    from . import gameplay
     output = Path(output)
     data = read_json(output / 'report.json')
     if (not data.get('complete') or data.get('input_sha256') != file_digest(source) or
@@ -84,4 +85,11 @@ def verified_report(source, output):
             target = output / name
             if target.is_symlink() or file_digest(target) != row.get(key):
                 raise ValueError('Browser screenshot evidence changed')
+    request = read_json(source)
+    if 'gameplay_plan' in request:
+        if request.get('gameplay_plan_sha256') != gameplay.digest(request['gameplay_plan']):
+            raise ValueError('Browser gameplay plan hash changed')
+        gameplay.validate_result(request['gameplay_plan'], data.get('gameplay'))
+    elif data.get('gameplay') is not None:
+        raise ValueError('Unexpected gameplay results without a frozen plan')
     return data

@@ -10,6 +10,7 @@
 @media(max-width:1150px){.workbench{grid-template-columns:minmax(0,1fr)}.preview-column{position:static}.composer{position:static}.content{padding:24px}.brief-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.content{padding:20px 16px}.brief-grid{grid-template-columns:1fr}.preview-column{padding:14px}.preview-column iframe{height:360px!important}.heading{flex-wrap:wrap}}
 .polish-limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}@media(max-width:620px){.polish-limits{grid-template-columns:1fr}}
+#gameplay-editor fieldset{min-width:0;border:1px solid #405344;border-radius:8px;margin:16px 0}#gameplay-editor select{max-width:100%;background:#1d3024;color:inherit;border:1px solid #48604e;border-radius:7px;padding:8px}
 </style></head><body>
 <div class="layout"><aside class="sidebar" aria-label="Sessions">
 <div class="logo"><span class="mark" aria-hidden="true">◈</span><div><strong>Ember Harness</strong><small>LOCAL WORKSPACE</small></div></div>
@@ -143,6 +144,98 @@ function renderBrief(s){
   $('brief-save').disabled=!sid||!briefDirty||briefSaving||sending||s.chat_activity?.state==='active';
   $('brief-reset').disabled=!briefDirty||briefSaving;
   $('brief-summary').textContent=briefDirty?' · Unsaved changes':briefRevision?' · Saved direction':' · Keep the direction in view';
+}
+const gameplayDrafts=new Map();let gameplayDraft=null,gameplayReportKey='';
+const gameplayLabels={click:'Click',tap:'Touch tap',press:'Press key',wait:'Wait',visible:'Visible',hidden:'Hidden or absent',text:'Text equals',contains:'Text contains',number_at_least:'Number at least'};
+function gameplayDefault(action,old={}){
+  if(action==='press')return {action,key:'Space'};
+  if(action==='wait')return {action,ms:500};
+  return {action,selector:old.selector||'canvas',...(['text','contains'].includes(action)?{value:'0'}:action==='number_at_least'?{value:1}:{})};
+}
+function gameplayEditor(){
+  const d=gameplayDraft,area=$('gameplay-editor');area.replaceChildren();
+  function changed(){d.dirty=true;$('gameplay-message').textContent='Unsaved changes';gameplayButtons(lastState)}
+  function input(parent,title,value,change){const label=el('label',title,parent),field=el('input',undefined,label);field.value=value;field.maxLength=200;field.oninput=()=>{change(field.value);changed()};return field}
+  input(area,'Test plan name',d.plan.title,value=>d.plan.title=value).maxLength=120;
+  for(const [i,scenario] of d.plan.scenarios.entries()){
+    const box=el('fieldset',undefined,area);el('legend','Scenario '+(i+1),box);
+    input(box,'Scenario name',scenario.name,value=>scenario.name=value).maxLength=120;
+    const label=el('label','Controls to test',box),viewport=el('select',undefined,label);
+    viewport.setAttribute('aria-label','Controls to test');
+    for(const [value,title] of [['desktop','Desktop · keyboard and mouse'],['mobile','Mobile · touch']]){const option=el('option',title,viewport);option.value=value}
+    viewport.value=scenario.viewport;viewport.onchange=()=>{scenario.viewport=viewport.value;changed()};
+    for(const [j,step] of scenario.steps.entries()){
+      const row=el('div',undefined,box);row.className='panel';el('strong','Step '+(j+1),row);
+      const actionLabel=el('label','Action',row),action=el('select',undefined,actionLabel);
+      action.setAttribute('aria-label','Action');
+      for(const [value,title] of Object.entries(gameplayLabels)){const option=el('option',title,action);option.value=value}
+      action.value=step.action;action.onchange=()=>{scenario.steps[j]=gameplayDefault(action.value,step);changed();gameplayEditor()};
+      if(step.action==='press'){
+        const keyLabel=el('label','Key',row),key=el('select',undefined,keyLabel);
+        key.setAttribute('aria-label','Key');
+        for(const value of ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','Enter','Escape','a','d','w','s','r']){const option=el('option',value,key);option.value=value}
+        key.value=step.key;key.onchange=()=>{step.key=key.value;changed()};
+      }else if(step.action==='wait')input(row,'Milliseconds',step.ms,value=>step.ms=Number(value)).type='number';
+      else {
+        input(row,'Target',step.selector,value=>step.selector=value).placeholder='canvas, #score or [data-testid="start"]';
+        if('value' in step){const value=input(row,step.action==='number_at_least'?'Minimum score':'Expected text',step.value,value=>step.value=step.action==='number_at_least'?Number(value):value);if(step.action==='number_at_least')value.type='number'}
+      }
+      const remove=el('button','Remove step '+(j+1),row);remove.type='button';remove.className='button';remove.onclick=()=>{scenario.steps.splice(j,1);changed();gameplayEditor()};
+    }
+    const actions=el('div',undefined,box);actions.className='actions';
+    const add=el('button','Add step',actions);add.type='button';add.className='button';add.disabled=scenario.steps.length>=16;add.onclick=()=>{scenario.steps.push(gameplayDefault('visible'));changed();gameplayEditor()};
+    const remove=el('button','Remove scenario',actions);remove.type='button';remove.className='button';remove.onclick=()=>{d.plan.scenarios.splice(i,1);changed();gameplayEditor()};
+  }
+  const add=el('button','Add scenario',area);add.type='button';add.className='button';add.disabled=d.plan.scenarios.length>=4;
+  add.onclick=()=>{d.plan.scenarios.push({name:'Start, score and restart',viewport:'desktop',steps:[gameplayDefault('visible')]});changed();gameplayEditor()};
+}
+function gameplayButtons(s){
+  const d=gameplayDraft;if(!d)return;
+  $('gameplay-editor').inert=!!d.saving;
+  $('gameplay-save').disabled=!d.dirty||d.saving||sending;
+  $('gameplay-reload').disabled=d.saving||d.running;
+  $('gameplay-run').disabled=d.dirty||d.saving||d.running||!d.plan.scenarios.length||!s.build?.completed.length||!!s.build?.resumable.length||!s.polish_available?.ready;
+  $('gameplay-run').textContent=d.running?'Running gameplay checks…':'Run gameplay checks';
+}
+function renderGameplay(s){
+  if(!$('gameplay-plan')){
+    const area=el('details');area.id='gameplay-plan';area.className='brief';$('project-brief').after(area);
+    el('summary','Gameplay checks',area);el('p','Save the actions and outcomes your game must preserve. Each scenario starts a fresh game. Canvas-only scores need a visible score element to be checked.',area);
+    el('p','Choose targets by tag, #id or [data-testid="name"]. Include an expectation in every scenario. Limits: four scenarios, sixteen steps each, and twenty seconds of actions in total.',area).className='subtitle';
+    const form=el('form',undefined,area);el('div',undefined,form).id='gameplay-editor';const actions=el('div',undefined,form);actions.className='actions';
+    const save=el('button','Save gameplay plan',actions);save.id='gameplay-save';save.type='submit';save.className='button';
+    const reload=el('button','Use saved plan',actions);reload.id='gameplay-reload';reload.type='button';reload.className='button';
+    const run=el('button','Run gameplay checks',actions);run.id='gameplay-run';run.type='button';run.className='button';
+    el('p',undefined,area).id='gameplay-message';$('gameplay-message').setAttribute('role','status');el('section',undefined,area).id='gameplay-reports';
+    el('small','These checks cover the listed observations. Play the game yourself before accepting changes.',area);
+    reload.onclick=()=>{if(gameplayDraft.saving||gameplayDraft.running)return;gameplayDrafts.delete(gameplayDraft.sid);gameplayDraft=null;renderGameplay(lastState)};
+    form.onsubmit=async event=>{event.preventDefault();const d=gameplayDraft;if(d.saving||sending)return;d.saving=true;gameplayButtons(lastState);
+      try{const saved=await api('gameplay-plan',{session_id:d.sid,revision:d.revision,plan:d.plan});d.revision=saved.revision;d.dirty=false;
+        if(activeSession?.id===d.sid){lastState.gameplay_plan=saved;$('gameplay-message').textContent='Plan saved · Frozen into future overnight scopes'}}
+      catch(error){if(activeSession?.id===d.sid)$('gameplay-message').textContent=error.message}
+      finally{d.saving=false;await refresh()}
+    };
+    run.onclick=async()=>{const d=gameplayDraft;if(d.running||d.dirty)return;d.running=true;gameplayButtons(lastState);$('gameplay-message').textContent='Running fixed actions in fresh desktop/mobile browsers…';
+      try{const result=await api('gameplay-run',{session_id:d.sid,revision:d.revision,request_ref:lastState.build.completed.at(-1).request_ref,report_id:crypto.randomUUID()});
+        if(activeSession?.id===d.sid)$('gameplay-message').textContent=result.outcome==='passed'?'Listed gameplay checks passed':'Gameplay checks found a problem'}
+      catch(error){if(activeSession?.id===d.sid)$('gameplay-message').textContent='Checks stopped: '+error.message}
+      finally{d.running=false;await refresh()}
+    };
+  }
+  const sid=s.session?.id;$('gameplay-plan').hidden=!sid;if(!sid){gameplayDraft=null;return}
+  const saved=s.gameplay_plan;
+  if(gameplayDraft?.sid!==sid){
+    gameplayDraft=gameplayDrafts.get(sid)||{sid,revision:saved.revision,plan:structuredClone(saved.plan),dirty:false};gameplayDrafts.set(sid,gameplayDraft);
+    gameplayEditor();$('gameplay-message').textContent=gameplayDraft.dirty?'Unsaved changes':saved.revision?'Saved plan · Revision '+saved.revision:'Add checks for this game';
+  }else if(!gameplayDraft.dirty&&!gameplayDraft.saving&&gameplayDraft.revision!==saved.revision){gameplayDraft.revision=saved.revision;gameplayDraft.plan=structuredClone(saved.plan);gameplayEditor()}
+  gameplayButtons(s);
+  const reports=s.build?.gameplay_checks||[],ref=s.build?.completed.at(-1)?.request_ref,key=JSON.stringify([sid,ref,saved.sha256,reports.map(r=>r.report_id)]);
+  if(key!==gameplayReportKey){gameplayReportKey=key;const area=$('gameplay-reports');area.replaceChildren();
+    const current=reports.filter(r=>r.request_ref===ref&&r.plan_sha256===saved.sha256).at(-1);
+    el('p',current?'Current game · '+(current.outcome==='passed'?'Listed checks passed':'Gameplay checks failed'):'Current game · No report for this saved plan',area);
+    if(current)detail('Gameplay steps and observations',current.gameplay,area);
+    if(reports.length)detail('Saved gameplay reports',reports.map(r=>({version:r.request_ref,plan:r.plan.title,revision:r.plan_revision,outcome:r.outcome,gameplay:r.gameplay})),area);
+  }
 }
 $('brief-form').oninput=()=>{briefDirty=true;$('brief-status').textContent='Unsaved changes · Save to include them in your next request';renderBrief(lastState)};
 $('brief-reset').onclick=()=>{briefDirty=false;briefRevision=-1;renderBrief(lastState);$('brief-status').textContent='Using saved brief'};
@@ -325,6 +418,7 @@ function renderPlaytestSummary(s){
   if(latest.outcome==='problem'){const fix=el('button','Ask Muse to fix this',area);fix.className='button';fix.onclick=()=>sendMessage('Please fix the problem in playtest report '+latest.report_id+'. Propose changes for my review.',crypto.randomUUID())}
 }
 function renderBuild(s){
+  renderGameplay(s);
   renderPolish(s);
   const b=s.build||{completed:[],resumable:[]};
   const key=JSON.stringify([s.session?.id,b.completed,b.resumable,b.versions]);
@@ -425,6 +519,7 @@ function renderPolish(s){
     el('h3',({awaiting_approval:'Review overnight scope',running:'Ember is polishing',interrupted:'Polish needs attention',ready_review:'Your polish report',declined:'Polish scope discarded'})[run.status]||run.status,box);
     el('p',run.goal,box);
     el('p',run.rounds+' rounds · Up to '+run.hours+' hours · $'+run.credits+' free-credit cap · At most '+run.model_calls+' Muse calls',box);
+    if(run.gameplay_plan?.plan.scenarios.length){el('p','Frozen gameplay plan: '+run.gameplay_plan.plan.title+' · Revision '+run.gameplay_plan.revision,box);detail('Required gameplay scenarios',run.gameplay_plan.plan,box)}
     const live=el('p',run.phase+' · Estimated $'+run.usage.estimated_spent_usd.toFixed(4)+' · Reserved $'+run.usage.reserved_usd.toFixed(2),box);live.id='polish-live-'+run.id;live.setAttribute('role','status');
     if(run.error)el('pre',run.error,box);
     const actions=el('div',undefined,box);actions.className='actions';
@@ -451,7 +546,9 @@ function renderPolish(s){
     if(run.candidates.length){
       const candidates=el('details',undefined,box);el('summary','Play completed candidates ('+run.candidates.length+')',candidates);
       for(const candidate of run.candidates){
-        const row=el('div',undefined,candidates);el('p',(candidate.index===0?'Original':'Candidate '+candidate.index)+' · '+candidate.title+' · '+candidate.failures+' browser issues',row);
+        const row=el('div',undefined,candidates);el('p',(candidate.index===0?'Original':'Candidate '+candidate.index)+' · '+candidate.title+' · '+candidate.failures+' check issues',row);
+        el('p',candidate.gameplay?'Gameplay: '+(candidate.gameplay.outcome==='passed'?'Listed checks passed':'Required checks failed'):'Gameplay: no plan configured for this run',row);
+        if(candidate.gameplay)detail('Gameplay assertions',candidate.gameplay,row);
         const play=el('button',candidate.index===0?'Play original':'Play candidate '+candidate.index,row);play.className='button';
         play.onclick=async()=>{try{play.disabled=true;const saved=await api('polish-preview?'+new URLSearchParams({session_id:sid,run_id:run.id,index:candidate.index}));
           if(activeSession?.id!==sid||!row.isConnected)return;row.querySelector('iframe')?.remove();

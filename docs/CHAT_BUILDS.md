@@ -113,6 +113,10 @@ older version instead. File deletion remains outside the approved write target.
 
 ## Browser smoke checks
 
+For game-specific scoring, restart and touch expectations, use
+[saved gameplay checks](GAMEPLAY_CHECKS.md). These run through the host's fixed
+Chromium actions and also constrain future overnight polish candidates.
+
 Choose **Run browser smoke check** for a fresh, isolated preview of the current
 approved build. The fixed `startup-inputs-v1` plan waits for document load and an
 animation frame, clicks the first enabled button if present, sends arrow-key and

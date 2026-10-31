@@ -1,8 +1,53 @@
 # ember-courier-harness
 
-Public documentation for a **contract-driven game development harness**, demonstrated on the sample game **Ember Courier**. Prepared for Johnathan Rossi's Meta Global AI Developer Hackathon entry (Track 1, indie, solo).
+**Ember is a local game-development workspace:** describe a browser game, review the proposed changes, play it, and iterate with Muse. Its contract-driven harness keeps file writes, approvals, evidence and recovery tied to the exact work you reviewed. **Ember Courier** is the separate sample workflow demonstrating the contract library.
 
-This repository contains the public architecture and a local Python implementation of the contract schema, approval gate, evidence verification, versioned amendments, local triage workflows, and manual concept selection and asset ingest. It does not include private engine code or production game assets. The broader concept generation and production pipeline remain specifications.
+This repository contains the local app, Python contract library, regression tests, browser rehearsals and architecture. Browser games are supported; private engine code and production assets are not included. The broader engine and asset-production pipeline remain specifications.
+
+## Run Ember
+
+Requires Python 3.12+ and Git. From this repository:
+
+```powershell
+py -3.12 -m pip install -e .
+py -3.12 -m ember_harness.local_ui
+```
+
+On Windows, you can also run **Start Ember.cmd**. Open the printed private launch link, create or reopen a named session, and describe an original browser game. Muse chat requires an installed, signed-in Muse CLI and the configured promotional-credit allowance.
+
+1. Save a **Project brief** with the goal, controls, visual direction and constraints.
+2. Review the proposal and choose **Try proposed changes** to play it beside the current game.
+3. Choose **Approve & play** to apply those exact changes, or **Request changes** to send feedback.
+4. Revisit saved versions, review a restore, or download a verified game ZIP.
+
+See [the local app guide](docs/LOCAL_UI.md) and [builds, previews and versions](docs/CHAT_BUILDS.md).
+
+## Gameplay checks and overnight polish
+
+**Gameplay checks** saves a per-session plan of clicks, key presses, touch taps and observable expectations. Check visible states, text and numeric scores; reports bind to the game version and saved plan. Each scenario starts a fresh isolated game. Canvas-only scores need a visible score element before they can be asserted. See [saved gameplay checks](docs/GAMEPLAY_CHECKS.md).
+
+**Overnight polish** freezes the game, brief and saved test plan inside an upfront-reviewed scope. Ember builds isolated candidates, captures real desktop/mobile browser screenshots, obtains AI critiques, and keeps the strongest qualifying result. Failed required gameplay checks block automatic recommendation even when startup is clean. You review the playable candidates and exact final diff before the current game changes. See [overnight polish](docs/OVERNIGHT_POLISH.md).
+
+These features use optional Node, Playwright and Chromium tooling; [setup instructions](docs/CHAT_BUILDS.md#browser-smoke-checks) describe the developer installation. The Python library and offline release suite do not require Chromium. Browser observations and AI judgments cover their stated checks; human gameplay review is still needed.
+
+## Local data and credit limits
+
+Sessions, generated projects, approvals, captures, reports and exports live under ignored **`.harness/`** paths. They are not included in Git pushes. Game previews use an opaque-origin frame with blocked network access. ZIP exports contain verified game files and a source manifest, without private session history or credentials.
+
+Live Muse requests share Johnathan's authorized **$150 total promotional-credit ceiling**, with bounded reservations, conservative holds for uncertain usage, and no cash fallback or automatic top-up. Running saved gameplay checks, trying proposals, restoring versions and exporting ZIPs do not call Muse. See [models and credits](docs/MODELS_AND_CREDITS.md).
+
+## Verify the project
+
+```powershell
+py -3.12 tools/release_check.py
+py -3.12 tools/clean_install_check.py --wheelhouse .harness/clean-install-wheelhouse
+py -3.12 tools/browser_check.py --playwright-module PATH_TO_PLAYWRIGHT --browser-executable PATH_TO_CHROMIUM
+py -3.12 tools/polish_check.py
+```
+
+The offline gate runs the full test suite and twelve demos. The clean-install gate builds and tests an installed wheel without checkout package source; prepare its dependency wheelhouse using [these instructions](docs/PRODUCT_DEMO.md#clean-installation-check). Chromium rehearsals use synthetic model replies and approval decisions with real browser input, captures and assertions; they consume no Muse credits. Logs and source hashes stay under `.harness/`. See [the current release plan](docs/RELEASE_PLAN.md) for the latest verified checkpoint and remaining work.
+
+## Contract library and demonstrations
 
 Run the contract tests with `py -m unittest discover -s tests -v` after installing with `py -m pip install -e .`. See [the implementation guide](docs/contracts/IMPLEMENTATION.md) for setup, approval flow, coverage and current limits.
 
@@ -22,7 +67,7 @@ Run `py examples/reconciliation_demo.py` for owner-approved late duplicate merge
 
 Run `py examples/reopening_demo.py` for a real closed → reopened → triaged → closed cycle, preserved attempt counts, stale-evidence rejection and a second verified local fix. See [reopening closed bugs](docs/triage/REOPENING.md).
 
-Run `py examples/muse_review_demo.py` for optional review imports and gated intake, or add `--binary PATH_TO_MUSE_EXE` to exercise the installed Muse CLI in no-cost echo mode. Live credit-consuming runs are blocked pending enforceable budget controls. See [Muse review captures](docs/triage/MUSE_REVIEWS.md).
+Run `py examples/muse_review_demo.py` for optional review imports and gated intake, or add `--binary PATH_TO_MUSE_EXE` to exercise the installed Muse CLI in no-cost echo mode. This review-capture adapter remains no-cost-only; live chat and overnight polish use the separate credit controls described above. See [Muse review captures](docs/triage/MUSE_REVIEWS.md).
 
 ## Start here
 

@@ -22,6 +22,8 @@ Implemented in the local app:
 - Compact review, Approve & play, direct revision requests, and feedback-to-fix.
 - Playable pending-proposal previews alongside the current game, before exact
   approval, including restoration and final polish proposals.
+- Saved desktop/touch gameplay plans with fixed actions and observable assertions,
+  version-bound reports and frozen required checks for overnight candidates.
 - Opaque-origin game previews with blocked network access, browser diagnostics,
   version-bound playtest reports and proposed fixes that still need approval.
 - Observed agent activity: context preparation, provider startup and output
@@ -49,10 +51,14 @@ in the bounded integrated sample. Engine work remains paused. See
 ## Remaining priorities
 
 1. **Reproducible checkpoint and clean installation — verified October 30.**
-   The current proposal-preview source passed all 370 tests and twelve demos
+   The current gameplay-plan source passed all 381 tests and twelve demos
    from a clean-installed wheel, plus the browser QA/restore and overnight-polish
    Chromium rehearsals. A separate Chromium rehearsal also passed against the
-   installed wheel without checkout package source. Retained reports bind the
+   installed wheel without checkout package source, including UI-authored desktop
+   and touch scenarios and rejection of an error-free scoring regression. A
+   starter plan on an existing saved game also passed real keyboard/touch loss
+   and restart checks without changing its files; canvas-only score coverage
+   still needs a separately reviewed accessible HUD. Retained reports bind the
    source and wheel hashes; source remained unchanged during the final gates.
    Model replies and owner decisions were synthetic, with no live Muse calls.
    Repeat these gates after code changes; the clean-checkout launch rehearsal

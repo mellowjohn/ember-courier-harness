@@ -34,7 +34,10 @@ same browser inspection and requests a new screenshot-based critique. Candidate
 comparisons attach both candidate and current-best screenshots.
 
 The original and every completed candidate remain available. A candidate with
-browser errors or horizontal overflow cannot become the recommendation. The AI
+browser errors or horizontal overflow cannot become the recommendation. The
+[saved gameplay checks](GAMEPLAY_CHECKS.md), frozen into the scope at preparation,
+must also pass. Failed gameplay assertions block recommendation even when the
+browser reports no startup errors. Empty plans are labeled unconfigured. The AI
 must also judge the core preserved; a clean candidate must receive a stronger
 assessment and explicit preference to replace an already clean best version.
 An equal or weaker latest attempt does not replace an earlier stronger candidate.

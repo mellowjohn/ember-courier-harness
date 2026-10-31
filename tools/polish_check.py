@@ -50,7 +50,7 @@ def main():
         else:
             files={**FILES,'style.css':STYLE}
             if phase.endswith('-2'):
-                files['app.js']+='\nthrow Error("SYNTHETIC regression: do not recommend this candidate");'
+                files['app.js']=files['app.js'].replace('if(e.key==="ArrowRight")','if(e.key==="SYNTHETIC_DISABLED_CONTROL")')
             result=dict(title='Warm, responsive counter',summary='Cohesive color, hierarchy and tactile button motion',
                         files=[dict(path=k,content=v) for k,v in files.items()])
         return dict(response=json.dumps(result))
@@ -71,6 +71,10 @@ def main():
         row=polish.history(fixture,folder)[0]
         if row['best_index']!=1 or len(row['candidates'])!=3 or len(calls)!=5:
             raise ValueError('The run did not keep the strongest candidate and bounded call count')
+        if [c['gameplay']['outcome'] for c in row['candidates']] != ['passed','passed','failed']:
+            raise ValueError('Gameplay assertions did not reject the error-free scoring regression')
+        if row['candidates'][-1]['failures'] != 1:
+            raise ValueError('The broken candidate should fail gameplay without browser startup errors')
         if [c['images'] for c in calls]!=[2,2,4,2,4]:raise ValueError('Screenshot comparisons were not attached as planned')
         work,h,packet,plan=polish.load(folder,row['id'])
         if len([e for e in h._entries() if e['kind']=='owner_decision'])!=1:raise ValueError('Iterations invented an owner approval')
@@ -83,7 +87,7 @@ def main():
     unchanged=source_manifest()==before
     report=dict(passed=error is None and unchanged,error=error,source_unchanged=unchanged,source_manifest=before,calls=calls,
         basis='Synthetic owner decisions and model replies; real Chromium inspection and screenshots. No live Muse calls or credit use.',
-        checks='Upfront scope → isolated rounds → screenshot critique → reject higher-rated broken candidate → before/after and playable review → separate exact approval → restart persistence')
+        checks='Save desktop/touch gameplay plan → run current game → upfront frozen scope → isolated rounds → screenshot critique → reject higher-rated scoring regression with no startup errors → playable review → separate exact approval → restart persistence')
     (output/'report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     (output/'REPORT.md').write_text('# Overnight polish browser rehearsal\n\n**'+('PASS' if report['passed'] else 'FAIL')+'**\n\n'+report['basis']+'\n\n'+report['checks']+'\n\nSource unchanged: '+str(unchanged)+('\n\n'+error if error else '')+'\n',encoding='utf-8')
     print('Report: '+str(output/'REPORT.md'))

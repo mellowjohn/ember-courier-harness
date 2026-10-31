@@ -14,7 +14,8 @@ from urllib.request import Request, urlopen
 from PIL import Image
 
 import test_chat_build as fixture
-from ember_harness import chat_build, polish, polish_runtime
+import test_gameplay as gameplay_fixture
+from ember_harness import chat_build, polish, polish_runtime, gameplay
 from ember_harness.core import content_hash, digest, timestamp
 from ember_harness.local_ui import App, server
 from ember_harness.muse_chat import CreditLedger
@@ -75,6 +76,9 @@ class PolishTests(unittest.TestCase):
                 screenshot=name+'.png', sha256=polish_runtime.file_digest(output/(name+'.png')),
                 before_screenshot=name+'-before.png', before_sha256=polish_runtime.file_digest(output/(name+'-before.png'))))
         result = dict(complete=True, input_sha256=polish_runtime.file_digest(source), viewports=rows, basis='SYNTHETIC fixture, not real browser evidence')
+        input_data=read_json(source)
+        if input_data.get('gameplay_plan'):
+            result['gameplay']=gameplay_fixture.result(input_data['gameplay_plan'])
         atomic_json(output/'report.json', result)
         return result
 
@@ -112,6 +116,33 @@ class PolishTests(unittest.TestCase):
         self.app.respond(ref, 'approve', 'SYNTHETIC TEST: final exact polish diff')
         self.assertIn('transition', (destination/'style.css').read_text())
         self.assertEqual(len(self.app.snapshot()['build']['completed']), 2)
+
+    def test_gameplay_plan_is_frozen_in_review_and_required_for_all_candidates(self):
+        saved=gameplay.save(self.folder,gameplay_fixture.PLAN,0)
+        run_id=self.prepare(rounds=1)
+        gameplay.save(self.folder,{**gameplay_fixture.PLAN,'title':'Changed after preparation'},1)
+        self.approve(run_id);self.run_worker(run_id)
+        work,h,packet,plan=polish.load(self.folder,run_id)
+        self.assertEqual(plan['gameplay_plan'],saved)
+        for index in (0,1):
+            source=read_json(work/'captures'/str(index)/'input.json')
+            self.assertEqual(source['gameplay_plan_sha256'],saved['sha256'])
+            polish.candidate_files(self.folder,run_id,index)
+        self.assertEqual(polish.history(self.root,self.folder)[0]['best_index'],1)
+        report=work/'captures/1/output/report.json';data=read_json(report)
+        data['gameplay']['outcome']='failed';atomic_json(report,data)
+        with self.assertRaises(ValueError):polish.promote(self.root,self.folder,run_id,1)
+
+    def test_missing_gameplay_results_interrupt_instead_of_recommending(self):
+        gameplay.save(self.folder,gameplay_fixture.PLAN,0)
+        run_id=self.prepare(rounds=1);self.approve(run_id)
+        original=self.browser
+        def missing(runtime,source,output,**kwargs):
+            response=original(runtime,source,output,**kwargs);response.pop('gameplay');atomic_json(output/'report.json',response);return response
+        with patch('ember_harness.polish.run_muse',side_effect=self.model),patch('ember_harness.polish_runtime.inspect',side_effect=missing):
+            polish.Worker(self.root,self.folder,run_id).run()
+        row=polish.history(self.root,self.folder)[0]
+        self.assertEqual(row['status'],'interrupted');self.assertEqual(row['candidates'],[])
 
     def test_draft_decline_validation_stale_source_and_current_write_denied(self):
         for changes in (dict(rounds=True), dict(hours=13), dict(credits=4), dict(goal='')):

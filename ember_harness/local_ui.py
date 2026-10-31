@@ -19,7 +19,7 @@ from .owner_review import load_request, decide
 from .recovery import Recovery, exclusive, worker_active, read_json
 from .session_chat import transcript, send, activity as chat_activity, MUSE_UNAVAILABLE
 from .muse_chat import installed_binary, CreditLedger
-from . import chat_build, playtests, project_versions, project_brief, browser_checks, polish, polish_runtime
+from . import chat_build, playtests, project_versions, project_brief, browser_checks, polish, polish_runtime, gameplay
 
 
 class App:
@@ -137,6 +137,19 @@ class App:
                 raise ValueError('Reopen the intended session before saving its brief')
             return project_brief.save(self.sessions_dir / session_id, fields, revision)
 
+    def save_gameplay(self, session_id, plan, revision):
+        with self.lock:
+            if not self.session or session_id != self.session['id']:
+                raise ValueError('Reopen the intended session before saving its gameplay plan')
+            return gameplay.save(self.sessions_dir / session_id, plan, revision)
+
+    def run_gameplay(self, session_id, revision, request_ref, report_id):
+        with self.lock:
+            if not self.session or session_id != self.session['id']:
+                raise ValueError('Reopen the intended session before running gameplay checks')
+            folder = self.sessions_dir / session_id
+        return gameplay.run_current(self.root, folder, revision, request_ref, report_id)
+
     def choose_model(self, provider):
         with self.lock:
             if provider != 'muse':
@@ -228,12 +241,14 @@ class App:
             if self.session:
                 session_folder = self.sessions_dir / self.session['id']
                 result['project_brief'] = project_brief.load(session_folder)
+                result['gameplay_plan'] = gameplay.load(session_folder)
                 result['messages'] = transcript(session_folder)
                 result['chat_activity'] = chat_activity(session_folder)
                 result['build'] = chat_build.status(self.root, session_folder)
                 result['build']['playtests'] = playtests.reports(session_folder)
                 result['build']['versions'] = project_versions.history(session_folder)
                 result['build']['smoke_checks'] = browser_checks.reports(session_folder)
+                result['build']['gameplay_checks'] = gameplay.reports(session_folder)
                 result['polish_runs'] = polish.history(self.root, session_folder)
                 try:
                     polish_runtime.discover(self.root, fingerprints=False)
@@ -474,7 +489,7 @@ def server(app, port=0):
                 return self.reply(403, {'error': 'Local app authorization required'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= (64000 if self.path == '/api/project-brief' else 16000):
+                if not 0 < size <= (64000 if self.path in ('/api/project-brief', '/api/gameplay-plan') else 16000):
                     raise ValueError('Invalid request size')
                 body = json.loads(self.rfile.read(size))
                 if self.path == '/api/start':
@@ -497,6 +512,10 @@ def server(app, port=0):
                     result = app.polish_control(**body)
                 elif self.path == '/api/project-brief':
                     result = app.save_brief(body['session_id'], body['fields'], body['revision'])
+                elif self.path == '/api/gameplay-plan':
+                    result = app.save_gameplay(body['session_id'], body['plan'], body['revision'])
+                elif self.path == '/api/gameplay-run':
+                    result = app.run_gameplay(body['session_id'], body['revision'], body['request_ref'], body['report_id'])
                 elif self.path == '/api/model':
                     result = app.choose_model(body['provider'])
                 elif self.path == '/api/workflow':
