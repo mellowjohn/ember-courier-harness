@@ -19,7 +19,7 @@ from .owner_review import load_request, decide
 from .recovery import Recovery, exclusive, worker_active, read_json
 from .session_chat import transcript, send, activity as chat_activity, MUSE_UNAVAILABLE
 from .muse_chat import installed_binary, CreditLedger
-from . import chat_build, playtests, project_versions
+from . import chat_build, playtests, project_versions, project_brief
 
 
 class App:
@@ -126,6 +126,12 @@ class App:
         messages = send(folder, text, turn_id, 'muse', root=self.root)
         return dict(messages=messages)
 
+    def save_brief(self, session_id, fields, revision):
+        with self.lock:
+            if not self.session or session_id != self.session['id']:
+                raise ValueError('Reopen the intended session before saving its brief')
+            return project_brief.save(self.sessions_dir / session_id, fields, revision)
+
     def choose_model(self, provider):
         with self.lock:
             if provider != 'muse':
@@ -216,6 +222,7 @@ class App:
                     result['report'] = (path.parent / 'PRODUCT_DEMO.md').read_text(encoding='utf-8')
             if self.session:
                 session_folder = self.sessions_dir / self.session['id']
+                result['project_brief'] = project_brief.load(session_folder)
                 result['messages'] = transcript(session_folder)
                 result['chat_activity'] = chat_activity(session_folder)
                 result['build'] = chat_build.status(self.root, session_folder)
@@ -392,7 +399,7 @@ def server(app, port=0):
                 return self.reply(403, {'error': 'Local app authorization required'})
             try:
                 size = int(self.headers.get('Content-Length', '0'))
-                if not 0 < size <= 16000:
+                if not 0 < size <= (64000 if self.path == '/api/project-brief' else 16000):
                     raise ValueError('Invalid request size')
                 body = json.loads(self.rfile.read(size))
                 if self.path == '/api/start':
@@ -407,6 +414,8 @@ def server(app, port=0):
                     result = app.request_changes(body['ref'], body['note'], body['id'])
                 elif self.path == '/api/playtest':
                     result = app.record_playtest(**body)
+                elif self.path == '/api/project-brief':
+                    result = app.save_brief(body['session_id'], body['fields'], body['revision'])
                 elif self.path == '/api/model':
                     result = app.choose_model(body['provider'])
                 elif self.path == '/api/workflow':

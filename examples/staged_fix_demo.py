@@ -76,7 +76,7 @@ def _bootstrap(state, *, recovery=None, with_rounds=False, with_intake=False, in
     state.snapshot = state.repo / 'triage/bug_snapshot.json'
     state.snapshot.write_bytes(canonical({'id': 'BUG-0001', 'severity': 'S2', 'title': 'Delivery rewards lose one coin', 'steps': ['Deliver five coins', 'Inspect reward'], 'expected': 5, 'actual': 4}))
     git(state.repo, 'init', '--initial-branch=main')
-    for state.key, state.value in (('user.name', 'Ember demo fixture'), ('user.email', 'demo@example.invalid'), ('core.autocrlf', 'false'), ('commit.gpgsign', 'false'), ('core.hooksPath', str(state.folder / 'no-hooks'))):
+    for state.key, state.value in (('user.name', 'Ember demo fixture'), ('user.email', 'demo@example.invalid'), ('core.autocrlf', 'false'), ('core.longpaths', 'true'), ('commit.gpgsign', 'false'), ('core.hooksPath', str(state.folder / 'no-hooks'))):
         git(state.repo, 'config', '--local', state.key, state.value)
     state.h = Harness(state.repo / 'control')
     state.fix_id, state.verifier_id, state.scope_id = ('ct-fix-0001', 'ct-verifier-0001', 'ct-fix-scope-0001')

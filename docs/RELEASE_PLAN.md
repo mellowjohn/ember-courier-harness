@@ -14,6 +14,9 @@ report, not a claim that arbitrary generated games pass automated gameplay tests
 Implemented in the local app:
 
 - Saved named sessions and durable conversation turns.
+- Persistent per-session project briefs and a responsive chat/preview workspace.
+  Brief snapshots remain bound to requests and retries; previews retain game state
+  during polling and recorded playtest updates.
 - One reviewed proposal for up to eight HTML/CSS/JavaScript files; exact gated
   writes, file evidence, changed-input rejection and interrupted-build recovery.
 - Compact review, Approve & play, direct revision requests, and feedback-to-fix.

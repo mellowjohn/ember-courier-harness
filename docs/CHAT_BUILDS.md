@@ -8,7 +8,9 @@ Inline code still works. Limits are 64 KiB per file and 256 KiB per project. Ord
 current implementation does not edit arbitrary repositories, run package
 installations or commands, or build engine projects.
 
-The conversation and the complete current session project are supplied to Muse. A
+The latest 20 conversation messages, saved project brief and complete current
+session project are supplied to Muse. The brief preserves design guidance across
+long conversations; it never grants action authority. See [the local workspace guide](LOCAL_UI.md#project-brief-and-preview-workspace). A
 structured reply contains a message and either a concrete build proposal or
 `null`. The host validates the proposed path, file count, size, HTML structure,
 and all current source hashes. Duplicate names, missing or external script/style

@@ -114,3 +114,32 @@ boundary and seven-checkpoint integration test. Recovery checks are in
 `tests/test_session_recovery.py`; conversation durability checks are in
 `tests/test_session_chat.py`. All decisions in that test are
 explicit synthetic test responses, not owner approvals.
+
+## Project brief and preview workspace
+
+Open **Project brief** to save the game goal, controls, visual direction and
+constraints (up to 2000 characters per field). **Save brief** persists the four
+fields for this session across restarts. **Use saved brief** discards local edits.
+The saved brief is included independently of the latest 20 conversation messages
+in each new Muse request. Unsaved edits are marked and are not sent to Muse.
+Editing a brief does not call Muse, change a game, approve a contract, or grant
+broader permissions. Existing sessions start with an empty brief.
+
+Each request retains its original brief snapshot, including on retry after a
+failure; the next new request uses the latest saved brief. Saves are blocked while
+Muse is running. A stale save from another window is rejected; use the saved brief
+to reload it before editing again. Chat drafts and unsaved brief edits stay with
+their session while switching within this browser page; save the brief before
+refreshing or closing the page. Conversation turns still save automatically.
+
+On wide screens chat and **Play & refine** appear side by side. Smaller screens
+stack the preview below chat. The latest completed build opens automatically after
+its source is verified; its version is labeled above the game. Opening previews
+does not call Muse. Game state and playtest notes remain in place during normal
+polling and when a playtest observation is saved. Opening a different session,
+completing a new build, or explicitly reopening the preview starts a fresh game.
+The existing preview isolation, version downloads and exact build approvals apply.
+
+Local source checkpoint before this polish pass: `235f31b`. Generated projects,
+private sessions, approvals and release logs remain under ignored `.harness/`;
+the Git checkpoint contains application source and documentation.

@@ -7,6 +7,7 @@ import time
 from types import SimpleNamespace
 import unittest
 
+import ember_harness
 from ember_harness.local_ui import App
 from ember_harness.recovery import Recovery, atomic_json, decode, encode, exclusive, worker_active
 
@@ -43,8 +44,9 @@ class SessionRecoveryTests(unittest.TestCase):
         scratch.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=scratch) as folder:
             root = Path(folder)
-            for area in ('examples', 'ember_harness'):
-                shutil.copytree(ROOT / area, root / area, ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(ROOT / 'examples', root / 'examples', ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(Path(ember_harness.__file__).parent, root / 'ember_harness',
+                            ignore=shutil.ignore_patterns('__pycache__'))
             # Crash once immediately after the durable local commit checkpoint.
             product_source = root / 'examples/product_demo.py'
             source = product_source.read_text(encoding='utf-8')
