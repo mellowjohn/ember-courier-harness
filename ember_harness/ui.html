@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ember Harness</title>
+<style>
+:root{color-scheme:dark;font:14px/1.6 Inter,Segoe UI,system-ui,sans-serif;background:#111715;color:#e7ece8}*{box-sizing:border-box}body{margin:0}button,input,textarea{font:inherit}button{cursor:pointer;color:inherit}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid #f3ad70;outline-offset:3px}[hidden]{display:none!important}.layout{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:100vh}.sidebar{background:#0c1210;border-right:1px solid #28342e;padding:30px 20px;display:flex;flex-direction:column;gap:26px;height:100vh;position:sticky;top:0}.logo{display:flex;align-items:center;gap:12px}.mark{display:grid;place-items:center;width:36px;height:40px;background:#32271e;border:1px solid #63482f;border-radius:10px;font-size:24px;color:#ffb168}.logo strong{font-size:17px;letter-spacing:-.4px}.logo small{display:block;font-size:11px;color:#8a9b91}.primary{background:#f4af73!important;color:#251b13!important;border:1px solid #f4af73!important;font-weight:600}.new-button{width:100%;padding:12px;border-radius:8px;text-align:left}.new-button span{font-size:20px;vertical-align:-1px;margin-right:10px}.section-label{font-size:10px;letter-spacing:1.8px;font-weight:600;color:#8c9c92;text-transform:uppercase}.session-heading{display:flex;justify-content:space-between;align-items:center;padding:0 8px;margin-bottom:12px}.session-heading span:last-child{color:#8c9c92;font-size:11px}.session-scroll{flex:1;min-height:0;overflow:auto}.session-item{display:block;width:100%;border:1px solid transparent;background:transparent;text-align:left;padding:11px 12px;border-radius:8px;margin-bottom:6px}.session-item:hover{background:#17221b}.session-item[aria-current=true]{background:#233329;border-color:#3b5141}.session-name{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:550}.session-meta{display:flex;align-items:center;gap:6px;font-size:11px;color:#8fa195;margin-top:3px}.dot{height:6px;width:6px;border-radius:50%;background:#6a786f;display:inline-block;flex:none}.running .dot{background:#efb577}.completed .dot{background:#8cc59d}.sidebar-footer{border-top:1px solid #26342b;padding:18px 8px 0;color:#819287;font-size:11px}.sidebar-footer strong{display:block;font-size:12px;color:#b5c6b9;font-weight:500}.workspace{min-width:0}.topbar{padding:20px 40px;border-bottom:1px solid #29362e;display:flex;justify-content:space-between;align-items:center;color:#94a79b;font-size:12px}.topbar strong{color:#d2dfd5;font-weight:500}.badge{background:#23362a;border:1px solid #3a5140;color:#b9d2bf;border-radius:6px;padding:4px 10px;text-transform:capitalize;font-size:11px}.content{max-width:1260px;padding:36px 40px;margin:auto}.heading{display:flex;justify-content:space-between;gap:24px;align-items:center}.eyebrow{color:#c09a76;font-size:10px;letter-spacing:1.7px;text-transform:uppercase}h1{font-size:29px;line-height:1.25;letter-spacing:-.8px;margin:9px 0}h2{font-size:23px;line-height:1.3}h3{font-size:17px;line-height:1.4}p{color:#adbbb1}.subtitle{margin:8px 0;color:#8c9e91;font-size:12px}.button{border:1px solid #425649;background:#1b2a21;border-radius:7px;padding:9px 15px}.button:hover{border-color:#d69a68}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:28px 0}.metric{border:1px solid #2d3d32;background:#17221b;padding:17px 20px;border-radius:9px}.metric-label{color:#8fa395;font-size:11px}.metric strong{display:block;font-size:24px;font-weight:550;margin:5px 0 0;line-height:1.4}.metric small{color:#8a9e90;font-size:11px}.tabs{display:flex;gap:28px;border-bottom:1px solid #304035;margin:26px 0}.tabs button{background:transparent;border:0;border-bottom:2px solid transparent;padding:0 0 13px;color:#8da193;font-size:12px}.tabs button[aria-selected=true]{color:#f3ba88;border-bottom-color:#e9a56a}.notice{font-size:12px;border:1px solid #344435;background:#1b271d;border-radius:8px;padding:13px 17px;color:#a6b6aa}.panel{border:1px solid #344439;background:#17221b;padding:24px;border-radius:9px;margin:18px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 ui-monospace,monospace;background:#0d1710;padding:16px;border-radius:7px;max-height:520px;overflow:auto}textarea,input{width:100%;background:#101a13;color:inherit;border:1px solid #49604e;border-radius:7px;padding:11px 12px}textarea{min-height:90px}label{display:block;color:#becdc1;font-size:12px}img{max-width:100%;height:180px;object-fit:contain;image-rendering:pixelated;background:#101613;border-radius:8px}.options{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}.option{border:1px solid #516055;padding:16px;border-radius:8px}.actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}.decision{border:1px solid #4a6050;background:#24372a;border-radius:7px;padding:10px 16px}.decline{background:#382723;border-color:#704c3d}.brand{color:#e5ad7d}small,.muted{color:#8fa395}#error{color:#ffb0a2;white-space:pre-wrap}#error:empty{display:none}details{margin:16px 0}summary{cursor:pointer;color:#c0d0c3}a{color:#ffb168}.empty{padding:40px 0;color:#8fa395}.hash{font:11px monospace;overflow-wrap:anywhere}dialog{width:min(460px,calc(100vw - 32px));color:#e5eee7;border:1px solid #405344;border-radius:12px;background:#17221b;padding:28px}dialog::backdrop{background:#050b08bb;backdrop-filter:blur(3px)}dialog h2{margin-top:0}dialog input{margin-top:8px}.dialog-error{color:#ffb0a2;font-size:12px}.rename{max-width:330px;margin:16px 0}#save-note{font-size:11px;color:#8fa395}
+@media(max-width:900px){.layout{grid-template-columns:220px minmax(0,1fr)}.content{padding:28px 24px}.topbar{padding:18px 24px}.metrics{gap:8px}.metric{padding:14px}}
+@media(max-width:620px){.layout{display:block}.sidebar{position:static;height:auto;padding:18px;gap:16px}.session-scroll{max-height:180px}.sidebar-footer{display:none}.content{padding:24px 18px}.topbar{padding:16px 18px}.heading{align-items:flex-start}.metrics{grid-template-columns:1fr}.tabs{gap:20px}.metric strong{font-size:20px}.metric{padding:12px 16px}}
+.chat-thread{display:flex;flex-direction:column;gap:18px;margin:24px 0}.message{max-width:88%;padding:16px 20px;border:1px solid #304337;border-radius:12px;background:#18261d;white-space:pre-wrap;overflow-wrap:anywhere}.message.user{align-self:flex-end;background:#283b2e}.message .message-author{display:block;color:#f0b783;font-size:11px;margin-bottom:8px;font-weight:600}.message .message-status{display:block;color:#9dad9f;font-size:11px;margin-top:9px}.composer{border:1px solid #3f5847;background:#142219;border-radius:12px;padding:14px;margin:24px 0}.composer textarea{background:transparent;border:0;min-height:80px;resize:vertical}.composer .actions{justify-content:space-between;align-items:center;margin:8px 0 0}.composer select,dialog select{background:#1d3024;color:inherit;border:1px solid #48604e;border-radius:7px;padding:8px 12px}dialog select{width:100%;margin-top:8px}.chat-empty{padding:32px 0;text-align:center;color:#94a798}.chat-empty h2{color:#d7e5da}.recovery-notice{border-left:3px solid #e8ad75;padding:12px 18px;background:#293023}.metrics{margin:18px 0;gap:12px}.metric{padding:10px 16px}.metric strong{display:inline;font-size:16px;margin-left:10px}.metric small{display:none}
+
+.content{max-width:1800px;padding:28px 32px}.workbench{display:grid;grid-template-columns:minmax(320px,1fr) minmax(380px,1.15fr);gap:24px;align-items:start}.chat-column,.preview-column{min-width:0}.preview-column{position:sticky;top:20px;border:1px solid #344439;background:#131f18;border-radius:12px;padding:20px}.preview-column h2{font-size:18px;margin:0}.preview-column .panel{padding:16px}.preview-column iframe{height:480px!important}.preview-empty{min-height:300px;display:grid;place-content:center;text-align:center;padding:24px}.brief{border:1px solid #344439;border-radius:10px;padding:14px 18px;margin:16px 0}.brief summary{font-weight:600}.brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.brief textarea{min-height:95px;resize:vertical;margin-top:6px}.brief-status{font-size:12px;color:#b9d2bf}.chat-thread{margin-top:0}.composer{position:sticky;bottom:12px;box-shadow:0 8px 24px #0a100dcc}.playtest-area .button{margin:8px 6px 0 0}.build-version{color:#f0b783;font-size:12px}.message{max-width:95%}
+@media(max-width:1150px){.workbench{grid-template-columns:minmax(0,1fr)}.preview-column{position:static}.composer{position:static}.content{padding:24px}.brief-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:620px){.content{padding:20px 16px}.brief-grid{grid-template-columns:1fr}.preview-column{padding:14px}.preview-column iframe{height:360px!important}.heading{flex-wrap:wrap}}
+.polish-limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}@media(max-width:620px){.polish-limits{grid-template-columns:1fr}}
+#gameplay-editor fieldset{min-width:0;border:1px solid #405344;border-radius:8px;margin:16px 0}#gameplay-editor select{max-width:100%;background:#1d3024;color:inherit;border:1px solid #48604e;border-radius:7px;padding:8px}
+</style></head><body>
+<div class="layout"><aside class="sidebar" aria-label="Sessions">
+<div class="logo"><span class="mark" aria-hidden="true">◈</span><div><strong>Ember Harness</strong><small>LOCAL WORKSPACE</small></div></div>
+<button id="new-session" class="new-button primary"><span aria-hidden="true">＋</span>New session</button>
+<div class="session-scroll"><div class="session-heading"><span class="section-label">Sessions</span><span id="session-count">0</span></div><nav id="session-list" aria-label="Saved sessions"><p class="muted">Loading sessions…</p></nav></div>
+<div class="sidebar-footer"><strong><span class="dot" style="background:#8cc59d"></span> Local workspace</strong>Sessions and evidence saved on this computer.</div>
+</aside><div class="workspace">
+<header class="topbar"><span>Workspace <span aria-hidden="true">/</span> <strong>Ember Courier</strong></span><span class="badge" id="status">Connecting</span></header>
+<main class="content"><div class="heading"><div><div class="eyebrow">Session workspace</div><h1 id="session-title">Your sessions, in one place.</h1><p class="subtitle" id="saved">Create a session or select one from the sidebar.</p></div><div class="actions"><button id="recover" class="button primary" hidden>Resume workflow</button><button id="save" class="button">Rename session</button></div></div>
+<div class="rename" id="rename-area" hidden><label>Session name<input id="rename-name" maxlength="120"></label><div class="actions"><button id="rename-confirm" class="button">Save changes</button><button id="rename-cancel" class="button">Cancel</button></div></div><p id="save-note" role="status"></p>
+<details class="session-details"><summary>Session details</summary><div class="metrics"><div class="metric"><span class="metric-label">Decisions recorded</span><strong id="decision-count">0</strong><small>Owner review history</small></div><div class="metric"><span class="metric-label">Pending reviews</span><strong id="pending-count">0</strong><small>Waiting for your response</small></div><div class="metric"><span class="metric-label">Session progress</span><strong id="progress">Ready</strong><small id="progress-detail">Start a workflow to begin</small></div></div>
+</details><nav class="tabs" aria-label="Session views" role="tablist"><button data-tab="chat" role="tab" aria-selected="true" aria-controls="chat">Chat</button><button data-tab="activity" role="tab" aria-selected="false" aria-controls="activity">Activity & audit</button><button data-tab="report" role="tab" aria-selected="false" aria-controls="report">Results</button></nav>
+<details id="project-brief" class="brief" hidden><summary>Project brief <span id="brief-summary" class="muted"> · Keep the direction in view</span></summary><p class="subtitle">Saved with this session and included in every new Muse request. Guidance only; builds still need your approval.</p><form id="brief-form"><div class="brief-grid"><label>Game goal<textarea id="brief-goal" maxlength="2000" placeholder="What does the player do, and what makes it fun?"></textarea></label><label>Controls<textarea id="brief-controls" maxlength="2000" placeholder="Movement, actions, keyboard or touch"></textarea></label><label>Visual direction<textarea id="brief-visual_direction" maxlength="2000" placeholder="Style, palette, mood, readability"></textarea></label><label>Constraints<textarea id="brief-constraints" maxlength="2000" placeholder="Must keep, avoid, or preserve across revisions"></textarea></label></div><div class="actions"><button id="brief-save" class="button" type="submit">Save brief</button><button id="brief-reset" class="button" type="button">Use saved brief</button><span id="brief-status" class="brief-status" role="status"></span></div></form></details><p id="error" role="alert"></p><section id="chat" role="tabpanel"><p id="recovery-note" class="recovery-notice" hidden></p><div class="workbench"><div class="chat-column"><div id="messages" class="chat-thread" role="log" aria-label="Conversation"></div><section id="agent-progress" class="panel" aria-label="Agent progress" aria-live="polite" hidden></section><section id="review" aria-label="Workflow review"></section><form id="chat-form" class="composer"><label for="chat-input" class="section-label">Message Ember</label><textarea id="chat-input" maxlength="8000" placeholder="What would you like to work on?" required></textarea><div class="actions"><label>Model <select id="chat-provider"><option value="muse">Muse · free credits</option></select></label><button id="chat-send" class="button primary" type="submit">Send message</button></div><p id="model-note" class="subtitle"></p></form></div><aside class="preview-column" aria-label="Game preview workspace"><h2>Play & refine</h2><p class="subtitle">Try your latest approved build while you chat.</p><section id="build-result" aria-label="Build result"></section></aside></div></section><section id="activity" role="tabpanel" hidden><h3>Agent activity</h3><pre id="chat-log">No messages yet.</pre><h3>Workflow execution log</h3><pre id="log"></pre><h3>Audit trail</h3><pre id="audit"></pre><p class="hash" id="store"></p></section><section id="report" role="tabpanel" hidden><button id="verify" class="button">Verify current evidence</button><pre id="verification" hidden></pre><pre id="result">Complete a workflow to see its report.</pre></section>
+<details><summary class="subtitle">Sample workflow and technical details</summary><button id="run-workflow" class="button" hidden>Start sample workflow</button><p class="notice">Ember Courier sample: scope → concept → asset acceptance → bug fix → verification. Each approval applies only to the packet you review. <span id="mode"></span> Background work continues when Ember closes. Interrupted workflows can resume from saved checkpoints. Uncertain partial writes require inspection.</p></details>
+</main></div></div>
+<dialog id="new-dialog" aria-labelledby="new-title"><form id="new-form"><h2 id="new-title">Create a new session</h2><p>Name this conversation so you can find it later.</p><label>Session name<input id="session-name" maxlength="120" placeholder="e.g. Courier asset review" required autocomplete="off"></label><label style="margin-top:16px">Model<select id="new-provider"><option value="muse">Muse · up to $150 free credits</option></select></label><p class="dialog-error" id="new-error" role="alert"></p><div class="actions"><button id="start" class="button primary" type="submit">Create session</button><button id="cancel-new" class="button" type="button">Cancel</button></div><p class="subtitle">Your conversation is saved with this session. Workflows ask for approval before acting.</p></form></dialog>
+<script>
+
+const token=location.hash.slice(1)||sessionStorage.getItem('ember-token')||'';sessionStorage.setItem('ember-token',token);history.replaceState(null,'',location.pathname);
+const $=id=>document.getElementById(id);let current='',busy=false,activeSession=null,historyKey='',chatKey='',sending=false,buildReviewRef=null,buildKey='',previewState=null,autoPreviewRef=null,localRequest=null,lastState=null;const urls=[];const briefFields=['goal','controls','visual_direction','constraints'];let briefSession=null,briefRevision=0,briefDirty=false,briefSaving=false;const sessionDrafts=new Map();
+let smokeRun=null;
+let polishKey='';const polishURLs=[],polishDrafts=new Map();
+async function api(path,body){const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'X-Ember-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
+function el(tag,text,parent){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(parent)parent.append(n);return n}
+function detail(title,data,parent){const d=el('details',undefined,parent);el('summary',title,d);el('pre',JSON.stringify(data,null,2),d)}
+async function preview(ref,choice,parent){try{const r=await fetch('/api/image?'+new URLSearchParams({ref,...(choice?{choice}:{})}),{headers:{'X-Ember-Token':token}});if(!r.ok)throw Error((await r.json()).error);const url=URL.createObjectURL(await r.blob());urls.push(url);const img=el('img',undefined,parent);img.src=url;img.alt=choice||'Asset awaiting acceptance'}catch(e){el('p','Preview unavailable: '+e.message,parent)}}
+async function respond(ref,choice,label){
+  if(busy||sending||briefSaving)return;
+  const isBuild=buildReviewRef===ref,quote=label||'Approve reviewed changes';
+  busy=true;document.querySelectorAll('.decision').forEach(b=>b.disabled=true);
+  try{
+    const result=await api('decide',{ref,choice,quote});
+    if(isBuild&&choice==='approve'&&result.build?.status==='completed')autoPreviewRef=ref;
+    current='';$('error').textContent='';await refresh();
+  }catch(e){$('error').textContent=e.message}
+  finally{busy=false;document.querySelectorAll('.decision').forEach(b=>b.disabled=false)}
+}
+function decision(parent,text,ref,choice,cls=''){
+  const button=el('button',text,parent);button.className='decision '+cls;button.disabled=busy||sending;
+  button.onclick=()=>respond(ref,choice,text);
+}
+function renderReview(s){
+  const pending=s.requests.filter(r=>!r.decision);
+  const key=JSON.stringify([s.session?.id,s.status,pending.map(r=>r.ref),s.requests.length]);
+  if(key===current)return;current=key;urls.splice(0).forEach(URL.revokeObjectURL);
+  $('review').replaceChildren();$('review').hidden=!pending.length;buildReviewRef=null;
+  if(!pending.length)return;
+  const r=pending[0],body=r.payload.body,p=el('div',undefined,$('review'));p.className='panel';
+  if(body.build){
+    buildReviewRef=r.ref;
+    el('small',body.build.restore_from?'READY TO RESTORE':'READY TO BUILD',p).className='brand';el('h3',body.build.title,p);el('p',body.build.summary,p);
+    const files=body.build.files||[{name:'index.html',before_sha256:body.build.before_sha256}];
+    el('p',files.map(file=>(file.before_sha256?'Update ':'Create ')+file.name).join(' · '),p);
+    el('small','One approval applies all of these exact file changes and opens the preview.',p);
+    const code=el('details',undefined,p);el('summary','View code changes',code);el('pre',body.build.diff,code);
+    const permissions=el('details',undefined,p);el('summary','Permissions and checks',permissions);
+    el('p',body.build.restore_from?'Restoration stays in this session and does not call Muse.':'Changes are limited to this session project. Muse uses the shared credit budget.',permissions);
+    for(const check of body.build.checks)el('p',check,permissions);
+    detail('Exact contracts and audit reference',{ref:r.ref,contracts:body.contracts},permissions);
+    const actions=el('div',undefined,p);actions.className='actions';
+    const tryBuild=el('button','Try proposed changes',actions);tryBuild.className='button';
+    decision(actions,body.build.restore_from?'Approve restore & play':'Approve & play',r.ref,'approve','primary');
+    const change=el('button','Request changes',actions);change.className='button';change.disabled=busy||sending;
+    decision(actions,'Discard',r.ref,'decline');
+    const trial=el('section',undefined,p);trial.hidden=true;trial.setAttribute('aria-label','Proposal preview');
+    tryBuild.onclick=async()=>{
+      if(trial.querySelector('iframe')){trial.hidden=!trial.hidden;tryBuild.textContent=trial.hidden?'Try proposed changes':'Hide proposal preview';return}
+      const sid=s.session.id;tryBuild.disabled=true;
+      try{const result=await api('proposal-preview?'+new URLSearchParams({session_id:sid,ref:r.ref}));
+        if(activeSession?.id!==sid||!trial.isConnected||result.request_ref!==r.ref)return;
+        el('h4','Proposal preview · not applied',trial);el('p','Try the controls and compare with your current game. Approve & play saves these changes; Request changes sends your feedback.',trial);
+        prototypeFrame(trial,'Proposed browser prototype · not applied').srcdoc=previewDocument(result.html);
+        trial.hidden=false;tryBuild.textContent='Hide proposal preview';$('error').textContent='';
+      }catch(error){if(trial.isConnected)$('error').textContent=error.message}
+      finally{tryBuild.disabled=false}
+    };
+    const edit=el('div',undefined,p);edit.hidden=true;
+    const label=el('label','What should change?',edit),note=el('textarea',undefined,label);note.maxLength=2000;
+    const send=el('button','Send changes to Muse',edit);send.className='button primary';const turnId=crypto.randomUUID();
+    change.onclick=()=>{edit.hidden=!edit.hidden;if(!edit.hidden)note.focus()};
+    send.onclick=async()=>{
+      if(busy||sending||briefSaving)return;
+      if(!note.value.trim()){$('error').textContent='Describe what you want changed.';note.focus();return}
+      sending=true;beginChatRequest(note.value,turnId);send.disabled=true;send.textContent='Preparing revision…';
+      try{await api('request-changes',{ref:r.ref,note:note.value,id:turnId});$('error').textContent=''}
+      catch(e){$('error').textContent=e.message}
+      finally{sending=false;localRequest=null;current='';chatKey='';await refresh()}
+    };
+    return;
+  }
+  el('small','SAMPLE WORKFLOW',p).className='brand';
+  if(r.payload.kind==='contracts'){
+    el('h3','Review the next step',p);for(const item of body.contracts)el('p',item.contract.goal,p);
+    detail('Permissions and complete contracts',body.contracts,p);
+  }else if(r.payload.kind==='choice'){
+    el('h3','Choose your concept',p);const grid=el('div',undefined,p);grid.className='options';
+    for(const option of body.options){const card=el('div',undefined,grid);card.className='option';el('h3',option.choice,card);el('p',option.pitch,card);preview(r.ref,option.choice,card);decision(card,'Select '+option.choice,r.ref,option.choice)}
+  }else{
+    el('h3',body.action.tool==='asset.accept'?'Accept this asset':'Review the next action',p);
+    detail('Action details',body.action,p);if(body.action.tool==='asset.accept')preview(r.ref,null,p);
+  }
+  const actions=el('div',undefined,p);actions.className='actions';
+  if(r.payload.kind!=='choice')decision(actions,body.action?.tool==='asset.accept'?'Accept asset':'Approve this step',r.ref,'approve','primary');
+  decision(actions,'Decline and stop',r.ref,'decline');detail('Complete review packet',r.payload,p);
+  if(s.status!=='running')p.querySelectorAll('.decision').forEach(button=>button.disabled=true);
+}
+
+function showTab(id){for(const view of ['chat','polish','activity','report'])if($(view))$(view).hidden=view!==id;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)))}
+async function refresh(){try{const s=await api('state');lastState=s;activeSession=s.session;renderBrief(s);renderChat(s);renderBuild(s);$('recover').hidden=!s.recovery_available;$('run-workflow').hidden=!s.session||s.session.workflow_started!==false;$('recovery-note').hidden=!s.recovery_available;$('recovery-note').textContent=s.recovery_error||'This workflow stopped. Resume it from the last saved checkpoint; recorded approvals remain in place.';$('save').disabled=!s.session;$('session-title').textContent=s.session?s.session.name:'Your sessions, in one place.';$('saved').textContent=s.session?'Created '+new Date(s.session.created_at).toLocaleDateString()+' · Saved '+new Date(s.session.updated_at).toLocaleString():'Create a session or select one from the sidebar.';$('status').textContent=(sending||s.chat_activity?.state==='active')?'Working':s.build?.requests.some(r=>!r.decision)?'Awaiting approval':s.status;$('mode').textContent='Model: Muse. Describe a browser prototype in chat, review its diff, and approve changes inline. Sample workflows remain separate.';$('decision-count').textContent=s.requests.filter(r=>r.decision).length;$('pending-count').textContent=s.requests.filter(r=>!r.decision).length;$('progress').textContent=({idle:'Ready',running:'In progress',completed:'Complete',stopped:'Stopped',interrupted:'Interrupted'})[s.status]||s.status;$('progress-detail').textContent=s.status==='running'?'Workflow active':s.status==='completed'?'Evidence ready to verify':s.status==='idle'?'Ready for your message':'Open Activity for details';$('log').textContent=s.log||'No sample workflow started.';$('chat-log').textContent=(s.chat_activity?.events||[]).map(event=>new Date(event.at).toLocaleTimeString()+' · '+event.title).join('\n')||'No recorded request activity yet.';$('audit').textContent=JSON.stringify({sample_workflow:s.audit,chat_builds:s.build?.audit||[]},null,2);$('store').textContent=s.store;$('verify').disabled=s.status!=='completed'&&!s.build?.completed.length;$('result').textContent=s.report||(s.build?.completed.length?'Browser build complete.\nProject: '+s.build.project+'\nSHA-256: '+s.build.completed[s.build.completed.length-1].sha256+'\nVerify current evidence to refresh file and approval checks.':'Approve a build in chat or complete a sample workflow to see results.');renderReview(s)}catch(e){$('error').textContent=e.message}}
+$('new-session').onclick=()=>{if(busy||sending||briefSaving)return;$('new-error').textContent='';$('session-name').value='';$('new-dialog').showModal();$('session-name').focus()};
+$('cancel-new').onclick=()=>$('new-dialog').close();
+$('new-form').onsubmit=async event=>{event.preventDefault();if(busy||sending||briefSaving)return;const name=$('session-name').value.trim();if(!name){$('new-error').textContent='Enter a name for this session.';return}busy=true;$('start').disabled=true;try{await api('start',{name,new_session:true,chat_only:true,provider:$('new-provider').value});$('new-dialog').close();$('error').textContent='';$('save-note').textContent='';$('rename-area').hidden=true;$('verification').hidden=true;current='';await refresh();await loadHistory();showTab('chat')}catch(e){$('new-error').textContent=e.message}finally{busy=false;$('start').disabled=false}};
+$('verify').onclick=async()=>{try{$('verify').disabled=true;const d=await api('verify',{});$('verification').hidden=false;$('verification').textContent=JSON.stringify(d,null,2)}catch(e){$('error').textContent=e.message}finally{await refresh()}};
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+$('save').onclick=async()=>{if(!activeSession||busy||sending)return;try{$('rename-name').value=activeSession.name;$('rename-area').hidden=false;$('save-note').textContent='Conversations save automatically. Update the name below.';await refresh();await loadHistory()}catch(e){$('error').textContent=e.message}};
+$('rename-cancel').onclick=()=>$('rename-area').hidden=true;
+$('rename-confirm').onclick=async()=>{try{await api('save',{name:$('rename-name').value});$('rename-area').hidden=true;$('save-note').textContent='Session saved.';await refresh();await loadHistory()}catch(e){$('error').textContent=e.message}};
+async function loadHistory(){try{const sessions=await api('sessions');const key=JSON.stringify([activeSession?.id,sessions.map(s=>[s.id,s.name,s.status,s.updated_at])]);if(key===historyKey)return;historyKey=key;$('session-list').replaceChildren();$('session-count').textContent=sessions.length;if(!sessions.length)el('p','No sessions yet. Create your first session above.',$('session-list')).className='subtitle';for(const s of sessions){const row=el('button',undefined,$('session-list'));row.className='session-item '+s.status;row.setAttribute('aria-current',String(s.id===activeSession?.id));row.title=s.name+' · Saved '+new Date(s.updated_at).toLocaleString();el('span',s.name,row).className='session-name';const meta=el('span',undefined,row);meta.className='session-meta';el('span','',meta).className='dot';el('span',s.status+' · '+new Date(s.updated_at).toLocaleDateString(),meta);row.onclick=async()=>{if(busy||sending||briefSaving)return;busy=true;row.disabled=true;try{await api('resume',{id:s.id});$('error').textContent='';$('save-note').textContent='';$('rename-area').hidden=true;$('verification').hidden=true;current='';await refresh();await loadHistory();showTab('chat')}catch(e){$('error').textContent=e.message}finally{busy=false;row.disabled=false}}}}catch(e){$('error').textContent=e.message}}
+function renderBrief(s){
+  const sid=s.session?.id||null;
+  if(briefSession!==sid){
+    if(briefSession)sessionDrafts.set(briefSession,{chat:$('chat-input').value,brief:briefFields.map(k=>$('brief-'+k).value),revision:briefRevision,dirty:briefDirty});
+    briefSession=sid;const draft=sessionDrafts.get(sid),saved=s.project_brief;
+    $('chat-input').value=draft?.chat||'';briefRevision=draft?.dirty?draft.revision:(saved?.revision||0);briefDirty=!!draft?.dirty;
+    briefFields.forEach((key,i)=>$('brief-'+key).value=draft?.dirty?draft.brief[i]:(saved?.fields[key]||''));
+    $('brief-status').textContent=briefDirty?'Unsaved changes':saved?.revision?'Brief saved':'Add the direction you want Muse to remember';
+  }else if(!briefDirty&&!briefSaving&&s.project_brief?.revision!==briefRevision){
+    briefRevision=s.project_brief?.revision||0;briefFields.forEach(key=>$('brief-'+key).value=s.project_brief?.fields[key]||'');
+  }
+  $('project-brief').hidden=!sid;
+  $('brief-save').disabled=!sid||!briefDirty||briefSaving||sending||s.chat_activity?.state==='active';
+  $('brief-reset').disabled=!briefDirty||briefSaving;
+  $('brief-summary').textContent=briefDirty?' · Unsaved changes':briefRevision?' · Saved direction':' · Keep the direction in view';
+}
+const gameplayDrafts=new Map();let gameplayDraft=null,gameplayReportKey='';
+const gameplayLabels={click:'Click',tap:'Touch tap',press:'Press key',wait:'Wait',visible:'Visible',hidden:'Hidden or absent',text:'Text equals',contains:'Text contains',number_at_least:'Number at least'};
+function gameplayDefault(action,old={}){
+  if(action==='press')return {action,key:'Space'};
+  if(action==='wait')return {action,ms:500};
+  return {action,selector:old.selector||'canvas',...(['text','contains'].includes(action)?{value:'0'}:action==='number_at_least'?{value:1}:{})};
+}
+function gameplayEditor(){
+  const d=gameplayDraft,area=$('gameplay-editor');area.replaceChildren();
+  function changed(){d.dirty=true;$('gameplay-message').textContent='Unsaved changes';gameplayButtons(lastState)}
+  function input(parent,title,value,change){const label=el('label',title,parent),field=el('input',undefined,label);field.value=value;field.maxLength=200;field.oninput=()=>{change(field.value);changed()};return field}
+  input(area,'Test plan name',d.plan.title,value=>d.plan.title=value).maxLength=120;
+  for(const [i,scenario] of d.plan.scenarios.entries()){
+    const box=el('fieldset',undefined,area);el('legend','Scenario '+(i+1),box);
+    input(box,'Scenario name',scenario.name,value=>scenario.name=value).maxLength=120;
+    const label=el('label','Controls to test',box),viewport=el('select',undefined,label);
+    viewport.setAttribute('aria-label','Controls to test');
+    for(const [value,title] of [['desktop','Desktop · keyboard and mouse'],['mobile','Mobile · touch']]){const option=el('option',title,viewport);option.value=value}
+    viewport.value=scenario.viewport;viewport.onchange=()=>{scenario.viewport=viewport.value;changed()};
+    for(const [j,step] of scenario.steps.entries()){
+      const row=el('div',undefined,box);row.className='panel';el('strong','Step '+(j+1),row);
+      const actionLabel=el('label','Action',row),action=el('select',undefined,actionLabel);
+      action.setAttribute('aria-label','Action');
+      for(const [value,title] of Object.entries(gameplayLabels)){const option=el('option',title,action);option.value=value}
+      action.value=step.action;action.onchange=()=>{scenario.steps[j]=gameplayDefault(action.value,step);changed();gameplayEditor()};
+      if(step.action==='press'){
+        const keyLabel=el('label','Key',row),key=el('select',undefined,keyLabel);
+        key.setAttribute('aria-label','Key');
+        for(const value of ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','Enter','Escape','a','d','w','s','r']){const option=el('option',value,key);option.value=value}
+        key.value=step.key;key.onchange=()=>{step.key=key.value;changed()};
+      }else if(step.action==='wait')input(row,'Milliseconds',step.ms,value=>step.ms=Number(value)).type='number';
+      else {
+        input(row,'Target',step.selector,value=>step.selector=value).placeholder='canvas, #score or [data-testid="start"]';
+        if('value' in step){const value=input(row,step.action==='number_at_least'?'Minimum score':'Expected text',step.value,value=>step.value=step.action==='number_at_least'?Number(value):value);if(step.action==='number_at_least')value.type='number'}
+      }
+      const remove=el('button','Remove step '+(j+1),row);remove.type='button';remove.className='button';remove.onclick=()=>{scenario.steps.splice(j,1);changed();gameplayEditor()};
+    }
+    const actions=el('div',undefined,box);actions.className='actions';
+    const add=el('button','Add step',actions);add.type='button';add.className='button';add.disabled=scenario.steps.length>=16;add.onclick=()=>{scenario.steps.push(gameplayDefault('visible'));changed();gameplayEditor()};
+    const remove=el('button','Remove scenario',actions);remove.type='button';remove.className='button';remove.onclick=()=>{d.plan.scenarios.splice(i,1);changed();gameplayEditor()};
+  }
+  const add=el('button','Add scenario',area);add.type='button';add.className='button';add.disabled=d.plan.scenarios.length>=4;
+  add.onclick=()=>{d.plan.scenarios.push({name:'Start, score and restart',viewport:'desktop',steps:[gameplayDefault('visible')]});changed();gameplayEditor()};
+}
+function gameplayButtons(s){
+  const d=gameplayDraft;if(!d)return;
+  $('gameplay-editor').inert=!!d.saving;
+  $('gameplay-save').disabled=!d.dirty||d.saving||sending;
+  $('gameplay-reload').disabled=d.saving||d.running;
+  $('gameplay-run').disabled=d.dirty||d.saving||d.running||!d.plan.scenarios.length||!s.build?.completed.length||!!s.build?.resumable.length||!s.polish_available?.ready;
+  $('gameplay-run').textContent=d.running?'Running gameplay checks…':'Run gameplay checks';
+}
+function renderGameplay(s){
+  if(!$('gameplay-plan')){
+    const area=el('details');area.id='gameplay-plan';area.className='brief';$('project-brief').after(area);
+    el('summary','Gameplay checks',area);el('p','Save the actions and outcomes your game must preserve. Each scenario starts a fresh game. Canvas-only scores need a visible score element to be checked.',area);
+    el('p','Choose targets by tag, #id or [data-testid="name"]. Include an expectation in every scenario. Limits: four scenarios, sixteen steps each, and twenty seconds of actions in total.',area).className='subtitle';
+    const form=el('form',undefined,area);el('div',undefined,form).id='gameplay-editor';const actions=el('div',undefined,form);actions.className='actions';
+    const save=el('button','Save gameplay plan',actions);save.id='gameplay-save';save.type='submit';save.className='button';
+    const reload=el('button','Use saved plan',actions);reload.id='gameplay-reload';reload.type='button';reload.className='button';
+    const run=el('button','Run gameplay checks',actions);run.id='gameplay-run';run.type='button';run.className='button';
+    el('p',undefined,area).id='gameplay-message';$('gameplay-message').setAttribute('role','status');el('section',undefined,area).id='gameplay-reports';
+    el('small','These checks cover the listed observations. Play the game yourself before accepting changes.',area);
+    reload.onclick=()=>{if(gameplayDraft.saving||gameplayDraft.running)return;gameplayDrafts.delete(gameplayDraft.sid);gameplayDraft=null;renderGameplay(lastState)};
+    form.onsubmit=async event=>{event.preventDefault();const d=gameplayDraft;if(d.saving||sending)return;d.saving=true;gameplayButtons(lastState);
+      try{const saved=await api('gameplay-plan',{session_id:d.sid,revision:d.revision,plan:d.plan});d.revision=saved.revision;d.dirty=false;
+        if(activeSession?.id===d.sid){lastState.gameplay_plan=saved;$('gameplay-message').textContent='Plan saved · Frozen into future overnight scopes'}}
+      catch(error){if(activeSession?.id===d.sid)$('gameplay-message').textContent=error.message}
+      finally{d.saving=false;await refresh()}
+    };
+    run.onclick=async()=>{const d=gameplayDraft;if(d.running||d.dirty)return;d.running=true;gameplayButtons(lastState);$('gameplay-message').textContent='Running fixed actions in fresh desktop/mobile browsers…';
+      try{const result=await api('gameplay-run',{session_id:d.sid,revision:d.revision,request_ref:lastState.build.completed.at(-1).request_ref,report_id:crypto.randomUUID()});
+        if(activeSession?.id===d.sid)$('gameplay-message').textContent=result.outcome==='passed'?'Listed gameplay checks passed':'Gameplay checks found a problem'}
+      catch(error){if(activeSession?.id===d.sid)$('gameplay-message').textContent='Checks stopped: '+error.message}
+      finally{d.running=false;await refresh()}
+    };
+  }
+  const sid=s.session?.id;$('gameplay-plan').hidden=!sid;if(!sid){gameplayDraft=null;return}
+  const saved=s.gameplay_plan;
+  if(gameplayDraft?.sid!==sid){
+    gameplayDraft=gameplayDrafts.get(sid)||{sid,revision:saved.revision,plan:structuredClone(saved.plan),dirty:false};gameplayDrafts.set(sid,gameplayDraft);
+    gameplayEditor();$('gameplay-message').textContent=gameplayDraft.dirty?'Unsaved changes':saved.revision?'Saved plan · Revision '+saved.revision:'Add checks for this game';
+  }else if(!gameplayDraft.dirty&&!gameplayDraft.saving&&gameplayDraft.revision!==saved.revision){gameplayDraft.revision=saved.revision;gameplayDraft.plan=structuredClone(saved.plan);gameplayEditor()}
+  gameplayButtons(s);
+  const reports=s.build?.gameplay_checks||[],ref=s.build?.completed.at(-1)?.request_ref,key=JSON.stringify([sid,ref,saved.sha256,reports.map(r=>r.report_id)]);
+  if(key!==gameplayReportKey){gameplayReportKey=key;const area=$('gameplay-reports');area.replaceChildren();
+    const current=reports.filter(r=>r.request_ref===ref&&r.plan_sha256===saved.sha256).at(-1);
+    el('p',current?'Current game · '+(current.outcome==='passed'?'Listed checks passed':'Gameplay checks failed'):'Current game · No report for this saved plan',area);
+    if(current)detail('Gameplay steps and observations',current.gameplay,area);
+    if(reports.length)detail('Saved gameplay reports',reports.map(r=>({version:r.request_ref,plan:r.plan.title,revision:r.plan_revision,outcome:r.outcome,gameplay:r.gameplay})),area);
+  }
+}
+$('brief-form').oninput=()=>{briefDirty=true;$('brief-status').textContent='Unsaved changes · Save to include them in your next request';renderBrief(lastState)};
+$('brief-reset').onclick=()=>{briefDirty=false;briefRevision=-1;renderBrief(lastState);$('brief-status').textContent='Using saved brief'};
+$('brief-form').onsubmit=async event=>{
+  event.preventDefault();if(!activeSession||briefSaving||sending||lastState?.chat_activity?.state==='active')return;
+  const sid=activeSession.id,fields=Object.fromEntries(briefFields.map(k=>[k,$('brief-'+k).value]));briefSaving=true;
+  briefFields.forEach(k=>$('brief-'+k).disabled=true);$('brief-save').disabled=true;
+  try{const saved=await api('project-brief',{session_id:sid,fields,revision:briefRevision});
+    if(activeSession?.id===sid){briefRevision=saved.revision;briefDirty=false;lastState.project_brief=saved;briefFields.forEach(k=>$('brief-'+k).value=saved.fields[k]);$('brief-status').textContent='Brief saved · Included in your next request'}
+  }catch(e){if(activeSession?.id===sid)$('brief-status').textContent=e.message}
+  finally{briefSaving=false;briefFields.forEach(k=>$('brief-'+k).disabled=false);await refresh()}
+};
+function renderAgentActivity(s){
+  let a=s.chat_activity;
+  if(localRequest&&localRequest.sid===s.session?.id&&a?.turn_id!==localRequest.turn_id)a=localRequest;
+  const area=$('agent-progress');const expanded=area.dataset.turnId===a?.turn_id&&!!area.querySelector('details')?.open;area.dataset.turnId=a?.turn_id||'';area.replaceChildren();
+  const review=a?.phase==='awaiting_review'&&(s.build?.requests||[]).some(r=>!r.decision&&r.payload.body.build.turn_id===a.turn_id);
+  area.hidden=!a||a.state==='complete'&&!review;
+  if(area.hidden)return;
+  const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(a.started_at))/1000));
+  const age=Math.max(0,Math.floor((Date.now()-Date.parse(a.updated_at))/1000));
+  const title=a.state==='interrupted'?'Request interrupted':a.state==='failed'?'Request stopped':a.title;
+  el('strong',title,area);
+  if(a.state==='active'){
+    el('p',(elapsed<60?elapsed+'s':Math.floor(elapsed/60)+'m '+elapsed%60+'s')+' elapsed · Muse Spark 1.3',area);
+    if(a.response_chars)el('p',a.response_chars.toLocaleString()+' response characters received',area);
+    if(age>=20)el('p','Waiting for Muse’s next update. Ember still has this request running.',area);
+  }
+  if(a.state==='interrupted')el('p','The worker stopped before saving a reply. Use Retry reply below to continue; nothing is resent automatically.',area);
+  if(a.state==='failed'&&a.error)el('p',a.error,area);
+  if(review)el('p','Review the proposed changes below. No project files have been changed.',area);
+  const history=el('details',undefined,area);history.open=expanded;el('summary','Request activity',history);
+  for(const event of a.events||[])el('p',new Date(event.at).toLocaleTimeString()+' · '+event.title,history);
+}
+function renderChat(s){
+  renderAgentActivity(s);
+  const inFlight=sending||s.chat_activity?.state==='active';
+  const messages=[...s.messages];
+  if(localRequest&&localRequest.sid===s.session?.id&&!messages.some(m=>m.id===localRequest.turn_id))messages.push({id:localRequest.turn_id,role:'user',text:localRequest.text,status:'pending',created_at:localRequest.started_at});
+  const key=JSON.stringify([s.session?.id,messages.map(({progress,activity,...message})=>message),s.requests.map(r=>r.decision),s.chat_activity?.state]);
+  if(key!==chatKey){
+    chatKey=key;$('messages').replaceChildren();
+    if(!messages.length){const empty=el('div',undefined,$('messages'));empty.className='chat-empty';el('h2',s.session?'What are we building?':'Start a conversation with Ember',empty);el('p',s.session?'Describe your idea or ask a question. Your conversation stays in this session.':'Create a new session or choose one in the sidebar.',empty)}
+    const timeline=[...messages,...(s.build?.requests||[]).filter(r=>r.decision).map(r=>({id:'decision-'+r.ref,role:'owner_decision',created_at:r.decision.ts,text:(r.decision.choice==='approve'?'Approved: ':'Declined: ')+r.payload.body.build.title+'\n'+r.decision.quote}))].sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));
+    for(const m of timeline){
+      const bubble=el('article',undefined,$('messages'));bubble.className='message '+m.role;
+      el('span',m.role==='user'?'You':m.role==='owner_decision'?'You · build decision':'Ember · '+(m.model||m.provider),bubble).className='message-author';el('span',m.text,bubble);
+      if(m.status==='pending'||m.status==='failed'){
+        const active=inFlight&&(s.chat_activity?.turn_id===m.id||localRequest?.turn_id===m.id);
+        el('small',m.status==='failed'?'Reply failed: '+m.error:active?'Request in progress':'Reply interrupted; retry when ready.',bubble).className='message-status';
+        if(!active){const retry=el('button','Retry reply',bubble);retry.className='button';retry.disabled=inFlight;retry.onclick=()=>sendMessage(m.text,m.id)}
+      }
+    }
+  }
+  if(document.activeElement!==$('chat-provider'))$('chat-provider').value=s.session?.provider||'muse';
+  $('chat-provider').disabled=!s.session||inFlight;$('chat-send').disabled=!s.session||inFlight;$('chat-send').textContent=inFlight?'Working…':'Send message';$('chat-input').disabled=!s.session;
+  $('model-note').textContent=s.models.muse_reason+' Estimated Ember usage: $'+s.credit_budget.estimated_spent_usd.toFixed(4)+' · Reserved: $'+s.credit_budget.reserved_usd.toFixed(2);
+}
+function beginChatRequest(text,id){
+  const now=new Date().toISOString();
+  localRequest={sid:activeSession.id,turn_id:id,text,state:'active',phase:'sending',title:'Sending your message',started_at:now,updated_at:now,events:[{at:now,title:'Sending your message'}]};
+  if(lastState)renderChat(lastState);
+  $('agent-progress').scrollIntoView({block:'nearest'});
+}
+
+window.addEventListener('message', event=>{
+  const state=previewState,data=event.data;
+  if(!state||!state.frame.isConnected||event.source!==state.frame.contentWindow||state.sid!==activeSession?.id||
+     !data||data.emberPreview!==state.channel||!['error','rejection'].includes(data.kind)||typeof data.message!=='string'||state.observations.length>=5)return;
+  state.observations.push({kind:data.kind,message:data.message.slice(0,300)});
+  state.observed.textContent=state.observations.map(item=>item.message).join('\n');
+});
+function previewDocument(html){return '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\' data:; style-src \'unsafe-inline\' data:; img-src data:; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">'+html;}
+function prototypeFrame(parent,title){
+  const frame=el('iframe',undefined,parent);frame.title=title;frame.setAttribute('sandbox','allow-scripts');
+  frame.referrerPolicy='no-referrer';frame.style.cssText='width:100%;height:480px;border:1px solid #49604e;border-radius:8px;margin-top:20px;background:white';
+  return frame;
+}
+async function downloadVersion(version,button){
+  try{
+    button.disabled=true;
+    const response=await fetch('/api/export-version?'+new URLSearchParams({ref:version.request_ref}),{headers:{'X-Ember-Token':token}});
+    if(!response.ok)throw new Error((await response.json()).error);
+    const url=URL.createObjectURL(await response.blob()),link=el('a',undefined,document.body);
+    link.href=url;link.download='ember-game-v'+version.number+'.zip';link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);$('error').textContent='';
+  }catch(error){$('error').textContent=error.message}
+  finally{button.disabled=false}
+}
+function renderVersions(versions,parent,s){
+  if(!versions?.length)return;
+  const history=el('details',undefined,parent);el('summary','Saved versions ('+versions.length+')',history);
+  el('p','Preview, download, or review a restore as a new version. Restores require approval and preserve history.',history);
+  for(const version of [...versions].reverse()){
+    const row=el('div',undefined,history);row.className='panel';
+    el('strong','Version '+version.number+' · '+version.title+(version.latest?' · Latest completed build':''),row);
+    el('p',new Date(version.created_at).toLocaleString()+' · '+version.file_count+' files',row);
+    const actions=el('div',undefined,row);actions.className='actions';
+    const preview=el('button','Preview version '+version.number,actions);preview.className='button';
+    preview.onclick=async()=>{try{
+      preview.disabled=true;const saved=await api('version-preview?'+new URLSearchParams({ref:version.request_ref}));
+      row.querySelector('iframe')?.remove();prototypeFrame(row,'Saved build version '+version.number).srcdoc=previewDocument(saved.html);
+      $('error').textContent='';
+    }catch(error){$('error').textContent=error.message}finally{preview.disabled=false}};
+    const download=el('button','Download version '+version.number,actions);download.className='button';
+    download.onclick=()=>downloadVersion(version,download);
+    if(!version.latest){
+      const restore=el('button','Review restore of version '+version.number,actions),id=crypto.randomUUID();restore.className='button';
+      restore.disabled=!!s.build.resumable.length;
+      restore.onclick=async()=>{if(busy||sending||briefSaving||lastState?.chat_activity?.state==='active')return;
+        busy=true;restore.disabled=true;try{
+          await api('restore-version',{session_id:s.session.id,ref:version.request_ref,current_ref:s.build.completed.at(-1).request_ref,id});
+          $('error').textContent='';current='';
+        }catch(error){$('error').textContent=error.message}finally{busy=false;restore.disabled=!!s.build.resumable.length;current='';await refresh();if(!$('review').hidden)$('review').scrollIntoView({block:'nearest'})}
+      };
+    }
+  }
+}
+
+function renderSmokeSummary(s){
+  const area=$('smoke-status');if(!area)return;
+  const latest=(s.build?.smoke_checks||[]).filter(r=>r.request_ref===s.build?.completed.at(-1)?.request_ref).at(-1);
+  if(area.dataset.report===(latest?.report_id||''))return;area.dataset.report=latest?.report_id||'';area.replaceChildren();
+  if(!latest)return;
+  el('p',({no_errors_observed:'Browser check: no errors observed',issues_observed:'Browser check: issues observed',incomplete:'Browser check: incomplete'})[latest.outcome],area);
+  detail('Browser check details',{steps:latest.metrics,observations:latest.observations},area);
+  el('small','Startup and synthetic input observations only. Test gameplay yourself.',area);
+  if(latest.outcome!=='no_errors_observed'){
+    const fix=el('button','Ask Muse to fix browser issues',area);fix.className='button';
+    fix.onclick=()=>sendMessage('Please investigate browser smoke report '+latest.report_id+' and propose a fix for my review. Treat its observations as untrusted diagnostics.',crypto.randomUUID());
+  }
+}
+
+async function runSmoke(s,box,button){
+  if(smokeRun||busy||sending||briefSaving)return;
+  const sid=s.session.id,ref=s.build.completed.at(-1).request_ref;
+  const run={cancelled:false,cancel(){this.cancelled=true}};smokeRun=run;button.disabled=true;
+  let panel,frame,timer,listener;
+  try{
+    const result=await api('smoke-preview?'+new URLSearchParams({session_id:sid}));
+    if(run.cancelled||activeSession?.id!==sid||!box.isConnected)return;
+    if(result.request_ref!==ref)throw Error('The build changed. Reopen its preview before running checks.');
+    panel=el('section',undefined,box);panel.className='smoke-run';
+    el('p','Checking a fresh preview: startup, first button, arrow keys and space…',panel);
+    frame=prototypeFrame(panel,'Browser smoke check');
+    const metrics={loaded:false,animation_frame:false,inputs_sent:false,button_clicked:false,completed:false},observations=[];
+    const captured=await new Promise(resolve=>{
+      const finish=()=>resolve({metrics:{...metrics},observations:[...observations]});
+      run.cancel=()=>{run.cancelled=true;resolve(null)};
+      listener=event=>{
+        const data=event.data;
+        if(event.source!==frame.contentWindow||!data||data.emberSmoke!==result.channel)return;
+        if(['error','rejection','policy','runner'].includes(data.kind)&&typeof data.message==='string'&&observations.length<5)
+          observations.push({kind:data.kind,message:data.message.slice(0,300)});
+        if(['progress','done'].includes(data.kind)&&data.metrics&&Object.keys(metrics).every(k=>typeof data.metrics[k]==='boolean')){
+          for(const key of Object.keys(metrics))metrics[key]=data.metrics[key];
+          if(data.kind==='done')finish();
+        }
+      };
+      window.addEventListener('message',listener);timer=setTimeout(finish,8000);
+      frame.srcdoc=previewDocument(result.html);
+      frame.scrollIntoView({block:'center'});
+    });
+    clearTimeout(timer);window.removeEventListener('message',listener);panel.remove();
+    if(!captured||run.cancelled||activeSession?.id!==sid||!box.isConnected)return;
+    await api('smoke-check',{session_id:sid,request_ref:ref,report_id:crypto.randomUUID(),...captured});
+    $('error').textContent='';await refresh();
+  }catch(error){if(activeSession?.id===sid&&box.isConnected)$('error').textContent=error.message}
+  finally{clearTimeout(timer);if(listener)window.removeEventListener('message',listener);panel?.remove();if(smokeRun===run)smokeRun=null;button.disabled=false}
+}
+
+function renderPlaytestSummary(s){
+  const area=$('playtest-status');if(!area)return;
+  const last=s.build?.completed.at(-1),latest=(s.build?.playtests||[]).filter(r=>r.request_ref===last?.request_ref).at(-1);
+  if(area.dataset.report===(latest?.report_id||''))return;area.dataset.report=latest?.report_id||'';area.replaceChildren();
+  if(!latest)return;
+  el('p',latest.outcome==='works'?'Your last playtest: works as expected':'Your last playtest: problem reported',area);
+  if(latest.note)el('p',latest.note,area);
+  el('small','Your playtest observation; not automated verification.',area);
+  if(latest.outcome==='problem'){const fix=el('button','Ask Muse to fix this',area);fix.className='button';fix.onclick=()=>sendMessage('Please fix the problem in playtest report '+latest.report_id+'. Propose changes for my review.',crypto.randomUUID())}
+}
+function renderBuild(s){
+  renderGameplay(s);
+  renderPolish(s);
+  const b=s.build||{completed:[],resumable:[]};
+  const key=JSON.stringify([s.session?.id,b.completed,b.resumable,b.versions]);
+  if(key===buildKey){renderPlaytestSummary(s);renderSmokeSummary(s);return;}buildKey=key;previewState=null;smokeRun?.cancel();
+  const area=$('build-result');area.replaceChildren();
+  for(const ref of b.resumable){
+    const box=el('div',undefined,area);box.className='panel';el('h3','Continue approved build',box);
+    el('p','Approval is saved. Continue to reconcile the files and finish their evidence checks.',box);
+    const resume=el('button','Resume approved build',box);resume.className='button primary';
+    resume.onclick=async()=>{try{resume.disabled=true;await api('build-resume',{ref});$('error').textContent='';await refresh()}catch(e){$('error').textContent=e.message;resume.disabled=false}};
+  }
+  if(!b.completed.length){const empty=el('div',undefined,area);empty.className='preview-empty';el('h3','Your game will appear here',empty);el('p','Describe your idea in chat, review the proposal, then choose Approve & play.',empty);return;}
+  const last=b.completed[b.completed.length-1],box=el('div',undefined,area);box.className='panel';
+  el('p','Version '+(b.versions?.at(-1)?.number||b.completed.length)+' · Latest approved build',box).className='build-version';el('h3',b.versions?.at(-1)?.title||'Build complete',box);el('p','Open the preview, try the game, and record what happened.',box);
+  if(last.manifest)detail('Project files',Object.keys(last.manifest),box);
+  el('div',undefined,box).id='playtest-status';
+  renderPlaytestSummary(s);
+  el('div',undefined,box).id='smoke-status';renderSmokeSummary(s);
+  const smoke=el('button','Run browser smoke check',box);smoke.className='button';smoke.disabled=!!b.resumable.length;
+  smoke.onclick=()=>runSmoke(s,box,smoke);
+  const preview=el('button','Open prototype preview',box);preview.className='button primary';preview.disabled=!!b.resumable.length;
+  const latestVersion=b.versions?.at(-1);if(latestVersion){const download=el('button','Download game ZIP',box);download.className='button';download.onclick=()=>downloadVersion(latestVersion,download)}
+  renderVersions(b.versions,box,s);
+  preview.onclick=async()=>{try{
+    const sid=s.session?.id;preview.disabled=true;const result=await api('build-preview');
+    if(activeSession?.id!==sid||!box.isConnected||result.request_ref!==last.request_ref)return;
+    box.querySelector('.playtest-area')?.remove();const panel=el('section',undefined,box);panel.className='playtest-area';box.querySelector('h3').after(panel);
+    const frame=prototypeFrame(panel,'Approved browser prototype');
+    const details=el('details',undefined,panel);el('summary','Browser observations',details);
+    const observed=el('pre','No browser errors observed yet. Try the controls and gameplay.',details);
+    el('small','Generated code can influence these observations. They are diagnostic clues.',details);
+    const label=el('label','Playtest notes',panel),note=el('textarea',undefined,label);note.maxLength=2000;
+    note.placeholder='What did you try? What happened, and what should have happened?';
+    const state={sid,frame,channel:result.channel,observed,observations:[]};previewState=state;
+    for(const [outcome,title] of [['works','Works as expected'],['problem','Send feedback & fix']]){
+      const save=el('button',title,panel),reportId=crypto.randomUUID();save.className='button';
+      save.onclick=async()=>{try{
+        if(activeSession?.id!==sid)throw new Error('Reopen the preview in the selected session.');
+        if(busy||sending||briefSaving)return;save.disabled=true;await api('playtest',{report_id:reportId,request_ref:result.request_ref,outcome,note:note.value,observations:state.observations});
+        $('error').textContent='';if(outcome==='problem'){await sendMessage('Please fix the problem in playtest report '+reportId+'. Propose changes for my review.',reportId+'-fix')}else{await refresh()}
+      }catch(e){$('error').textContent=e.message;save.disabled=false}};
+    }
+    frame.srcdoc=previewDocument(result.html);
+  }catch(e){if(box.isConnected)$('error').textContent=e.message}finally{preview.disabled=!!b.resumable.length}};
+  if(!b.resumable.length){autoPreviewRef=null;preview.onclick()}
+}
+async function sendMessage(text,id){if(sending||briefSaving||!activeSession||lastState?.chat_activity?.state==='active')return;sending=true;beginChatRequest(text,id);$('chat-send').disabled=true;$('chat-provider').disabled=true;try{await api('chat',{text,id});if($('chat-input').value.trim()===text)$('chat-input').value='';$('error').textContent=''}catch(e){$('error').textContent=e.message}finally{sending=false;localRequest=null;chatKey='';await refresh()}}
+async function polishAction(sessionId,action,body){
+  if(busy||sending||briefSaving)return;
+  busy=true;
+  try{const result=await api('polish',{session_id:sessionId,action,...body});$('error').textContent='';return result}
+  catch(error){$('error').textContent=error.message}
+  finally{busy=false;current='';await refresh();if(action==='promote'&&!$('review').hidden){showTab('chat');$('review').scrollIntoView({block:'nearest'})}}
+}
+async function polishScreenshot(sid,run,index,name,parent){
+  const query=new URLSearchParams({session_id:sid,run_id:run,index,name});
+  const response=await fetch('/api/polish-image?'+query,{headers:{'X-Ember-Token':token}});
+  if(!response.ok)throw Error((await response.json()).error);
+  const blob=await response.blob();if(activeSession?.id!==sid||!parent.isConnected)return;
+  const url=URL.createObjectURL(blob);polishURLs.push(url);const image=el('img',undefined,parent);
+  image.src=url;image.alt=(index===0?'Original':'Candidate '+index)+' '+name+' screenshot';image.style.cssText='height:auto;width:100%;object-fit:contain';
+}
+function renderPolish(s){
+  let area=$('polish-workspace');
+  if(!area){
+    const view=el('section');view.id='polish';view.hidden=true;view.setAttribute('role','tabpanel');$('activity').before(view);
+    area=el('section',undefined,view);area.id='polish-workspace';area.setAttribute('aria-label','Overnight polish');
+    const tab=el('button','Overnight polish');tab.id='polish-tab';tab.dataset.tab='polish';tab.setAttribute('role','tab');
+    tab.setAttribute('aria-label','Overnight polish');tab.setAttribute('aria-controls','polish');tab.setAttribute('aria-selected','false');
+    document.querySelector('[data-tab="chat"]').after(tab);tab.onclick=()=>showTab('polish');
+  }
+  const runs=s.polish_runs||[],sid=s.session?.id;
+  const key=JSON.stringify([sid,s.build?.completed.at(-1)?.request_ref,runs.map(r=>[r.id,r.status,r.best_index,r.candidates.map(c=>c.index),r.error,r.stop_requested]),s.polish_available]);
+  $('polish-tab').textContent='Overnight polish'+(runs.some(r=>r.status==='running')?' · Working':runs.some(r=>r.status==='ready_review')?' · Ready':'');
+  if(key===polishKey){for(const run of runs){const live=$('polish-live-'+run.id);if(live)live.textContent=run.phase+' · Estimated $'+run.usage.estimated_spent_usd.toFixed(4)+' · Reserved $'+run.usage.reserved_usd.toFixed(2)}return}
+  polishKey=key;polishURLs.splice(0).forEach(URL.revokeObjectURL);area.replaceChildren();
+  if(!sid||!s.build?.completed.length){el('p','Open a session with an approved browser game to start an overnight polish pass.',area);return;}
+  const panel=el('div',undefined,area);panel.className='panel';
+  el('h2','Overnight polish',panel);
+  el('p','Leave a direction. Ember works in a separate copy, tests desktop and mobile, and brings back its strongest candidate for your review.',panel);
+  const active=runs.some(r=>['awaiting_approval','running','interrupted','ready'].includes(r.status));
+  if(!active){
+    const draft=polishDrafts.get(sid)||{goal:'Make this game feel satisfying and cohesive. Improve visual polish, motion and interaction feedback while preserving its core gameplay.',rounds:2,hours:8,credits:25};
+    const setup=el('details',undefined,panel);setup.open=!runs.length;el('summary',runs.length?'Start another polish run':'Set the polish direction',setup);
+    const form=el('form',undefined,setup),label=el('label','What should feel better?',form),goal=el('textarea',undefined,label);
+    goal.maxLength=2000;goal.required=true;goal.value=draft.goal;
+    const fields={},limits=el('div',undefined,form);limits.className='polish-limits';
+    for(const [key,title,min,max] of [['rounds','Polish rounds',1,6],['hours','Maximum hours',1,12],['credits','Free-credit cap ($)',5,50]]){
+      const label=el('label',title,limits),input=el('input',undefined,label);input.type='number';input.min=min;input.max=max;input.step=1;input.required=true;input.value=draft[key];fields[key]=input;
+    }
+    form.oninput=()=>polishDrafts.set(sid,{goal:goal.value,...Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,Number(v.value)]))});
+    const prepare=el('button','Review overnight scope',form);prepare.type='submit';prepare.className='button';prepare.disabled=!s.polish_available?.ready||!!s.build.resumable.length;
+    el('small',s.polish_available?.ready?'The run ends when its rounds or limits are reached. Keep this computer awake; you can close Ember.':s.polish_available?.reason||'Browser tooling is unavailable',form);
+    form.onsubmit=event=>{event.preventDefault();polishAction(sid,'prepare',{goal:goal.value,...Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,Number(v.value)]))})};
+  }
+  for(const run of runs){
+    const box=el('article',undefined,panel);box.className='panel';
+    el('h3',({awaiting_approval:'Review overnight scope',running:'Ember is polishing',interrupted:'Polish needs attention',ready_review:'Your polish report',declined:'Polish scope discarded'})[run.status]||run.status,box);
+    el('p',run.goal,box);
+    el('p',run.rounds+' rounds · Up to '+run.hours+' hours · $'+run.credits+' free-credit cap · At most '+run.model_calls+' Muse calls',box);
+    if(run.gameplay_plan?.plan.scenarios.length){el('p','Frozen gameplay plan: '+run.gameplay_plan.plan.title+' · Revision '+run.gameplay_plan.revision,box);detail('Required gameplay scenarios',run.gameplay_plan.plan,box)}
+    const live=el('p',run.phase+' · Estimated $'+run.usage.estimated_spent_usd.toFixed(4)+' · Reserved $'+run.usage.reserved_usd.toFixed(2),box);live.id='polish-live-'+run.id;live.setAttribute('role','status');
+    if(run.error)el('pre',run.error,box);
+    const actions=el('div',undefined,box);actions.className='actions';
+    function control(title,action,body){const button=el('button',title,actions);button.className='button';button.onclick=()=>polishAction(sid,action,{run_id:run.id,...body});return button}
+    if(run.status==='awaiting_approval'){
+      el('p',run.notice,box);detail('Review permissions and both contracts',run.contracts,box);
+      control('Approve scope & start polish','decide',{choice:'approve',quote:'Approve scope & start polish'}).classList.add('primary');
+      control('Discard polish scope','decide',{choice:'decline',quote:'Discard polish scope'});
+    }
+    if(run.status==='running')control(run.stop_requested?'Stop requested':'Stop polish run','stop',{}).disabled=run.stop_requested;
+    if(run.status==='interrupted'&&!run.stop_requested){control('Resume polish run','resume',{});control('Stop and keep completed work','stop',{})}
+    const best=run.candidates.find(c=>c.index===run.best_index);
+    if(best){
+      el('strong',best.index===0?'Original retained: no candidate cleared the improvement bar.':'Strongest candidate: '+best.title,box);
+      el('p',best.critique.summary,box);detail('AI assessment and remaining issues',best.critique,box);
+      el('small','AI visual judgment and bounded browser checks. Play the game before accepting it.',box);
+      if(best.index>0&&run.status!=='running')control('Review exact changes','promote',{index:best.index}).classList.add('primary');
+      const compare=el('button','Compare before / after screenshots',box);compare.className='button';
+      compare.onclick=async()=>{compare.disabled=true;const grid=el('div',undefined,box);grid.className='options';
+        try{for(const [index,title] of [[0,'Original'],[best.index,'Strongest candidate']]){const column=el('div',undefined,grid);el('h4',title,column);await polishScreenshot(sid,run.id,index,'desktop',column);await polishScreenshot(sid,run.id,index,'mobile',column)}}
+        catch(error){$('error').textContent=error.message;compare.disabled=false}
+      };
+    }
+    if(run.candidates.length){
+      const candidates=el('details',undefined,box);el('summary','Play completed candidates ('+run.candidates.length+')',candidates);
+      for(const candidate of run.candidates){
+        const row=el('div',undefined,candidates);el('p',(candidate.index===0?'Original':'Candidate '+candidate.index)+' · '+candidate.title+' · '+candidate.failures+' check issues',row);
+        el('p',candidate.gameplay?'Gameplay: '+(candidate.gameplay.outcome==='passed'?'Listed checks passed':'Required checks failed'):'Gameplay: no plan configured for this run',row);
+        if(candidate.gameplay)detail('Gameplay assertions',candidate.gameplay,row);
+        const play=el('button',candidate.index===0?'Play original':'Play candidate '+candidate.index,row);play.className='button';
+        play.onclick=async()=>{try{play.disabled=true;const saved=await api('polish-preview?'+new URLSearchParams({session_id:sid,run_id:run.id,index:candidate.index}));
+          if(activeSession?.id!==sid||!row.isConnected)return;row.querySelector('iframe')?.remove();
+          prototypeFrame(row,'Polish candidate '+candidate.index+' · awaiting final approval').srcdoc=previewDocument(saved.html);
+        }catch(error){$('error').textContent=error.message}finally{play.disabled=false}};
+      }
+    }
+  }
+}
+$('chat-form').onsubmit=event=>{event.preventDefault();const text=$('chat-input').value.trim();if(text)sendMessage(text,crypto.randomUUID())};
+$('chat-provider').onchange=async()=>{try{await api('model',{provider:$('chat-provider').value});await refresh()}catch(e){$('error').textContent=e.message}};
+$('recover').onclick=async()=>{if(busy||sending||briefSaving)return;busy=true;$('recover').disabled=true;try{await api('recover',{});$('error').textContent='';current='';await refresh();await loadHistory()}catch(e){$('error').textContent=e.message}finally{busy=false;$('recover').disabled=false}};
+$('run-workflow').onclick=async()=>{if(busy||sending||briefSaving)return;busy=true;try{await api('workflow',{});current='';await refresh();await loadHistory()}catch(e){$('error').textContent=e.message}finally{busy=false}};
+async function poll(){await refresh();await loadHistory();setTimeout(poll,2000)}poll();
+</script></body></html>
