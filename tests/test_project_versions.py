@@ -12,6 +12,7 @@ import zipfile
 import test_chat_build as build_fixture
 from ember_harness import chat_build, project_versions
 from ember_harness.local_ui import App, server
+from ember_harness.recovery import exclusive
 
 
 class ProjectVersionTests(unittest.TestCase):
@@ -126,3 +127,108 @@ class ProjectVersionTests(unittest.TestCase):
             http.shutdown()
             http.server_close()
             worker.join()
+
+    def restore(self, source, current, request_id='restore-request-0001'):
+        return self.app.restore_version(self.fixture.sid, source, current, request_id)['request_ref']
+
+    def test_restore_is_reviewed_forward_revision_and_preserves_all_versions(self):
+        first = self.complete()
+        revised = {**build_fixture.PROJECT, 'app.js': 'document.body.dataset.version="two";'}
+        second = self.complete(revised, 'b' * 24)
+        before = {name: (self.fixture.target.parent / name).read_bytes() for name in revised}
+        with patch('ember_harness.session_chat.run_muse') as muse:
+            ref = self.restore(first, second)
+            self.assertEqual(self.restore(first, second), ref)
+            muse.assert_not_called()
+        self.assertEqual(len(project_versions.history(self.folder)), 2)
+        self.assertEqual(before, {name: (self.fixture.target.parent / name).read_bytes() for name in revised})
+        request = self.app.snapshot()['build']['requests'][-1]
+        self.assertIsNone(request['decision'])
+        self.assertEqual(request['payload']['body']['build']['restore_from']['request_ref'], first)
+        self.assertIn('current/app.js', request['payload']['body']['build']['diff'])
+        with self.assertRaisesRegex(ValueError, 'approval'):
+            self.app.resume_build(ref)
+        fresh = App(self.root)
+        fresh.resume(self.fixture.sid)
+        fresh.respond(ref, 'approve', 'SYNTHETIC TEST: approve exact restore')
+        self.assertEqual([r['number'] for r in project_versions.history(self.folder)], [1, 2, 3])
+        self.assertEqual(project_versions.snapshot(self.root, self.folder, ref)['files'], build_fixture.PROJECT)
+        self.assertEqual(project_versions.snapshot(self.root, self.folder, second)['files'], revised)
+        self.assertTrue(fresh.verify()['passed'])
+        # Replaying the same request never adds a version, even after completion.
+        self.assertEqual(fresh.restore_version(self.fixture.sid, first, second, 'restore-request-0001')['request_ref'], ref)
+        self.assertEqual(len(project_versions.history(self.folder)), 3)
+
+    def test_restore_decline_pending_conflicts_and_stale_current(self):
+        first = self.complete()
+        second = self.complete({**build_fixture.PROJECT, 'app.js': '/* revision */'}, 'b' * 24)
+        with self.assertRaisesRegex(ValueError, 'current build changed'):
+            self.restore(first, first)
+        ref = self.restore(first, second)
+        with self.assertRaisesRegex(ValueError, 'pending build'):
+            self.restore(first, second, 'restore-request-0002')
+        with self.assertRaisesRegex(ValueError, 'different version'):
+            self.restore(second, second)
+        self.app.respond(ref, 'decline', 'SYNTHETIC TEST: decline restore')
+        self.assertEqual((self.fixture.target.parent / 'app.js').read_text(), '/* revision */')
+        self.assertEqual(len(project_versions.history(self.folder)), 2)
+
+    def test_restore_rejects_deletion_tampering_and_session_switch(self):
+        first = self.complete()
+        second = self.complete({**build_fixture.PROJECT, 'extra.js': '/* newly added */'}, 'b' * 24)
+        with self.assertRaisesRegex(ValueError, 'would delete extra.js'):
+            self.restore(first, second)
+        self.assertEqual(len(self.app.snapshot()['build']['requests']), 2)
+        self.fixture.target.write_bytes(b'Unapproved corruption')
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            self.restore(second, second)
+        self.app.start('Another game', new_session=True, chat_only=True)
+        with self.assertRaisesRegex(ValueError, 'intended session'):
+            self.restore(first, second)
+
+    def test_interrupted_restore_resumes_exact_writes_once(self):
+        first = self.complete()
+        revised = {**build_fixture.PROJECT, 'app.js': '/* version two */', 'style.css': 'body { color:red; }'}
+        second = self.complete(revised, 'b' * 24)
+        ref = self.restore(first, second)
+        replace = chat_build.os.replace
+        def interrupt(source, target):
+            replace(source, target)
+            if str(target).endswith('app.js'):
+                raise OSError('SYNTHETIC restore interruption')
+        with patch('ember_harness.chat_build.os.replace', side_effect=interrupt):
+            with self.assertRaisesRegex(OSError, 'restore interruption'):
+                self.app.respond(ref, 'approve', 'SYNTHETIC TEST: restore before interruption')
+        fresh = App(self.root)
+        self.assertIn(ref, fresh.resume(self.fixture.sid)['build']['resumable'])
+        fresh.resume_build(ref)
+        self.assertTrue(fresh.verify()['passed'])
+        self.assertEqual(project_versions.snapshot(self.root, self.folder, ref)['files'], build_fixture.PROJECT)
+        child = self.app.snapshot()['build']['requests'][-1]['payload']['body']['contracts'][1]['contract']['id']
+        decisions = [e for e in chat_build.harness(self.folder)._entries()
+                     if e['kind'] == 'decision' and e.get('action', {}).get('contract_id') == child]
+        self.assertEqual(len(decisions), 2)
+
+    def test_restore_changed_after_proposal_and_corrupt_source_fail_closed(self):
+        first = self.complete()
+        second = self.complete({**build_fixture.PROJECT, 'app.js': '/* version two */'}, 'b' * 24)
+        ref = self.restore(first, second)
+        (self.fixture.target.parent / 'app.js').write_text('/* external edit */')
+        with self.assertRaisesRegex(ValueError, 'changed since'):
+            self.app.respond(ref, 'approve', 'SYNTHETIC TEST: must not approve')
+        self.assertIsNone(self.app.snapshot()['build']['requests'][-1]['decision'])
+        packet = chat_build.harness(self.folder).root / 'owner-review' / first / 'request.json'
+        packet.write_bytes(b'{}')
+        with self.assertRaises(ValueError):
+            self.restore(first, second, 'restore-request-0002')
+
+    def test_restore_during_chat_and_identical_or_invalid_requests_do_not_propose(self):
+        first = self.complete()
+        with self.assertRaisesRegex(ValueError, 'identical'):
+            self.restore(first, first)
+        with self.assertRaisesRegex(ValueError, 'stable restore'):
+            self.restore(first, first, '../invalid')
+        with exclusive(self.folder / 'chat.lock'):
+            with self.assertRaisesRegex(ValueError, 'already active'):
+                self.restore(first, first, 'restore-request-0002')
+        self.assertEqual(len(self.app.snapshot()['build']['requests']), 1)

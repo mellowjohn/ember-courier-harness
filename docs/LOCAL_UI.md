@@ -140,6 +140,12 @@ polling and when a playtest observation is saved. Opening a different session,
 completing a new build, or explicitly reopening the preview starts a fresh game.
 The existing preview isolation, version downloads and exact build approvals apply.
 
+**Run browser smoke check** records bounded startup and synthetic-input diagnostics
+without resetting the current game. **Saved versions → Review restore of version
+N** prepares a new approval before restoring historical files. See
+[browser checks and restoration](CHAT_BUILDS.md#browser-smoke-checks) for behavior,
+limits and the repeatable Chromium rehearsal.
+
 Local source checkpoint before this polish pass: `235f31b`. Generated projects,
 private sessions, approvals and release logs remain under ignored `.harness/`;
 the Git checkpoint contains application source and documentation.

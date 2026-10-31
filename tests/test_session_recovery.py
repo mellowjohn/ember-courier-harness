@@ -6,6 +6,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import ember_harness
 from ember_harness.local_ui import App
@@ -15,6 +16,26 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SessionRecoveryTests(unittest.TestCase):
+    def test_worker_finishing_between_state_read_and_lease_check_is_terminal(self):
+        scratch = ROOT / '.harness/test-temp'
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            folder = Path(directory)
+            app = App(ROOT)
+            running = dict(status='running', exit_code=None, pid=123)
+            for status, code in [('completed', 0), ('stopped', 1)]:
+                with self.subTest(status=status):
+                    atomic_json(folder / 'worker.json', running)
+                    terminal = dict(status=status, exit_code=code, pid=123)
+                    def finish(_):
+                        atomic_json(folder / 'worker.json', terminal)
+                        return False
+                    with patch('ember_harness.local_ui.worker_active', side_effect=finish):
+                        self.assertEqual(app.worker_state(folder), terminal)
+            atomic_json(folder / 'worker.json', running)
+            with patch('ember_harness.local_ui.worker_active', return_value=False):
+                self.assertEqual(app.worker_state(folder)['status'], 'interrupted')
+
     def test_changed_workspace_and_uncheckpointed_actions_block_recovery(self):
         scratch = ROOT / '.harness/test-temp'
         scratch.mkdir(parents=True, exist_ok=True)

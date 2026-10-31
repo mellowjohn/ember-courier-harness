@@ -19,7 +19,7 @@ from .owner_review import load_request, decide
 from .recovery import Recovery, exclusive, worker_active, read_json
 from .session_chat import transcript, send, activity as chat_activity, MUSE_UNAVAILABLE
 from .muse_chat import installed_binary, CreditLedger
-from . import chat_build, playtests, project_versions, project_brief
+from . import chat_build, playtests, project_versions, project_brief, browser_checks
 
 
 class App:
@@ -53,7 +53,12 @@ class App:
             return dict(status='interrupted', exit_code=None)
         data = read_json(path)
         if data['status'] == 'running' and not worker_active(folder):
-            data['status'] = 'interrupted'
+            # Completion is published before releasing worker.lock. Our first
+            # read may have preceded that final write while the lease check
+            # followed it; reread before declaring the worker interrupted.
+            data = read_json(path)
+            if data['status'] == 'running':
+                data['status'] = 'interrupted'
         return data
 
     def save(self, name=None):
@@ -228,6 +233,7 @@ class App:
                 result['build'] = chat_build.status(self.root, session_folder)
                 result['build']['playtests'] = playtests.reports(session_folder)
                 result['build']['versions'] = project_versions.history(session_folder)
+                result['build']['smoke_checks'] = browser_checks.reports(session_folder)
                 result['requests'].extend(result['build']['requests'])
                 checkpoint = session_folder / 'recovery.json'
                 declined = any(r['decision'] and r['decision']['choice'] == 'decline' for r in result['requests'])
@@ -302,6 +308,26 @@ class App:
             if not self.session:
                 raise ValueError('Select a session first')
             return project_versions.export(self.root, self.sessions_dir / self.session['id'], ref)
+
+    def restore_version(self, session_id, ref, current_ref, request_id):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before restoring a version')
+            proposal = project_versions.propose_restore(self.root, self.sessions_dir / session_id,
+                                                        ref, current_ref, request_id)
+            return dict(request_ref=proposal)
+
+    def smoke_preview(self, session_id):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before running browser checks')
+            return browser_checks.preview(self.root, self.sessions_dir / session_id)
+
+    def record_smoke(self, session_id, **body):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before recording browser checks')
+            return browser_checks.record(self.root, self.sessions_dir / session_id, **body)
 
     def image(self, ref, choice=None):
         with self.lock:
@@ -383,6 +409,9 @@ def server(app, port=0):
                 if url.path == '/api/version-preview':
                     q = parse_qs(url.query)
                     return self.reply(200, app.version_preview(q['ref'][0]))
+                if url.path == '/api/smoke-preview':
+                    q = parse_qs(url.query)
+                    return self.reply(200, app.smoke_preview(q['session_id'][0]))
                 if url.path == '/api/export-version':
                     q = parse_qs(url.query)
                     data, filename = app.export_version(q['ref'][0])
@@ -414,6 +443,10 @@ def server(app, port=0):
                     result = app.request_changes(body['ref'], body['note'], body['id'])
                 elif self.path == '/api/playtest':
                     result = app.record_playtest(**body)
+                elif self.path == '/api/smoke-check':
+                    result = app.record_smoke(**body)
+                elif self.path == '/api/restore-version':
+                    result = app.restore_version(body['session_id'], body['ref'], body['current_ref'], body['id'])
                 elif self.path == '/api/project-brief':
                     result = app.save_brief(body['session_id'], body['fields'], body['revision'])
                 elif self.path == '/api/model':

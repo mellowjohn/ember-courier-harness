@@ -85,7 +85,60 @@ current workspace bytes or automatically establish correct gameplay.
 Exports exclude conversation history, credentials, launch tokens, private host
 paths, approval packets and audit logs. The private authenticated local API is
 required for preview and download. Old versions do not overwrite the current
-project; restoring versions into the working project is a separate future feature.
+project. **Review restore of version N** prepares an exact diff against the current
+project, using verified historical approved files. Review it, then choose
+**Approve restore & play** to apply it as a new version. **Discard** leaves the
+current project unchanged. Restoration does not call Muse or consume credits.
+
+Restores preserve every completed version, approval and report. They reuse the
+same gated writes and interruption recovery as other builds. A pending proposal,
+unfinished approved build, active Muse request, changed project or stale selected
+session stops a new restore. If restoring would require deleting files introduced
+in a later version, it is refused with the file names; preview or download the
+older version instead. File deletion remains outside the approved write target.
+
+## Browser smoke checks
+
+Choose **Run browser smoke check** for a fresh, isolated preview of the current
+approved build. The fixed `startup-inputs-v1` plan waits for document load and an
+animation frame, clicks the first enabled button if present, sends arrow-key and
+space keydown/keyup events, and observes a short settling window. These are
+synthetic events; games requiring trusted input or other controls need a human
+playtest. The player's existing preview and notes stay in place.
+
+The report records each completed step and up to five browser errors, rejected
+promises, blocked-resource policy events or runner errors. It shows **issues
+observed**, **incomplete**, or **no errors observed**. A missing completion message
+times out after eight seconds and cannot produce a clean result. Reports bind to
+the exact completed build and manifest; stale builds, changed files and switched
+sessions cannot receive a new report. Saving is idempotent, and reports persist
+across restarts in the build audit.
+
+Browser messages are untrusted observations, even when all steps complete. They
+cannot approve changes, establish correct gameplay, or close bugs. **Ask Muse to
+fix browser issues** explicitly sends the current report for investigation and a
+normal reviewed proposal. Running and saving checks does not call Muse. Reports
+for older builds remain in history but are not supplied as current observations.
+
+For repeatable application QA, run `py -3.12 tools/browser_check.py` with Node and
+Playwright available. Optional flags are `--node`, `--playwright-module` (an
+installed module directory), and `--browser-executable` (a Chromium executable).
+For example, install developer tooling under the ignored workspace:
+
+```powershell
+npm install --prefix .harness/browser-tools playwright
+.harness/browser-tools/node_modules/.bin/playwright.cmd install chromium
+py -3.12 tools/browser_check.py --playwright-module .harness/browser-tools/node_modules/playwright
+```
+
+This separate browser gate exercises an original synthetic fixture: startup
+failure → report → reviewed fix → clean check → reviewed restoration → clean
+check. It also checks real button/keyboard input, preservation of preview state,
+message isolation, all four saved versions, responsive layout and ZIP download.
+It uses deterministic model fixtures and synthetic decisions, never live Muse
+calls or genuine owner approvals. Logs, screenshots, source hashes and the
+export stay under `.harness/browser-checks/`. Playwright is optional developer
+tooling; the app and offline Python gate need no new runtime dependency.
 
 ## Playtest and request a fix
 

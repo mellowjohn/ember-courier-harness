@@ -165,7 +165,7 @@ class ResourcePreview(HTMLParser):
         self.output.append('<!' + decl + '>')
 
 
-def propose_build(root, folder, turn_id, intent, build, *, expected_before=None):
+def propose_build(root, folder, turn_id, intent, build, *, expected_before=None, restore_from=None):
     Draft202012Validator(BUILD_SCHEMA).validate(build)
     files = {item['path']: item['content'] for item in build['files']}
     if len(files) != len(build['files']):
@@ -179,7 +179,7 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None)
     if previous:
         saved = previous['payload']['body']['build']
         proposed = {name: sha256(value.encode('utf-8')).hexdigest() for name, value in files.items()}
-        if saved.get('manifest', {'index.html': saved['after_sha256']}) != proposed:
+        if saved.get('manifest', {'index.html': saved['after_sha256']}) != proposed or saved.get('restore_from') != restore_from:
             raise ValueError('The saved turn already has a different build proposal')
         return previous['ref']
     if any(not r['decision'] for r in existing):
@@ -237,6 +237,9 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None)
                            files=rows, manifest=manifest, before_manifest=current['manifest'],
                            checks=['HTML parsed and local script/stylesheet references checked', str(len(files)) + ' files in this session project; ' + str(len(rows)) + ' changed',
                                    'No server commands, packages, deployment or engine edits']))
+    if restore_from is not None:
+        body['build']['restore_from'] = restore_from
+        body['build']['checks'].append('Historical approved bytes and evidence verified; restoration requires this new approval')
     return OwnerReview()._request(h, 'contracts', body, wait=False)
 
 

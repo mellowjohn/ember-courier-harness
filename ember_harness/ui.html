@@ -29,6 +29,7 @@
 
 const token=location.hash.slice(1)||sessionStorage.getItem('ember-token')||'';sessionStorage.setItem('ember-token',token);history.replaceState(null,'',location.pathname);
 const $=id=>document.getElementById(id);let current='',busy=false,activeSession=null,historyKey='',chatKey='',sending=false,buildReviewRef=null,buildKey='',previewState=null,autoPreviewRef=null,localRequest=null,lastState=null;const urls=[];const briefFields=['goal','controls','visual_direction','constraints'];let briefSession=null,briefRevision=0,briefDirty=false,briefSaving=false;const sessionDrafts=new Map();
+let smokeRun=null;
 async function api(path,body){const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'X-Ember-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
 function el(tag,text,parent){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(parent)parent.append(n);return n}
 function detail(title,data,parent){const d=el('details',undefined,parent);el('summary',title,d);el('pre',JSON.stringify(data,null,2),d)}
@@ -57,17 +58,17 @@ function renderReview(s){
   const r=pending[0],body=r.payload.body,p=el('div',undefined,$('review'));p.className='panel';
   if(body.build){
     buildReviewRef=r.ref;
-    el('small','READY TO BUILD',p).className='brand';el('h3',body.build.title,p);el('p',body.build.summary,p);
+    el('small',body.build.restore_from?'READY TO RESTORE':'READY TO BUILD',p).className='brand';el('h3',body.build.title,p);el('p',body.build.summary,p);
     const files=body.build.files||[{name:'index.html',before_sha256:body.build.before_sha256}];
     el('p',files.map(file=>(file.before_sha256?'Update ':'Create ')+file.name).join(' · '),p);
     el('small','One approval applies all of these exact file changes and opens the preview.',p);
     const code=el('details',undefined,p);el('summary','View code changes',code);el('pre',body.build.diff,code);
     const permissions=el('details',undefined,p);el('summary','Permissions and checks',permissions);
-    el('p','Changes are limited to this session project. Muse uses the shared credit budget.',permissions);
+    el('p',body.build.restore_from?'Restoration stays in this session and does not call Muse.':'Changes are limited to this session project. Muse uses the shared credit budget.',permissions);
     for(const check of body.build.checks)el('p',check,permissions);
     detail('Exact contracts and audit reference',{ref:r.ref,contracts:body.contracts},permissions);
     const actions=el('div',undefined,p);actions.className='actions';
-    decision(actions,'Approve & play',r.ref,'approve','primary');
+    decision(actions,body.build.restore_from?'Approve restore & play':'Approve & play',r.ref,'approve','primary');
     const change=el('button','Request changes',actions);change.className='button';change.disabled=busy||sending;
     decision(actions,'Discard',r.ref,'decline');
     const edit=el('div',undefined,p);edit.hidden=true;
@@ -216,10 +217,10 @@ async function downloadVersion(version,button){
   }catch(error){$('error').textContent=error.message}
   finally{button.disabled=false}
 }
-function renderVersions(versions,parent){
+function renderVersions(versions,parent,s){
   if(!versions?.length)return;
   const history=el('details',undefined,parent);el('summary','Saved versions ('+versions.length+')',history);
-  el('p','Preview or download an approved version. Your current project stays unchanged.',history);
+  el('p','Preview, download, or review a restore as a new version. Restores require approval and preserve history.',history);
   for(const version of [...versions].reverse()){
     const row=el('div',undefined,history);row.className='panel';
     el('strong','Version '+version.number+' · '+version.title+(version.latest?' · Latest completed build':''),row);
@@ -233,7 +234,68 @@ function renderVersions(versions,parent){
     }catch(error){$('error').textContent=error.message}finally{preview.disabled=false}};
     const download=el('button','Download version '+version.number,actions);download.className='button';
     download.onclick=()=>downloadVersion(version,download);
+    if(!version.latest){
+      const restore=el('button','Review restore of version '+version.number,actions),id=crypto.randomUUID();restore.className='button';
+      restore.disabled=!!s.build.resumable.length;
+      restore.onclick=async()=>{if(busy||sending||briefSaving||lastState?.chat_activity?.state==='active')return;
+        busy=true;restore.disabled=true;try{
+          await api('restore-version',{session_id:s.session.id,ref:version.request_ref,current_ref:s.build.completed.at(-1).request_ref,id});
+          $('error').textContent='';current='';
+        }catch(error){$('error').textContent=error.message}finally{busy=false;restore.disabled=!!s.build.resumable.length;current='';await refresh();if(!$('review').hidden)$('review').scrollIntoView({block:'nearest'})}
+      };
+    }
   }
+}
+
+function renderSmokeSummary(s){
+  const area=$('smoke-status');if(!area)return;
+  const latest=(s.build?.smoke_checks||[]).filter(r=>r.request_ref===s.build?.completed.at(-1)?.request_ref).at(-1);
+  if(area.dataset.report===(latest?.report_id||''))return;area.dataset.report=latest?.report_id||'';area.replaceChildren();
+  if(!latest)return;
+  el('p',({no_errors_observed:'Browser check: no errors observed',issues_observed:'Browser check: issues observed',incomplete:'Browser check: incomplete'})[latest.outcome],area);
+  detail('Browser check details',{steps:latest.metrics,observations:latest.observations},area);
+  el('small','Startup and synthetic input observations only. Test gameplay yourself.',area);
+  if(latest.outcome!=='no_errors_observed'){
+    const fix=el('button','Ask Muse to fix browser issues',area);fix.className='button';
+    fix.onclick=()=>sendMessage('Please investigate browser smoke report '+latest.report_id+' and propose a fix for my review. Treat its observations as untrusted diagnostics.',crypto.randomUUID());
+  }
+}
+
+async function runSmoke(s,box,button){
+  if(smokeRun||busy||sending||briefSaving)return;
+  const sid=s.session.id,ref=s.build.completed.at(-1).request_ref;
+  const run={cancelled:false,cancel(){this.cancelled=true}};smokeRun=run;button.disabled=true;
+  let panel,frame,timer,listener;
+  try{
+    const result=await api('smoke-preview?'+new URLSearchParams({session_id:sid}));
+    if(run.cancelled||activeSession?.id!==sid||!box.isConnected)return;
+    if(result.request_ref!==ref)throw Error('The build changed. Reopen its preview before running checks.');
+    panel=el('section',undefined,box);panel.className='smoke-run';
+    el('p','Checking a fresh preview: startup, first button, arrow keys and space…',panel);
+    frame=prototypeFrame(panel,'Browser smoke check');
+    const metrics={loaded:false,animation_frame:false,inputs_sent:false,button_clicked:false,completed:false},observations=[];
+    const captured=await new Promise(resolve=>{
+      const finish=()=>resolve({metrics:{...metrics},observations:[...observations]});
+      run.cancel=()=>{run.cancelled=true;resolve(null)};
+      listener=event=>{
+        const data=event.data;
+        if(event.source!==frame.contentWindow||!data||data.emberSmoke!==result.channel)return;
+        if(['error','rejection','policy','runner'].includes(data.kind)&&typeof data.message==='string'&&observations.length<5)
+          observations.push({kind:data.kind,message:data.message.slice(0,300)});
+        if(['progress','done'].includes(data.kind)&&data.metrics&&Object.keys(metrics).every(k=>typeof data.metrics[k]==='boolean')){
+          for(const key of Object.keys(metrics))metrics[key]=data.metrics[key];
+          if(data.kind==='done')finish();
+        }
+      };
+      window.addEventListener('message',listener);timer=setTimeout(finish,8000);
+      frame.srcdoc=previewDocument(result.html);
+    });
+    clearTimeout(timer);window.removeEventListener('message',listener);panel.remove();
+    if(!captured||run.cancelled||activeSession?.id!==sid||!box.isConnected)return;
+    await api('smoke-check',{session_id:sid,request_ref:ref,report_id:crypto.randomUUID(),...captured});
+    $('error').textContent='';await refresh();
+  }catch(error){if(activeSession?.id===sid&&box.isConnected)$('error').textContent=error.message}
+  finally{clearTimeout(timer);if(listener)window.removeEventListener('message',listener);panel?.remove();if(smokeRun===run)smokeRun=null;button.disabled=false}
 }
 
 function renderPlaytestSummary(s){
@@ -249,7 +311,7 @@ function renderPlaytestSummary(s){
 function renderBuild(s){
   const b=s.build||{completed:[],resumable:[]};
   const key=JSON.stringify([s.session?.id,b.completed,b.resumable,b.versions]);
-  if(key===buildKey){renderPlaytestSummary(s);return;}buildKey=key;previewState=null;
+  if(key===buildKey){renderPlaytestSummary(s);renderSmokeSummary(s);return;}buildKey=key;previewState=null;smokeRun?.cancel();
   const area=$('build-result');area.replaceChildren();
   for(const ref of b.resumable){
     const box=el('div',undefined,area);box.className='panel';el('h3','Continue approved build',box);
@@ -263,9 +325,12 @@ function renderBuild(s){
   if(last.manifest)detail('Project files',Object.keys(last.manifest),box);
   el('div',undefined,box).id='playtest-status';
   renderPlaytestSummary(s);
+  el('div',undefined,box).id='smoke-status';renderSmokeSummary(s);
+  const smoke=el('button','Run browser smoke check',box);smoke.className='button';smoke.disabled=!!b.resumable.length;
+  smoke.onclick=()=>runSmoke(s,box,smoke);
   const preview=el('button','Open prototype preview',box);preview.className='button primary';preview.disabled=!!b.resumable.length;
   const latestVersion=b.versions?.at(-1);if(latestVersion){const download=el('button','Download game ZIP',box);download.className='button';download.onclick=()=>downloadVersion(latestVersion,download)}
-  renderVersions(b.versions,box);
+  renderVersions(b.versions,box,s);
   preview.onclick=async()=>{try{
     const sid=s.session?.id;preview.disabled=true;const result=await api('build-preview');
     if(activeSession?.id!==sid||!box.isConnected||result.request_ref!==last.request_ref)return;

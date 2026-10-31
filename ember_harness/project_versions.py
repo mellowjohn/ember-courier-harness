@@ -94,6 +94,41 @@ def preview(root, folder, ref):
         return dict(html=''.join(parser.output), number=saved['number'], title=saved['title'], request_ref=ref)
 
 
+def propose_restore(root, folder, ref, current_ref, request_id):
+    """Create an exact forward revision; the existing owner gate applies every write."""
+    if not isinstance(request_id, str) or not re.fullmatch('[a-zA-Z0-9-]{16,64}', request_id):
+        raise ValueError('A stable restore request ID is required')
+    # Chat holds this same lock through inference/proposal, so a restore cannot change
+    # its input basis while a model response is being prepared.
+    with exclusive(folder / 'chat.lock'), exclusive(folder / 'build.lock'):
+        source = snapshot(root, folder, ref)
+        turn_id = 'restore-' + request_id
+        previous = next((r for r in chat_build.list_requests(folder)
+                         if r['payload']['body']['build']['turn_id'] == turn_id), None)
+        origin = dict(request_ref=ref, number=source['number'], manifest=source['manifest'], current_ref=current_ref)
+        if previous:
+            if previous['payload']['body']['build'].get('restore_from') != origin:
+                raise ValueError('Restore request ID already belongs to a different version')
+            return previous['ref']
+        state = chat_build.status(root, folder)
+        if state['resumable']:
+            raise ValueError('Resume the approved build before restoring a version')
+        if state['completed'][-1]['request_ref'] != current_ref:
+            raise ValueError('The current build changed; reopen saved versions before restoring')
+        chat_build.verify(root, folder)
+        current = chat_build.context(root, folder)
+        extra = set(current['manifest']) - set(source['files'])
+        if extra:
+            raise ValueError('This restore would delete ' + ', '.join(sorted(extra)) +
+                             '. File deletion is not supported; preview or download the saved version instead')
+        build = dict(title='Restore version ' + str(source['number']),
+                     summary='Restore the exact approved files from version ' + str(source['number']) +
+                             ' (' + source['title'] + ') as a new version. All completed versions and reports stay in history.',
+                     files=[dict(path=name, content=content) for name, content in source['files'].items()])
+        return chat_build.propose_build(root, folder, turn_id, build['summary'], build,
+                                        expected_before=current['sha256'], restore_from=origin)
+
+
 def export(root, folder, ref):
     with exclusive(folder / 'build.lock'):
         saved = snapshot(root, folder, ref)

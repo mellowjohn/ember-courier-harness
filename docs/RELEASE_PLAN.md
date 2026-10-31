@@ -28,6 +28,9 @@ Implemented in the local app:
   retries, conservative holds for uncertain usage and saved-response replay.
 - Completed-build version history, historical previews and verified ZIP exports
   containing reviewed game files and a source manifest. No publishing or deploys.
+- Repeatable browser smoke observations, version-bound reports and explicitly
+  requested reviewed fixes. Saved versions can be restored through a new exact
+  approval while preserving history; restores requiring file deletion are refused.
 
 The contract library also implements scope proposals, approvals, amendments,
 asset selection/ingest, intake, real local fixes, separate verification, rounds,
@@ -42,15 +45,16 @@ in the bounded integrated sample. Engine work remains paused. See
 1. **Reproducible checkpoint and clean installation.** The October 30 offline
    gate passed all 330 tests and twelve demos with tested source unchanged. The
    gate also caught and led to a fix for transient writer-lock contention during
-   recovery. Retain its logs and hashes, rerun after code changes, review the large
-   existing untracked implementation before a local Git checkpoint, and repeat
-   the clean wheel installation check. A harness PASS does not establish generated-
-   game quality.
-2. **Browser QA and safe restoration (October 31–November 1).** Add repeatable
-   browser smoke checks for generated games, with clear observed failures and
-   user-reviewed fixes. Define a restore flow with preserved history and exact
-   approvals; current saved-version previews and downloads never overwrite the
-   project. Do not quietly add deletion or broader repository authority.
+   recovery. The session-brief and preview-workspace baseline then passed 335
+   tests and twelve demos and was checkpointed locally as `b77e32e`. Retain logs
+   and hashes, rerun after code changes, and repeat the clean wheel installation
+   check. A harness PASS does not establish generated-game quality.
+2. **Browser QA and safe restoration (October 31–November 1).** Implemented:
+   bounded browser smoke checks, clearly labeled observations, user-requested
+   reviewed fixes and exact approved restoration as a new version. Run the
+   separate Chromium rehearsal in [chat builds](CHAT_BUILDS.md#browser-smoke-checks)
+   alongside the offline and clean-install gates. Broaden human gameplay
+   rehearsal; no automated claim of arbitrary generated-game quality follows.
 3. **Project guidance and presentation (November 2).** Keep the game brief and
    constraints useful across longer conversations; rehearse idea → proposal →
    approve/play → feedback → revised version → ZIP export. Distinguish synthetic

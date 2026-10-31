@@ -20,7 +20,7 @@ def source_manifest():
     paths = [ROOT / 'pyproject.toml', ROOT / 'AGENTS.md', ROOT / '.agents/skills/repo-hygiene/SKILL.md']
     for folder in ('ember_harness', 'examples', 'tests', 'tools'):
         paths.extend(p for p in (ROOT / folder).rglob('*')
-                     if p.suffix in ('.py', '.json', '.html') and '__pycache__' not in p.parts)
+                     if p.suffix in ('.py', '.json', '.html', '.js') and '__pycache__' not in p.parts)
     return {p.relative_to(ROOT).as_posix(): sha256(p.read_bytes()).hexdigest()
             for p in sorted(paths)}
 
