@@ -44,6 +44,27 @@ class OwnerReviewTests(unittest.TestCase):
         self.assertFalse(self.h._active(self.h._entries()))
         self.assertFalse(any(e['kind'] == 'approval' for e in self.h._entries()))
 
+    def test_approval_between_replay_read_and_save_is_observed_without_rewriting(self):
+        with patch('ember_harness.owner_review.time.sleep',side_effect=RuntimeError('SYNTHETIC pause')),redirect_stdout(io.StringIO()):
+            with self.assertRaises(RuntimeError):self.owner.contract(self.h,self.c)
+        original_save=self.h.save_draft;approved_bytes=[]
+        def race(contract):
+            decide(self.h,self.pending(),'approve',self.quote)
+            approved_bytes.append(self.h._path(contract['id'],contract['version']).read_bytes())
+            return original_save(contract)
+        with patch.object(self.h,'save_draft',side_effect=race),redirect_stdout(io.StringIO()):
+            result=self.owner.contract(self.h,self.c)
+        self.assertEqual(result['status'],'approved')
+        self.assertEqual(self.h._path(self.c['id'],1).read_bytes(),approved_bytes[0])
+        self.assertEqual(validate_history(self.h,self.h._entries()),1)
+        self.assertEqual(len([e for e in self.h._entries() if e['kind']=='approval' and e.get('scope')=='contract']),1)
+        with self.assertRaisesRegex(ValueError,'immutable'):self.h.save_draft(self.c)
+
+    def test_replay_save_error_without_an_approval_does_not_grant_authority(self):
+        with patch.object(self.h,'save_draft',side_effect=ValueError('SYNTHETIC save failure')):
+            with self.assertRaisesRegex(ValueError,'save failure'):self.owner.contract(self.h,self.c)
+        self.assertFalse(self.h._active(self.h._entries()))
+
     def test_explicit_response_binds_exact_review_and_cannot_replay(self):
         c = self.approve_scope()
         self.assertEqual(c['status'], 'approved')

@@ -31,6 +31,10 @@ Implemented in the local app:
 - Repeatable browser smoke observations, version-bound reports and explicitly
   requested reviewed fixes. Saved versions can be restored through a new exact
   approval while preserving history; restores requiring file deletion are refused.
+- Overnight polish for existing browser games: an upfront-approved scope/worker
+  pair, isolated candidates, real desktop/mobile captures, screenshot critiques,
+  bounded rounds and credits, checkpoint recovery and a separate final exact diff.
+  AI recommendations are judgments, and require a human playtest and acceptance.
 
 The contract library also implements scope proposals, approvals, amendments,
 asset selection/ingest, intake, real local fixes, separate verification, rounds,

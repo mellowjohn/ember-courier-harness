@@ -146,6 +146,11 @@ N** prepares a new approval before restoring historical files. See
 [browser checks and restoration](CHAT_BUILDS.md#browser-smoke-checks) for behavior,
 limits and the repeatable Chromium rehearsal.
 
+The **Overnight polish** tab adds upfront-approved autonomous iterations in an
+isolated copy, real browser screenshots, an AI critique loop and a morning review.
+The current game changes only after a separate exact-diff approval. See
+[overnight polish](OVERNIGHT_POLISH.md) for setup, budgets, stopping and recovery.
+
 Local source checkpoint before this polish pass: `235f31b`. Generated projects,
 private sessions, approvals and release logs remain under ignored `.harness/`;
 the Git checkpoint contains application source and documentation.

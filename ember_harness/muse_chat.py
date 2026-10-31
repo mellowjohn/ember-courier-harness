@@ -70,14 +70,27 @@ class CreditLedger:
         data = read_json(self.path) if self.path.exists() else dict(version=1, limit_micro_usd=BUDGET_MICRO_USD, requests={})
         if data.get('version') != 1 or type(data.get('limit_micro_usd')) is not int or not 0 <= data['limit_micro_usd'] <= BUDGET_MICRO_USD:
             raise ValueError('Invalid Muse credit ledger')
+        budgets = data.get('budgets', {})
+        if (not isinstance(budgets, dict) or any(not isinstance(key, str) or len(key) != 64 or
+                any(c not in '0123456789abcdef' for c in key) or type(value) is not int or
+                not RESERVATION_MICRO_USD <= value <= BUDGET_MICRO_USD for key, value in budgets.items())):
+            raise ValueError('Invalid run credit ledger')
         for row in data['requests'].values():
             if row.get('status') not in ('reserved', 'settled') or row.get('reserved_micro_usd') != RESERVATION_MICRO_USD:
                 raise ValueError('Invalid Muse credit reservation')
+            if row['status'] == 'reserved' and 'charged_micro_usd' in row:
+                raise ValueError('An uncertain credit reservation cannot report a settled charge')
             if row['status'] == 'settled' and (type(row.get('charged_micro_usd')) is not int or not 0 <= row['charged_micro_usd'] <= RESERVATION_MICRO_USD):
                 raise ValueError('Invalid Muse credit settlement')
+            if row.get('budget_id') is not None and row['budget_id'] not in budgets:
+                raise ValueError('Credit request has no approved run budget')
+        for key, limit in budgets.items():
+            if sum(row.get('charged_micro_usd', RESERVATION_MICRO_USD) for row in data['requests'].values()
+                   if row.get('budget_id') == key) > limit:
+                raise ValueError('Run credit ledger exceeds its ceiling')
         return data
 
-    def reserve(self, request_id):
+    def reserve(self, request_id, *, budget=None):
         with exclusive(self.folder / 'muse-credits.lock'):
             data = self.read()
             if data.get('blocked'):
@@ -87,8 +100,33 @@ class CreditLedger:
             used = sum(row.get('charged_micro_usd', RESERVATION_MICRO_USD) for row in data['requests'].values())
             if used + RESERVATION_MICRO_USD > min(data['limit_micro_usd'], BUDGET_MICRO_USD):
                 raise ValueError('Muse free-credit budget cannot cover another request')
+            if budget is not None:
+                if (not isinstance(budget, dict) or set(budget) != {'id', 'limit_micro_usd'} or
+                        not isinstance(budget['id'], str) or len(budget['id']) != 64 or
+                        any(c not in '0123456789abcdef' for c in budget['id']) or
+                        type(budget['limit_micro_usd']) is not int or
+                        not RESERVATION_MICRO_USD <= budget['limit_micro_usd'] <= BUDGET_MICRO_USD):
+                    raise ValueError('Invalid run credit budget')
+                budgets = data.setdefault('budgets', {})
+                previous = budgets.get(budget['id'])
+                if previous is not None and previous != budget['limit_micro_usd']:
+                    raise ValueError('An approved run budget cannot be changed')
+                local_used = sum(row.get('charged_micro_usd', RESERVATION_MICRO_USD)
+                                 for row in data['requests'].values() if row.get('budget_id') == budget['id'])
+                if local_used + RESERVATION_MICRO_USD > budget['limit_micro_usd']:
+                    raise ValueError('Polish run credit budget cannot cover another request')
+                budgets[budget['id']] = budget['limit_micro_usd']
             data['requests'][request_id] = dict(status='reserved', reserved_micro_usd=RESERVATION_MICRO_USD)
+            if budget is not None:
+                data['requests'][request_id]['budget_id'] = budget['id']
             atomic_json(self.path, data)
+
+    def budget_summary(self, budget_id):
+        data = self.read()
+        rows = [r for r in data['requests'].values() if r.get('budget_id') == budget_id]
+        return dict(estimated_spent_usd=sum(r.get('charged_micro_usd', 0) for r in rows) / 1_000_000,
+                    reserved_usd=sum(r['reserved_micro_usd'] for r in rows if r['status'] == 'reserved') / 1_000_000,
+                    calls=len(rows))
 
     def freeze(self, reason):
         with exclusive(self.folder / 'muse-credits.lock'):
@@ -166,11 +204,25 @@ def settle_capture(ledger, request_id, capture):
     ledger.settle(capture.get('ledger_request_id', request_id), models[0]['input_tokens'], models[0]['output_tokens'])
 
 
-def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, progress=None):
+def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, progress=None, images=None, budget=None, check=None):
     binary = Path(binary) if binary else installed_binary()
     if not binary or not binary.is_file():
         raise ValueError('Muse Code is not installed. Install and sign in to Muse before sending a message.')
     ledger = CreditLedger(root)
+    pictures = []
+    for value in images or []:
+        from PIL import Image
+        import io
+        raw = Path(value).read_bytes()
+        if len(pictures) >= 4 or len(raw) > 4 * 1024 * 1024:
+            raise ValueError('At most four bounded PNG screenshots may be attached')
+        with Image.open(io.BytesIO(raw)) as picture:
+            if picture.format != 'PNG' or picture.width * picture.height > 4_000_000:
+                raise ValueError('A bounded PNG screenshot is required')
+            picture.verify()
+        pictures.append(raw)
+    binding = digest(dict(prompt=prompt, schema=output_schema,
+                          images=[sha256(raw).hexdigest() for raw in pictures], budget=budget))
     captures = Path(folder) / 'muse-captures'
     captures.mkdir(exist_ok=True)
     capture_path = captures / (request_id + '.json')
@@ -178,12 +230,15 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
         capture = read_json(capture_path)
         if capture.get('capture_sha256') != digest({k: v for k, v in capture.items() if k != 'capture_sha256'}):
             raise ValueError('Saved Muse capture changed; no retry was sent')
+        if ((capture.get('request_binding') is not None or pictures or budget is not None) and
+                capture.get('request_binding') != binding):
+            raise ValueError('Saved Muse request context changed; no retry was sent')
         settle_capture(ledger, request_id, capture)
         if progress:
             progress('cached_reply')
         return capture
     ledger_id = sha256((str(Path(folder).resolve()) + ':' + request_id).encode()).hexdigest()
-    ledger.reserve(ledger_id)
+    ledger.reserve(ledger_id, budget=budget)
     with tempfile.TemporaryDirectory(dir=captures) as scratch:
         scratch = Path(scratch)
         prompt_path = scratch / 'prompt.txt'
@@ -198,6 +253,10 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
             schema_path = scratch / 'response-schema.json'
             atomic_json(schema_path, output_schema)
             args += ['--output-schema', str(schema_path)]
+        for index, raw in enumerate(pictures):
+            image_path = scratch / ('screenshot-' + str(index) + '.png')
+            image_path.write_bytes(raw)
+            args += ['--image', str(image_path)]
         with (scratch / 'stdout.jsonl').open('wb') as output, (scratch / 'stderr.log').open('wb') as errors:
             process = subprocess.Popen(args, cwd=scratch, stdin=subprocess.DEVNULL, stdout=output, stderr=errors,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
@@ -206,6 +265,8 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
             finished = False
             try:
                 while True:
+                    if check:
+                        check()
                     try:
                         code = process.wait(timeout=.25)
                         finished = True
@@ -256,7 +317,7 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
         terminal = [e.get('payload', {}) for e in events if e.get('payload_type') == 'run.terminal.completed']
         capture = dict(model=MODEL, binary_sha256=sha256(binary.read_bytes()).hexdigest(), events=events,
                        exit_code=code, response=None, ledger_request_id=ledger_id,
-                       reservation_micro_usd=RESERVATION_MICRO_USD)
+                       reservation_micro_usd=RESERVATION_MICRO_USD, request_binding=binding)
         if len(terminal) == 1 and terminal[0].get('terminal') == 'completed':
             capture['response'] = terminal[0].get('text')
         capture['capture_sha256'] = digest(capture)

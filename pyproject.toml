@@ -16,4 +16,4 @@ ember-ui = "ember_harness.local_ui:main"
 include = ["ember_harness*"]
 
 [tool.setuptools.package-data]
-ember_harness = ["schema/*.json", "ui.html"]
+ember_harness = ["schema/*.json", "ui.html", "polish_browser.js"]

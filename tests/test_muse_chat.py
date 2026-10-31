@@ -22,6 +22,49 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MuseChatTests(unittest.TestCase):
+    def test_cancel_check_stops_a_quiet_provider_and_retains_the_reservation(self):
+        from unittest.mock import Mock
+        scratch=ROOT/'.harness/test-temp';scratch.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root=Path(directory);session=root/'session';session.mkdir()
+            binary=root/'synthetic.exe';binary.write_bytes(b'Never executed')
+            process=Mock()
+            with patch('ember_harness.muse_chat.subprocess.Popen',return_value=process):
+                with self.assertRaisesRegex(ValueError,'SYNTHETIC cancellation'):
+                    run(root,session,'Plan','quiet-call',binary=binary,check=Mock(side_effect=ValueError('SYNTHETIC cancellation')))
+            process.kill.assert_called_once()
+            self.assertEqual(CreditLedger(root).summary()['reserved_usd'],5)
+
+    def test_screenshot_requests_bind_images_prompt_and_run_budget_on_replay(self):
+        from PIL import Image
+        from unittest.mock import Mock
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root=Path(directory); session=root/'session'; session.mkdir()
+            binary=root/'synthetic.exe'; binary.write_bytes(b'Never executed')
+            image=root/'screenshot.png'; Image.new('RGB',(40,30),'green').save(image)
+            original=image.read_bytes(); budget=dict(id='e'*64,limit_micro_usd=5_000_000)
+            events=[dict(payload_type='run.terminal.completed',payload=dict(terminal='completed',text='Screenshot critique'))]
+            def start(args,**kwargs):
+                attached=Path(args[args.index('--image')+1])
+                self.assertEqual(attached.read_bytes(),original)
+                self.assertNotEqual(attached,image)
+                kwargs['stdout'].write(json.dumps(events[0]).encode());kwargs['stdout'].flush()
+                return Mock(wait=Mock(return_value=0))
+            with patch('ember_harness.muse_chat.subprocess.Popen',side_effect=start) as process:
+                first=run(root,session,'Inspect screenshot','image-critique',binary=binary,images=[image],budget=budget)
+                self.assertEqual(run(root,session,'Inspect screenshot','image-critique',binary=binary,images=[image],budget=budget),first)
+                self.assertEqual(process.call_count,1)
+                for changes in (dict(prompt='Different prompt'),dict(budget={**budget,'limit_micro_usd':10_000_000})):
+                    options=dict(prompt='Inspect screenshot',budget=budget)|changes
+                    with self.assertRaisesRegex(ValueError,'context changed'):
+                        run(root,session,options['prompt'],'image-critique',binary=binary,images=[image],budget=options['budget'])
+                Image.new('RGB',(40,30),'red').save(image)
+                with self.assertRaisesRegex(ValueError,'context changed'):
+                    run(root,session,'Inspect screenshot','image-critique',binary=binary,images=[image],budget=budget)
+                self.assertEqual(process.call_count,1)
+            self.assertEqual(CreditLedger(root).budget_summary('e'*64)['reserved_usd'],5)
+
     def test_shared_credit_reservations_survive_restart_and_cannot_exceed_150(self):
         scratch = ROOT / '.harness/test-temp'
         scratch.mkdir(parents=True, exist_ok=True)

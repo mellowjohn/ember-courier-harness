@@ -9,6 +9,7 @@
 .content{max-width:1800px;padding:28px 32px}.workbench{display:grid;grid-template-columns:minmax(320px,1fr) minmax(380px,1.15fr);gap:24px;align-items:start}.chat-column,.preview-column{min-width:0}.preview-column{position:sticky;top:20px;border:1px solid #344439;background:#131f18;border-radius:12px;padding:20px}.preview-column h2{font-size:18px;margin:0}.preview-column .panel{padding:16px}.preview-column iframe{height:480px!important}.preview-empty{min-height:300px;display:grid;place-content:center;text-align:center;padding:24px}.brief{border:1px solid #344439;border-radius:10px;padding:14px 18px;margin:16px 0}.brief summary{font-weight:600}.brief-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.brief textarea{min-height:95px;resize:vertical;margin-top:6px}.brief-status{font-size:12px;color:#b9d2bf}.chat-thread{margin-top:0}.composer{position:sticky;bottom:12px;box-shadow:0 8px 24px #0a100dcc}.playtest-area .button{margin:8px 6px 0 0}.build-version{color:#f0b783;font-size:12px}.message{max-width:95%}
 @media(max-width:1150px){.workbench{grid-template-columns:minmax(0,1fr)}.preview-column{position:static}.composer{position:static}.content{padding:24px}.brief-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.content{padding:20px 16px}.brief-grid{grid-template-columns:1fr}.preview-column{padding:14px}.preview-column iframe{height:360px!important}.heading{flex-wrap:wrap}}
+.polish-limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}@media(max-width:620px){.polish-limits{grid-template-columns:1fr}}
 </style></head><body>
 <div class="layout"><aside class="sidebar" aria-label="Sessions">
 <div class="logo"><span class="mark" aria-hidden="true">◈</span><div><strong>Ember Harness</strong><small>LOCAL WORKSPACE</small></div></div>
@@ -30,6 +31,7 @@
 const token=location.hash.slice(1)||sessionStorage.getItem('ember-token')||'';sessionStorage.setItem('ember-token',token);history.replaceState(null,'',location.pathname);
 const $=id=>document.getElementById(id);let current='',busy=false,activeSession=null,historyKey='',chatKey='',sending=false,buildReviewRef=null,buildKey='',previewState=null,autoPreviewRef=null,localRequest=null,lastState=null;const urls=[];const briefFields=['goal','controls','visual_direction','constraints'];let briefSession=null,briefRevision=0,briefDirty=false,briefSaving=false;const sessionDrafts=new Map();
 let smokeRun=null;
+let polishKey='';const polishURLs=[],polishDrafts=new Map();
 async function api(path,body){const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'X-Ember-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
 function el(tag,text,parent){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(parent)parent.append(n);return n}
 function detail(title,data,parent){const d=el('details',undefined,parent);el('summary',title,d);el('pre',JSON.stringify(data,null,2),d)}
@@ -102,7 +104,7 @@ function renderReview(s){
   if(s.status!=='running')p.querySelectorAll('.decision').forEach(button=>button.disabled=true);
 }
 
-function showTab(id){for(const view of ['chat','activity','report'])$(view).hidden=view!==id;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)))}
+function showTab(id){for(const view of ['chat','polish','activity','report'])if($(view))$(view).hidden=view!==id;document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)))}
 async function refresh(){try{const s=await api('state');lastState=s;activeSession=s.session;renderBrief(s);renderChat(s);renderBuild(s);$('recover').hidden=!s.recovery_available;$('run-workflow').hidden=!s.session||s.session.workflow_started!==false;$('recovery-note').hidden=!s.recovery_available;$('recovery-note').textContent=s.recovery_error||'This workflow stopped. Resume it from the last saved checkpoint; recorded approvals remain in place.';$('save').disabled=!s.session;$('session-title').textContent=s.session?s.session.name:'Your sessions, in one place.';$('saved').textContent=s.session?'Created '+new Date(s.session.created_at).toLocaleDateString()+' · Saved '+new Date(s.session.updated_at).toLocaleString():'Create a session or select one from the sidebar.';$('status').textContent=(sending||s.chat_activity?.state==='active')?'Working':s.build?.requests.some(r=>!r.decision)?'Awaiting approval':s.status;$('mode').textContent='Model: Muse. Describe a browser prototype in chat, review its diff, and approve changes inline. Sample workflows remain separate.';$('decision-count').textContent=s.requests.filter(r=>r.decision).length;$('pending-count').textContent=s.requests.filter(r=>!r.decision).length;$('progress').textContent=({idle:'Ready',running:'In progress',completed:'Complete',stopped:'Stopped',interrupted:'Interrupted'})[s.status]||s.status;$('progress-detail').textContent=s.status==='running'?'Workflow active':s.status==='completed'?'Evidence ready to verify':s.status==='idle'?'Ready for your message':'Open Activity for details';$('log').textContent=s.log||'No sample workflow started.';$('chat-log').textContent=(s.chat_activity?.events||[]).map(event=>new Date(event.at).toLocaleTimeString()+' · '+event.title).join('\n')||'No recorded request activity yet.';$('audit').textContent=JSON.stringify({sample_workflow:s.audit,chat_builds:s.build?.audit||[]},null,2);$('store').textContent=s.store;$('verify').disabled=s.status!=='completed'&&!s.build?.completed.length;$('result').textContent=s.report||(s.build?.completed.length?'Browser build complete.\nProject: '+s.build.project+'\nSHA-256: '+s.build.completed[s.build.completed.length-1].sha256+'\nVerify current evidence to refresh file and approval checks.':'Approve a build in chat or complete a sample workflow to see results.');renderReview(s)}catch(e){$('error').textContent=e.message}}
 $('new-session').onclick=()=>{if(busy||sending||briefSaving)return;$('new-error').textContent='';$('session-name').value='';$('new-dialog').showModal();$('session-name').focus()};
 $('cancel-new').onclick=()=>$('new-dialog').close();
@@ -289,6 +291,7 @@ async function runSmoke(s,box,button){
       };
       window.addEventListener('message',listener);timer=setTimeout(finish,8000);
       frame.srcdoc=previewDocument(result.html);
+      frame.scrollIntoView({block:'center'});
     });
     clearTimeout(timer);window.removeEventListener('message',listener);panel.remove();
     if(!captured||run.cancelled||activeSession?.id!==sid||!box.isConnected)return;
@@ -309,6 +312,7 @@ function renderPlaytestSummary(s){
   if(latest.outcome==='problem'){const fix=el('button','Ask Muse to fix this',area);fix.className='button';fix.onclick=()=>sendMessage('Please fix the problem in playtest report '+latest.report_id+'. Propose changes for my review.',crypto.randomUUID())}
 }
 function renderBuild(s){
+  renderPolish(s);
   const b=s.build||{completed:[],resumable:[]};
   const key=JSON.stringify([s.session?.id,b.completed,b.resumable,b.versions]);
   if(key===buildKey){renderPlaytestSummary(s);renderSmokeSummary(s);return;}buildKey=key;previewState=null;smokeRun?.cancel();
@@ -355,6 +359,95 @@ function renderBuild(s){
   if(!b.resumable.length){autoPreviewRef=null;preview.onclick()}
 }
 async function sendMessage(text,id){if(sending||briefSaving||!activeSession||lastState?.chat_activity?.state==='active')return;sending=true;beginChatRequest(text,id);$('chat-send').disabled=true;$('chat-provider').disabled=true;try{await api('chat',{text,id});if($('chat-input').value.trim()===text)$('chat-input').value='';$('error').textContent=''}catch(e){$('error').textContent=e.message}finally{sending=false;localRequest=null;chatKey='';await refresh()}}
+async function polishAction(sessionId,action,body){
+  if(busy||sending||briefSaving)return;
+  busy=true;
+  try{const result=await api('polish',{session_id:sessionId,action,...body});$('error').textContent='';return result}
+  catch(error){$('error').textContent=error.message}
+  finally{busy=false;current='';await refresh();if(action==='promote'&&!$('review').hidden){showTab('chat');$('review').scrollIntoView({block:'nearest'})}}
+}
+async function polishScreenshot(sid,run,index,name,parent){
+  const query=new URLSearchParams({session_id:sid,run_id:run,index,name});
+  const response=await fetch('/api/polish-image?'+query,{headers:{'X-Ember-Token':token}});
+  if(!response.ok)throw Error((await response.json()).error);
+  const blob=await response.blob();if(activeSession?.id!==sid||!parent.isConnected)return;
+  const url=URL.createObjectURL(blob);polishURLs.push(url);const image=el('img',undefined,parent);
+  image.src=url;image.alt=(index===0?'Original':'Candidate '+index)+' '+name+' screenshot';image.style.cssText='height:auto;width:100%;object-fit:contain';
+}
+function renderPolish(s){
+  let area=$('polish-workspace');
+  if(!area){
+    const view=el('section');view.id='polish';view.hidden=true;view.setAttribute('role','tabpanel');$('activity').before(view);
+    area=el('section',undefined,view);area.id='polish-workspace';area.setAttribute('aria-label','Overnight polish');
+    const tab=el('button','Overnight polish');tab.id='polish-tab';tab.dataset.tab='polish';tab.setAttribute('role','tab');
+    tab.setAttribute('aria-label','Overnight polish');tab.setAttribute('aria-controls','polish');tab.setAttribute('aria-selected','false');
+    document.querySelector('[data-tab="chat"]').after(tab);tab.onclick=()=>showTab('polish');
+  }
+  const runs=s.polish_runs||[],sid=s.session?.id;
+  const key=JSON.stringify([sid,s.build?.completed.at(-1)?.request_ref,runs.map(r=>[r.id,r.status,r.best_index,r.candidates.map(c=>c.index),r.error,r.stop_requested]),s.polish_available]);
+  $('polish-tab').textContent='Overnight polish'+(runs.some(r=>r.status==='running')?' · Working':runs.some(r=>r.status==='ready_review')?' · Ready':'');
+  if(key===polishKey){for(const run of runs){const live=$('polish-live-'+run.id);if(live)live.textContent=run.phase+' · Estimated $'+run.usage.estimated_spent_usd.toFixed(4)+' · Reserved $'+run.usage.reserved_usd.toFixed(2)}return}
+  polishKey=key;polishURLs.splice(0).forEach(URL.revokeObjectURL);area.replaceChildren();
+  if(!sid||!s.build?.completed.length){el('p','Open a session with an approved browser game to start an overnight polish pass.',area);return;}
+  const panel=el('div',undefined,area);panel.className='panel';
+  el('h2','Overnight polish',panel);
+  el('p','Leave a direction. Ember works in a separate copy, tests desktop and mobile, and brings back its strongest candidate for your review.',panel);
+  const active=runs.some(r=>['awaiting_approval','running','interrupted','ready'].includes(r.status));
+  if(!active){
+    const draft=polishDrafts.get(sid)||{goal:'Make this game feel satisfying and cohesive. Improve visual polish, motion and interaction feedback while preserving its core gameplay.',rounds:2,hours:8,credits:25};
+    const setup=el('details',undefined,panel);setup.open=!runs.length;el('summary',runs.length?'Start another polish run':'Set the polish direction',setup);
+    const form=el('form',undefined,setup),label=el('label','What should feel better?',form),goal=el('textarea',undefined,label);
+    goal.maxLength=2000;goal.required=true;goal.value=draft.goal;
+    const fields={},limits=el('div',undefined,form);limits.className='polish-limits';
+    for(const [key,title,min,max] of [['rounds','Polish rounds',1,6],['hours','Maximum hours',1,12],['credits','Free-credit cap ($)',5,50]]){
+      const label=el('label',title,limits),input=el('input',undefined,label);input.type='number';input.min=min;input.max=max;input.step=1;input.required=true;input.value=draft[key];fields[key]=input;
+    }
+    form.oninput=()=>polishDrafts.set(sid,{goal:goal.value,...Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,Number(v.value)]))});
+    const prepare=el('button','Review overnight scope',form);prepare.type='submit';prepare.className='button';prepare.disabled=!s.polish_available?.ready||!!s.build.resumable.length;
+    el('small',s.polish_available?.ready?'The run ends when its rounds or limits are reached. Keep this computer awake; you can close Ember.':s.polish_available?.reason||'Browser tooling is unavailable',form);
+    form.onsubmit=event=>{event.preventDefault();polishAction(sid,'prepare',{goal:goal.value,...Object.fromEntries(Object.entries(fields).map(([k,v])=>[k,Number(v.value)]))})};
+  }
+  for(const run of runs){
+    const box=el('article',undefined,panel);box.className='panel';
+    el('h3',({awaiting_approval:'Review overnight scope',running:'Ember is polishing',interrupted:'Polish needs attention',ready_review:'Your polish report',declined:'Polish scope discarded'})[run.status]||run.status,box);
+    el('p',run.goal,box);
+    el('p',run.rounds+' rounds · Up to '+run.hours+' hours · $'+run.credits+' free-credit cap · At most '+run.model_calls+' Muse calls',box);
+    const live=el('p',run.phase+' · Estimated $'+run.usage.estimated_spent_usd.toFixed(4)+' · Reserved $'+run.usage.reserved_usd.toFixed(2),box);live.id='polish-live-'+run.id;live.setAttribute('role','status');
+    if(run.error)el('pre',run.error,box);
+    const actions=el('div',undefined,box);actions.className='actions';
+    function control(title,action,body){const button=el('button',title,actions);button.className='button';button.onclick=()=>polishAction(sid,action,{run_id:run.id,...body});return button}
+    if(run.status==='awaiting_approval'){
+      el('p',run.notice,box);detail('Review permissions and both contracts',run.contracts,box);
+      control('Approve scope & start polish','decide',{choice:'approve',quote:'Approve scope & start polish'}).classList.add('primary');
+      control('Discard polish scope','decide',{choice:'decline',quote:'Discard polish scope'});
+    }
+    if(run.status==='running')control(run.stop_requested?'Stop requested':'Stop polish run','stop',{}).disabled=run.stop_requested;
+    if(run.status==='interrupted'&&!run.stop_requested){control('Resume polish run','resume',{});control('Stop and keep completed work','stop',{})}
+    const best=run.candidates.find(c=>c.index===run.best_index);
+    if(best){
+      el('strong',best.index===0?'Original retained: no candidate cleared the improvement bar.':'Strongest candidate: '+best.title,box);
+      el('p',best.critique.summary,box);detail('AI assessment and remaining issues',best.critique,box);
+      el('small','AI visual judgment and bounded browser checks. Play the game before accepting it.',box);
+      if(best.index>0&&run.status!=='running')control('Review exact changes','promote',{index:best.index}).classList.add('primary');
+      const compare=el('button','Compare before / after screenshots',box);compare.className='button';
+      compare.onclick=async()=>{compare.disabled=true;const grid=el('div',undefined,box);grid.className='options';
+        try{for(const [index,title] of [[0,'Original'],[best.index,'Strongest candidate']]){const column=el('div',undefined,grid);el('h4',title,column);await polishScreenshot(sid,run.id,index,'desktop',column);await polishScreenshot(sid,run.id,index,'mobile',column)}}
+        catch(error){$('error').textContent=error.message;compare.disabled=false}
+      };
+    }
+    if(run.candidates.length){
+      const candidates=el('details',undefined,box);el('summary','Play completed candidates ('+run.candidates.length+')',candidates);
+      for(const candidate of run.candidates){
+        const row=el('div',undefined,candidates);el('p',(candidate.index===0?'Original':'Candidate '+candidate.index)+' · '+candidate.title+' · '+candidate.failures+' browser issues',row);
+        const play=el('button',candidate.index===0?'Play original':'Play candidate '+candidate.index,row);play.className='button';
+        play.onclick=async()=>{try{play.disabled=true;const saved=await api('polish-preview?'+new URLSearchParams({session_id:sid,run_id:run.id,index:candidate.index}));
+          if(activeSession?.id!==sid||!row.isConnected)return;row.querySelector('iframe')?.remove();
+          prototypeFrame(row,'Polish candidate '+candidate.index+' · awaiting final approval').srcdoc=previewDocument(saved.html);
+        }catch(error){$('error').textContent=error.message}finally{play.disabled=false}};
+      }
+    }
+  }
+}
 $('chat-form').onsubmit=event=>{event.preventDefault();const text=$('chat-input').value.trim();if(text)sendMessage(text,crypto.randomUUID())};
 $('chat-provider').onchange=async()=>{try{await api('model',{provider:$('chat-provider').value});await refresh()}catch(e){$('error').textContent=e.message}};
 $('recover').onclick=async()=>{if(busy||sending||briefSaving)return;busy=true;$('recover').disabled=true;try{await api('recover',{});$('error').textContent='';current='';await refresh();await loadHistory()}catch(e){$('error').textContent=e.message}finally{busy=false;$('recover').disabled=false}};

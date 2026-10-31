@@ -19,7 +19,7 @@ from .owner_review import load_request, decide
 from .recovery import Recovery, exclusive, worker_active, read_json
 from .session_chat import transcript, send, activity as chat_activity, MUSE_UNAVAILABLE
 from .muse_chat import installed_binary, CreditLedger
-from . import chat_build, playtests, project_versions, project_brief, browser_checks
+from . import chat_build, playtests, project_versions, project_brief, browser_checks, polish, polish_runtime
 
 
 class App:
@@ -234,6 +234,12 @@ class App:
                 result['build']['playtests'] = playtests.reports(session_folder)
                 result['build']['versions'] = project_versions.history(session_folder)
                 result['build']['smoke_checks'] = browser_checks.reports(session_folder)
+                result['polish_runs'] = polish.history(self.root, session_folder)
+                try:
+                    polish_runtime.discover(self.root, fingerprints=False)
+                    result['polish_available'] = dict(ready=True, reason='Browser tooling is ready')
+                except ValueError as error:
+                    result['polish_available'] = dict(ready=False, reason=str(error))
                 result['requests'].extend(result['build']['requests'])
                 checkpoint = session_folder / 'recovery.json'
                 declined = any(r['decision'] and r['decision']['choice'] == 'decline' for r in result['requests'])
@@ -351,6 +357,32 @@ class App:
                 raise ValueError('Image changed or too large')
             return data
 
+    def polish_control(self, session_id, action, **body):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before changing a polish run')
+            folder = self.sessions_dir / session_id
+            if action == 'prepare':
+                return polish.prepare(self.root, folder, **body)
+            if action == 'decide':
+                return polish.respond(self.root, folder, **body)
+            if action == 'resume':
+                return polish.launch(self.root, folder, body['run_id'])
+            if action == 'stop':
+                return polish.stop(self.root, folder, body['run_id'])
+            if action == 'promote':
+                return polish.promote(self.root, folder, body['run_id'], body['index'])
+            raise ValueError('Unknown polish action')
+
+    def polish_preview(self, session_id, run_id, index, image_name=None):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before viewing a polish run')
+            folder = self.sessions_dir / session_id
+            if image_name is not None:
+                return polish.image(folder, run_id, index, image_name)
+            return polish.preview(folder, run_id, index)
+
     def verify(self):
         with self.lock:
             state = self.snapshot()
@@ -376,7 +408,7 @@ def server(app, port=0):
             self.send_header('X-Content-Type-Options', 'nosniff')
             if download:
                 self.send_header('Content-Disposition', 'attachment; filename="' + download + '"')
-            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data:; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' data:; style-src 'self' 'unsafe-inline' data:; img-src 'self' data: blob:; frame-ancestors 'none'")
             self.end_headers()
             self.wfile.write(raw)
 
@@ -412,6 +444,11 @@ def server(app, port=0):
                 if url.path == '/api/smoke-preview':
                     q = parse_qs(url.query)
                     return self.reply(200, app.smoke_preview(q['session_id'][0]))
+                if url.path in ('/api/polish-preview', '/api/polish-image'):
+                    q = parse_qs(url.query)
+                    result = app.polish_preview(q['session_id'][0], q['run_id'][0], int(q['index'][0]),
+                        q['name'][0] if url.path == '/api/polish-image' else None)
+                    return self.reply(200, result, 'image/png' if url.path == '/api/polish-image' else 'application/json')
                 if url.path == '/api/export-version':
                     q = parse_qs(url.query)
                     data, filename = app.export_version(q['ref'][0])
@@ -447,6 +484,8 @@ def server(app, port=0):
                     result = app.record_smoke(**body)
                 elif self.path == '/api/restore-version':
                     result = app.restore_version(body['session_id'], body['ref'], body['current_ref'], body['id'])
+                elif self.path == '/api/polish':
+                    result = app.polish_control(**body)
                 elif self.path == '/api/project-brief':
                     result = app.save_brief(body['session_id'], body['fields'], body['revision'])
                 elif self.path == '/api/model':

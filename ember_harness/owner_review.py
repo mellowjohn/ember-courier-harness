@@ -63,17 +63,27 @@ class OwnerReview:
         for c, parent in items:
             if parent is None and c['extensions']['orchestration']['role'] != 'scope':
                 parent = h._active(h._entries()).get(c['id'], {}).get('parent_id')
-            prior = next((e for e in h._entries() if e['kind'] == 'approval' and
-                e.get('scope') == 'contract' and e.get('contract_id') == c['id'] and
-                e.get('contract_version') == c['version']), None)
+            def approved():
+                return next((e for e in h._entries() if e['kind'] == 'approval' and
+                    e.get('scope') == 'contract' and e.get('contract_id') == c['id'] and
+                    e.get('contract_version') == c['version']), None)
+            prior = approved()
+            if not prior:
+                try:
+                    h.save_draft(c)
+                except ValueError:
+                    # A human may approve the original pending packet between
+                    # our read and save after a worker restart. Observe that
+                    # exact receipt; never overwrite or approve on replay.
+                    prior = approved()
+                    if prior is None:
+                        raise
             if prior:
                 # Reopen the original review after a worker restart. Authority
                 # still comes from its existing receipt; never approve on replay.
                 if content_hash(c) != prior['reviewed_hash']:
                     raise ValueError('reviewed contract changed since approval')
                 h._load(prior)
-            else:
-                h.save_draft(c)
             records.append(dict(contract=c, parent_id=parent))
         self._request(h, 'contracts', dict(contracts=records))
         active = h._active(h._entries())
