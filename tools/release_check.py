@@ -17,7 +17,7 @@ DEMOS = ('contract', 'amendment', 'staged_fix', 'round', 'attempt', 'intake',
 
 
 def source_manifest():
-    paths = [ROOT / 'pyproject.toml', ROOT / 'Start Ember.cmd', ROOT / 'Setup Ember.cmd', ROOT / 'AGENTS.md', ROOT / '.agents/skills/repo-hygiene/SKILL.md']
+    paths = [ROOT / 'pyproject.toml', ROOT / 'LICENSE', ROOT / 'Start Ember.cmd', ROOT / 'Setup Ember.cmd', ROOT / 'AGENTS.md', ROOT / '.agents/skills/repo-hygiene/SKILL.md']
     for folder in ('ember_harness', 'examples', 'tests', 'tools', '.agents/skills'):
         paths.extend(p for p in (ROOT / folder).rglob('*')
                      if p.suffix in ('.py', '.json', '.html', '.js', '.css', '.md') and '__pycache__' not in p.parts)

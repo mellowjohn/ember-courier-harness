@@ -225,3 +225,7 @@ Optional area skills (stubs): `.agents/skills/{contracts,pipeline,concepts,triag
 - Doc headers that mention `/workspace/...` are historical authoring paths, not paths in this repo.
 - Technical content is unchanged from the sanitized docs pack; `[UNVERIFIED]` markers are kept where present (e.g. Meta model or rules claims until checked against official event materials).
 - Contract tests use prefixes: `CT-` contracts · `CS-T` concept · `PL-` pipeline · `TR-` triage.
+
+## License
+
+Ember is released under the [MIT License](LICENSE).
