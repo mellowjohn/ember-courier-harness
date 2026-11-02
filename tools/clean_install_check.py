@@ -32,6 +32,7 @@ def main(argv=None):
         path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, path)
     shutil.copyfile(ROOT / 'pyproject.toml', build / 'pyproject.toml')
+    shutil.copyfile(ROOT / 'LICENSE', build / 'LICENSE')
     if (validation / 'ember_harness').exists():
         raise ValueError('validation harness must not contain package source')
     rows = []
