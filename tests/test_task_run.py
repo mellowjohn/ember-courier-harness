@@ -173,6 +173,30 @@ class TaskRunTests(unittest.TestCase):
         self.assertEqual(state['reports'][1]['quality']['human_pending'], ['human-experience'])
         self.assertIsNone(project_plan.status(self.root, self.folder)['tasks'][0]['acceptance'])
 
+    def test_detached_hud_blocks_qualification_and_reaches_repair_with_screenshots(self):
+        run_id = self.prepare(); self.approve(run_id)
+        def reviewing(root, folder, prompt, phase, **kwargs):
+            data = json.loads(prompt.split('\n', 1)[1])
+            if phase.startswith('generate'):
+                self.assertIn(chat_build.GAME_UI_INSTRUCTION, prompt)
+            else:
+                self.assertIn(chat_build.GAME_UI_REVIEW_INSTRUCTION, prompt)
+            if phase == 'generate-2':
+                self.assertTrue(any('game-ui-integration: not_met' in b for b in data['feedback']['quality']['blockers']))
+                self.assertEqual(len(kwargs['images']), 2)
+            result = self.model(root, folder, prompt, phase, **kwargs)
+            if phase == 'verify-1':
+                verdict = json.loads(result['response'])
+                next(c for c in verdict['criteria'] if c['id'] == 'game-ui-integration').update(
+                    status='not_met', reason='Mobile controls sit below the game stage; anchor them inside it.')
+                result['response'] = json.dumps(verdict)
+            return result
+        state = self.run_worker(run_id, model=reviewing)
+        self.assertEqual(state['status'], 'ready_review', state.get('error'))
+        self.assertEqual([r['qualified'] for r in state['reports']], [False, True])
+        self.assertTrue(state['reports'][0]['verdict']['meets_task'])
+        self.assertEqual(state['reports'][0]['observations']['gameplay']['outcome'], 'passed')
+
     def test_three_failures_restart_and_new_run_cannot_reset_owner_escalation(self):
         run_id=self.prepare(); self.approve(run_id); self.passes=False
         state=self.run_worker(run_id)

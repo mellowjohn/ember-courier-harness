@@ -329,7 +329,7 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                       '(up to 512 KiB). Preserve these prepared files byte for byte unless explicitly asked to replace the asset or runtime. '
                       'Use ordinary local script src and stylesheet link href references; inline code also works. '
                       'Use classic scripts, no ES modules, external resources, dependencies, network, server or engine edits. '
-                      + chat_build.REVISION_INSTRUCTION +
+                      + chat_build.REVISION_INSTRUCTION + chat_build.GAME_UI_INSTRUCTION +
                       'File deletion is not supported. Keep code concise and usable. '
                       'Explain scope limits in message if another target is needed; do not substitute a different requested engine. '
                       'The host will show an exact diff and contracts for human approval before writing any file. '

@@ -37,10 +37,21 @@ def discover(root, *, fingerprints=True):
 
 
 def review_images(output):
-    """Actual desktop/mobile renders followed by any captured movement poses."""
+    """Actual game views plus open panels when present, otherwise movement poses."""
     output = Path(output)
-    return [output / (name + suffix + '.png') for suffix in ('', '-action') for name in ('desktop', 'mobile')
-            if not suffix or (output / (name + suffix + '.png')).is_file()]
+    images = [output / (name + '.png') for name in ('desktop', 'mobile')]
+    recorded = {v['name']: v for v in read_json(output / 'report.json')['viewports']}
+    for name in ('desktop', 'mobile'):
+        for kind in ('panel', 'action'):
+            filename = name + '-' + kind + '.png'
+            if recorded[name].get(kind + '_screenshot') != filename:
+                continue
+            path = output / filename
+            if path.is_symlink() or file_digest(path) != recorded[name].get(kind + '_sha256'):
+                raise ValueError('Browser ' + kind + ' capture changed')
+            images.append(path)
+            break
+    return images
 
 
 def validate(runtime):
@@ -98,6 +109,11 @@ def verified_report(source, output):
             target = output / name
             if row['action_screenshot'] != name or target.is_symlink() or file_digest(target) != row.get('action_sha256'):
                 raise ValueError('Browser movement capture changed')
+        if row.get('panel_screenshot'):
+            name = row['name'] + '-panel.png'
+            target = output / name
+            if row['panel_screenshot'] != name or target.is_symlink() or file_digest(target) != row.get('panel_sha256'):
+                raise ValueError('Browser panel capture changed')
     request = read_json(source)
     if 'gameplay_plan' in request:
         if request.get('gameplay_plan_sha256') != gameplay.digest(request['gameplay_plan']):

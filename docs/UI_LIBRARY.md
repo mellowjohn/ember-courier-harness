@@ -21,6 +21,8 @@ The game preview's empty-state ember uses the original SVG flame and CSS particl
 Both particles and the glow pause under `prefers-reduced-motion`. The decorative
 scene is hidden from assistive technology and makes no network requests. Game
 contents retain their own art direction inside the isolated preview.
+See [game UI creation and review](GAME_UI.md) for the in-game layout and style
+process; this library supplies the surrounding workspace.
 
 Game-idea shortcuts fill and focus an editable chat draft. They never submit a
 message or call Muse. The first-launch welcome opens the existing session dialog.

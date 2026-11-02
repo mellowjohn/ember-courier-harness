@@ -39,12 +39,18 @@ ask for up to eight independent image requests; see [bulk artwork generation](AS
 
 ## Inline approval
 
+Game UI follows the [integrated game-view process](GAME_UI.md): HUD and menus
+belong inside the playfield's stage and use the game's own visual language.
+Desktop/mobile review checks integration and style as separate required criteria.
+
 New chat build proposals automatically run a read-only verification stage before
 the reply finishes. Muse supplies bounded `gameplay_checks` for the actual
 interaction and visible result. The host retains existing saved checks, runs
-the exact candidate and current source in Chromium, and attaches actual
-desktop/mobile screenshots plus poses captured while movement input is held to
-a separate Muse review. Spark supports image input; the installed CLI's repeatable
+the exact candidate and current source in Chromium, and captures actual
+desktop/mobile screenshots plus poses while movement input is held. A separate
+Muse review receives the two game views plus open help/settings panels when
+discoverable, otherwise movement poses, within its four-image allowance. All
+captures remain available as evidence. Spark supports image input; the installed CLI's repeatable
 `--image` option carries the PNG bytes. See [Meta's multimodal input documentation](https://dev.meta.ai/docs/quickstart).
 
 **Game verification** shows gameplay outcomes separately from the AI visual

@@ -358,9 +358,12 @@ class Worker(polish.Worker):
                     if item['contract']['extensions']['orchestration']['stage_id'] == stage_id)
 
     def model(self, phase, instruction, data, schema, images):
+        if phase.startswith(('generate-', 'specialize-')):
+            instruction += ' ' + chat_build.GAME_UI_INSTRUCTION
         if images:
             data = {**data, 'image_order': [Path(p).name for p in images]}
-            instruction += ' Attached action captures show a held movement key; use these pixels when repairing visual defects. '
+            instruction += (' Attached -action captures show a held movement key; -panel captures show an opened '
+                            'help/settings view. Use the actual supplied image names and pixels when repairing defects. ')
         if self.plan.get('quality'):
             data = {**data, 'quality': self.plan['quality']}
             if phase.startswith('verify-'):

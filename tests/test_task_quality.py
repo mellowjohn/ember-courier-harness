@@ -66,11 +66,40 @@ class TaskQualityTests(unittest.TestCase):
         self.observed['gameplay']['scenarios'][0]['outcome'] = 'failed'
         self.assertTrue(self.review()['blockers'])
 
+    def test_game_ui_needs_both_viewports_and_blocks_a_bare_positive_verdict(self):
+        for criterion_id in ('game-ui-integration', 'game-ui-style'):
+            for defect in ('not_met', 'missing_mobile', 'source_only'):
+                verdict = deepcopy(self.verdict)
+                row = next(c for c in verdict['criteria'] if c['id'] == criterion_id)
+                if defect == 'not_met':
+                    row.update(status='not_met', reason='HUD is a detached footer with mismatched card styling')
+                elif defect == 'missing_mobile':
+                    row['evidence'].pop()
+                else:
+                    row['evidence'] = [dict(kind='source', ref='app.js', detail=self.files['app.js'])]
+                with self.subTest(criterion=criterion_id, defect=defect):
+                    self.assertTrue(any(b.startswith(criterion_id + ':') for b in self.review(verdict)['blockers']))
+
     def test_verifier_schema_requires_criteria_without_changing_specialized_schema(self):
         base = dict(required=['summary'], properties=dict(summary=dict(type='string')))
         changed = task_quality.schema(base)
         self.assertIn('criteria', changed['required'])
         self.assertNotIn('criteria', base['required'])
+
+    def test_abbreviated_or_explained_source_evidence_never_counts_as_verbatim(self):
+        for excerpt in ('const deliveryLabel ... "Deliver parcel";',
+                        self.files['app.js'] + ' preserves the delivery label'):
+            verdict = deepcopy(self.verdict)
+            verdict['criteria'][0]['evidence'][0]['detail'] = excerpt
+            with self.subTest(excerpt=excerpt):
+                self.assertTrue(any(b.startswith('task: unsupported source') for b in self.review(verdict)['blockers']))
+
+    def test_panel_evidence_is_supported_only_when_bound_to_browser_observations(self):
+        row = next(c for c in self.verdict['criteria'] if c['id'] == 'game-ui-integration')
+        row['evidence'].append(dict(kind='capture', ref='mobile-panel.png', detail='The open help panel fits the stage'))
+        self.assertTrue(any('unsupported capture' in b for b in self.review()['blockers']))
+        self.observed['viewports'][1].update(panel_screenshot='mobile-panel.png', panel_sha256='a'*64)
+        self.assertEqual(self.review()['blockers'], [])
 
     def test_platformer_review_requires_visible_joins_and_source_geometry(self):
         self.plan['brief']['fields']['goal']='Explore a jungle platformer'

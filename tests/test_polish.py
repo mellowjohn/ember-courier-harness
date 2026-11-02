@@ -56,6 +56,8 @@ class PolishTests(unittest.TestCase):
 
     def model(self, root, folder, prompt, request_id, **kwargs):
         self.calls.append((request_id, kwargs))
+        self.assertIn(chat_build.GAME_UI_REVIEW_INSTRUCTION if request_id.startswith('critique')
+                      else chat_build.GAME_UI_INSTRUCTION, prompt)
         if request_id.startswith('critique'):
             result = critique(5 if request_id.endswith('-0') else 8, preferred=not request_id.endswith('-0'))
         else:

@@ -109,7 +109,27 @@ async function gameplay(browser){
       if(sprites?.missingEntities.length)observations.push('Sprite entities were not observed drawing their bound artwork: '+sprites.missingEntities.join(', '));
       const screenshot=path.join(output,name+'.png');
       await page.screenshot({path:screenshot,animations:'disabled'});
+      let panelCapture={};
+      const panelButtons=frame.locator('button[aria-controls]:visible:enabled');
+      for(let i=0;i<Math.min(await panelButtons.count(),8);i++){
+        const trigger=panelButtons.nth(i);
+        const label=(await trigger.getAttribute('aria-label'))||(await trigger.textContent())||'';
+        const target=await trigger.getAttribute('aria-controls');
+        if(!/help|settings|pause|guide/i.test(label)||!target||!/^[-a-zA-Z0-9_]+$/.test(target))continue;
+        const panel=frame.locator('#'+target);
+        if(await panel.count()!==1)continue;
+        try{
+          if(!await panel.isVisible())await trigger.click({timeout:1000});
+          if(await panel.isVisible()){
+            const opened=path.join(output,name+'-panel.png');
+            await page.screenshot({path:opened,animations:'disabled'});
+            panelCapture={panel_screenshot:path.basename(opened),panel_sha256:hash(fs.readFileSync(opened)),panel_trigger:label.slice(0,100)};
+            break;
+          }
+        }catch{/* Missing panel evidence stays unobserved; gameplay captures remain available. */}
+      }
       results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,...(sprites?{sprites}:{}),
+                    ...panelCapture,
                     screenshot:path.basename(screenshot),sha256:hash(fs.readFileSync(screenshot)),
                     action_screenshot:path.basename(action),action_sha256:hash(fs.readFileSync(action)),action_input:'ArrowRight held for 120ms',
                     before_screenshot:path.basename(initial),before_sha256:hash(fs.readFileSync(initial))});

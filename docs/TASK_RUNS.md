@@ -48,8 +48,10 @@ the same $30 ceiling. See [orchestration](ORCHESTRATION.md).
    screenshots. It judges task completion and preservation of the approved scope.
    It receives no coder narrative and cannot write candidate or current-project files.
    Captures also include a movement pose while Right is held. Failed candidates'
-   desktop/mobile images and movement poses reach the coding specialists on the
-   next permitted repair, together with the failed assertions and visual feedback.
+   desktop/mobile images and open-panel captures (or movement poses when no
+   panel is captured) reach the coding specialists on the next permitted repair,
+   together with the failed assertions and visual feedback. Movement poses remain
+   retained even when panel images use the bounded review attachments.
    Visual review explicitly checks the requested artwork, silhouettes, palette,
    readability and feedback; one captured pose cannot establish smooth animation.
 3. Every required gameplay scenario must pass, browser startup must succeed,
@@ -65,6 +67,8 @@ approval: the selected task in its approved core-loop/brief context, preservatio
 of exclusions and assets, readable presentation and feedback, every frozen
 gameplay scenario, and pending human experience. The same checklist reaches all
 specialists, the verifier and repair attempts. It adds no model call.
+The [game UI criteria](GAME_UI.md) separately check that changed HUD/menu layers
+belong inside the game stage and match the game's art direction at both sizes.
 
 The independent verifier assesses each ID exactly once as `met`, `not_met` or
 `not_observed`, with a reason and evidence. Task/preservation judgments quote

@@ -46,6 +46,7 @@ class ProposalQualityTests(unittest.TestCase):
 
     def review(self,root,folder,prompt,request_id,**kwargs):
         self.calls.append((prompt,kwargs));data=json.loads(prompt.split('\n',1)[1])
+        self.assertIn(chat_build.GAME_UI_REVIEW_INSTRUCTION, prompt)
         self.assertEqual(len(kwargs['images']),4)
         self.assertEqual(data['image_order'],[p.name for p in kwargs['images']])
         for path in kwargs['images']:
@@ -112,11 +113,50 @@ class ProposalQualityTests(unittest.TestCase):
         ref=self.propose();report=self.run_quality(ref,checks=None)
         self.assertNotEqual(report['status'],'passed');self.assertTrue(any('unverified' in issue for issue in report['issues']))
 
+    def test_style_mismatch_blocks_even_when_global_verdict_and_gameplay_pass(self):
+        def mismatched(*args, **kwargs):
+            result = self.review(*args, **kwargs)
+            verdict = json.loads(result['response'])
+            next(c for c in verdict['criteria'] if c['id'] == 'game-ui-style').update(
+                status='not_met', reason='Rounded dashboard cards clash with the pixel-art game.')
+            return dict(response=json.dumps(verdict))
+        with patch('ember_harness.proposal_quality.run_muse', side_effect=mismatched):
+            report = self.run_quality(self.propose())
+        self.assertEqual(report['status'], 'needs_changes')
+        self.assertTrue(report['verdict']['meets_task'])
+        self.assertEqual(report['observations']['candidate']['gameplay']['outcome'], 'passed')
+        self.assertTrue(any('game-ui-style: not_met' in issue for issue in report['issues']))
+
+    def test_open_panel_images_replace_movement_attachments_and_are_hash_checked(self):
+        def panels(runtime, source, output, **kwargs):
+            report = self.capture(runtime, source, output, **kwargs)
+            for row in report['viewports']:
+                name = row['name'] + '-panel.png'
+                Image.new('RGB', (32, 24), 'green').save(output / name)
+                row.update(panel_screenshot=name, panel_sha256=polish_runtime.file_digest(output/name))
+            atomic_json(output/'report.json', report)
+            return report
+        with patch('ember_harness.polish_runtime.inspect', side_effect=panels):
+            ref = self.propose(); report = self.run_quality(ref)
+        self.assertEqual(report['status'], 'passed', report['issues'])
+        attached = self.calls[0][1]['images']
+        self.assertEqual([p.name for p in attached], ['desktop.png', 'mobile.png', 'desktop-panel.png', 'mobile-panel.png'])
+        attached[-1].write_bytes(b'changed panel')
+        with self.assertRaisesRegex(ValueError, 'panel capture changed'):
+            proposal_quality.load(self.folder, ref)
+
     def test_browser_unavailable_never_reports_pass_or_dispatches_review(self):
         self.runtime.stop()
         with patch('ember_harness.polish_runtime.discover',side_effect=ValueError('SYNTHETIC browser unavailable')):
             report=self.run_quality(self.propose())
         self.assertEqual(report['status'],'unavailable');self.assertEqual(self.calls,[])
+
+    def test_unrecorded_panel_file_cannot_replace_hash_bound_movement_evidence(self):
+        ref = self.propose(); self.run_quality(ref)
+        output = proposal_quality.workdir(self.folder, ref)/'candidate/output'
+        Image.new('RGB', (32, 24), 'red').save(output/'mobile-panel.png')
+        self.assertEqual([p.name for p in proposal_quality.images(self.folder, ref)],
+                         ['desktop.png', 'mobile.png', 'desktop-action.png', 'mobile-action.png'])
 
     def test_saved_checks_are_retained_when_new_checks_are_added(self):
         gameplay.save(self.folder,PLAN,0);extra=deepcopy(PLAN);extra['scenarios'][0]['name']='New interaction'

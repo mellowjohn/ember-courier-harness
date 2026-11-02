@@ -58,6 +58,47 @@ REVISION_INSTRUCTION = (
     'Do not edit engine.js, asset.js, sprite-player.js, sprite-assets.js, sprite-plan.js or ember-audio.js; the host retains these. '
     'Use complete files only for a first build or when a requested or necessary rewrite needs them. '
 )
+GAME_UI_INSTRUCTION = (
+    'For new or requested game UI, design the interface as part of the playable game view. '
+    'Before coding, choose the essential player information, its anchors within the game viewport, '
+    'and a small visual vocabulary drawn from the approved game art: palette, type, shapes, borders and icon treatment. '
+    'Describe those placement and style choices briefly in the build summary. '
+    'Use a shared game-stage wrapper for the renderer and DOM HUD/menu layers; anchor overlays to that wrapper, '
+    'not to the surrounding browser page. Keep HUD, pause, help and result states inside this stage. '
+    'Do not sandwich the game between a page header/scoreboard and a footer of instructions or controls, '
+    'or wrap gameplay in dashboard cards, unless the approved design explicitly calls for that layout. '
+    'Keep the playfield dominant and its action area clear: show only essential live information, '
+    'use contextual prompts and tuck secondary instructions into an in-game help/pause view. '
+    'Match the game world rather than importing the Ember workspace theme or a generic web-app style. '
+    'Use local available fonts and original CSS/SVG treatments; no remote UI kits or new artwork calls. '
+    'Adapt anchors, scale and touch controls to the actual game viewport and safe areas on mobile; '
+    'keep touch targets at least 44 CSS pixels and text legible without shrinking the entire desktop layout. '
+    'Reserve non-overlapping space for HUD counters and controls at narrow widths: use compact named icon buttons '
+    'or a menu rather than squeezing full desktop button labels over the counters. '
+    'Bound help/settings panels to the stage with border-box sizing, a maximum height and internal scrolling; '
+    'keep the close control reachable even when the panel content exceeds a short landscape stage. '
+    'Give help/settings/pause openers an accessible name and aria-controls pointing to the unique panel ID '
+    'so the browser reviewer can capture the open state as well as gameplay. '
+    'Keep decorative overlays from intercepting gameplay input; interactive controls need semantic buttons, '
+    'visible keyboard focus, accessible names and clear pressed/disabled states where applicable. '
+    'When required by the requested mechanic, make start, pause, success, failure and restart states coherent '
+    'with the same visual language. Preserve existing controls, selectors and gameplay checks. '
+    'This guidance applies within the selected task: preserve unrelated existing UI and honor explicit approved layouts. '
+)
+GAME_UI_REVIEW_INSTRUCTION = (
+    'Inspect game UI integration in the actual desktop and mobile captures. Check whether HUD, controls and '
+    'menus belong to the game viewport rather than detached page sections above or below the renderer; '
+    'whether their palette, typography, shapes and borders fit the approved game art; and whether they '
+    'leave the action readable and reachable. A tidy surrounding web page is not evidence of an integrated game UI. '
+    'Use source to check stage-relative anchoring, input interception and responsive behavior. '
+    'Report the offending element, viewport and concrete repair when there is a mismatch. '
+    'Overlapping or truncated counters, controls hiding other UI, and clipped or unclosable help/settings '
+    'panels fail UI integration even when they are inside the stage. Mark the affected criterion not_met, '
+    'rather than met with a crowding caveat. Inspect open panels when evidence is supplied; do not assume '
+    'that DOM visibility proves the full panel or its close control fits in the stage. '
+    'Respect explicit approved layouts and task scope; do not demand a redesign of unrelated existing UI. '
+    'Only claim interaction/menu states that the supplied evidence actually shows; flag required missing evidence. '
+)
 CHAT_SCHEMA = {
     '$defs': deepcopy(SCHEMA['$defs']),
     'type': 'object', 'additionalProperties': False, 'required': ['message', 'build'],

@@ -7,6 +7,7 @@ import json
 from unittest.mock import patch
 
 from ember_harness.local_ui import App
+from ember_harness.chat_build import GAME_UI_INSTRUCTION
 from ember_harness.session_chat import send, transcript, activity, MUSE_FREE_CREDITS_USD
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,7 @@ class SessionChatTests(unittest.TestCase):
                 self.assertEqual(messages[0]['status'], 'complete')
                 self.assertEqual(send(folder, 'Plan a courier game', 'a' * 24, 'muse', root=ROOT), messages)
                 self.assertEqual(local.call_count, 1)
+                self.assertIn(GAME_UI_INSTRUCTION, local.call_args.args[2])
                 self.assertEqual(transcript(folder), messages)
                 with self.assertRaisesRegex(ValueError, 'another prompt'):
                     send(folder, 'Different prompt', 'a' * 24, 'muse', root=ROOT)
