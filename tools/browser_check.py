@@ -32,8 +32,10 @@ FILES = {
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--node', default='node')
-    parser.add_argument('--ui-only', action='store_true', help='Run chat/game layout, preview controls and old-server state regressions only')
-    parser.add_argument('--playtest-fix-only', action='store_true', help='Check notes-only scoped fixes, observed progress and browser dictation')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--ui-only', action='store_true', help='Run chat/game layout, preview controls and old-server state regressions only')
+    mode.add_argument('--playtest-fix-only', action='store_true', help='Check notes-only scoped fixes, observed progress and browser dictation')
+    mode.add_argument('--build-loading-only', action='store_true', help='Check approval loading, preview readiness and error recovery without live AI')
     parser.add_argument('--playwright-module', help='optional path to an installed Playwright module')
     parser.add_argument('--browser-executable', help='optional Chromium executable; otherwise use Playwright browser')
     args = parser.parse_args(argv)
@@ -153,6 +155,24 @@ def main(argv=None):
             build=dict(title='Synthetic unapproved scoring regression',summary='Rounded controls with a deliberately broken keyboard path',files=[dict(path=k,content=v) for k,v in files.items()])
         else:return reply
         return dict(response=json.dumps(dict(message='SYNTHETIC proposal; review before applying.',build=build)))
+    if args.build_loading_only:
+        with redirect_stdout(io.StringIO()):
+            loading_ref = chat_build.propose_build(fixture, folder, 'loading-fixture', 'SYNTHETIC loading-screen rehearsal',
+                dict(title='Synthetic reviewed fix', summary='Remove the fixture startup failure',
+                     files=[dict(path=name, content=content) for name, content in fixed.items()]),
+                expected_before=chat_build.context(fixture, folder)['sha256'])
+        original_respond = app.respond
+        def loading_respond(ref, choice, quote):
+            result = original_respond(ref, choice, quote)
+            if ref == loading_ref and choice == 'approve':
+                with redirect_stdout(io.StringIO()):
+                    chat_build.propose_build(fixture, folder, 'second-loading-fixture', 'SYNTHETIC preview-error rehearsal',
+                        dict(title='Second loading fixture', summary='Change the approved button style', files=[
+                            dict(path=name, content=content) for name, content in
+                            {**fixed, 'style.css':FILES['style.css']+'\nbutton {border-radius:12px}'}.items()]),
+                        expected_before=chat_build.context(fixture, folder)['sha256'])
+            return result
+        app.respond = loading_respond
     http = server(app)
     worker = threading.Thread(target=http.serve_forever, daemon=True)
     worker.start()
@@ -171,11 +191,14 @@ def main(argv=None):
                 patch('ember_harness.task_run.installed_binary', return_value=task_binary), \
                 patch('ember_harness.task_run.launch', side_effect=launch_task), redirect_stdout(io.StringIO()):
             with (output / 'browser.log').open('w', encoding='utf-8') as stream:
-                result = subprocess.run([args.node, str(ROOT / 'tools' / ('playtest_fix_check.js' if args.playtest_fix_only else 'browser_check.js'))], env=env,
+                result = subprocess.run([args.node, str(ROOT / 'tools' / ('build_loading_check.js' if args.build_loading_only else 'playtest_fix_check.js' if args.playtest_fix_only else 'browser_check.js'))], env=env,
                                         cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT, timeout=900)
             if result.returncode:
                 raise ValueError('Browser rehearsal failed; see browser.log')
-        if args.playtest_fix_only:
+        if args.build_loading_only:
+            if len(project_versions.history(folder)) != 4 or note_calls:
+                raise ValueError('Loading-screen approvals did not apply exactly two fixture builds')
+        elif args.playtest_fix_only:
             if note_calls!=['investigate','fix'] or len(project_versions.history(folder))!=3 or findings.history(fixture,folder):
                 raise ValueError('Notes-only fixing did not preserve the two-pass workflow, approval or optional findings')
         elif not args.ui_only:
@@ -253,6 +276,12 @@ def main(argv=None):
                   initial_version=first, checks='startup failure → targeted reviewed fix → compare an unapplied scoring regression → targeted proposal repair retaining visual improvements → passing comparison → approve → checked restore; independent preview state, history, isolation, keyboard/touch input, ZIP export and chosen project folder → reviewed Save as → persistent project scope → selected task → targeted scope-bound exact build → gameplay comparison → separate task acceptance → reload → separate amendment acknowledgement and approval → reviewed task coder/verifier with targeted edits → real frozen Chromium checks → retained independent report after reload → exact promotion and approval → separate task acceptance → recorded problem → hash-bound finding intake → targeted scoped fix → failing frozen baseline and passing candidate checks → independent report → exact apply → explicit closure → reload and contract-lock → remembered new-project folder → reviewed read-only workspace inventory → setup diff and conflicts → pending exact-action reload → verified create-only sandbox → source preservation and contract-lock. Native dialog selection is simulated.')
     if args.ui_only:report['checks']='Enter-to-send, Shift+Enter newlines, IME/modifier/repeat/duplicate-send guards, shared typography and SVG icon gallery, reduced motion, observed work status with current task and retained progress counters, Known assets in Project tools, desktop/tablet/mobile layouts, retained drafts and live preview state, isolated full-window play session, fullscreen and restart, and legacy server compatibility. Local chat transport checks are intercepted; no provider calls.'
     if args.playtest_fix_only:report['checks']='Notes-only fix in an approved project with no saved gameplay plan; separate investigation and code proposal; observed phase transitions and diagnosis; exact application; persistent receipt; idempotent retry; simulated browser speech, interim/final replacement, permission failure, text limits, session switching and unsupported-browser fallback; desktop/mobile layouts. No real microphone or transcription provider was used.'
+    if args.build_loading_only:
+        report['checks'] = 'Real build approval with delayed application and preview response; loading persists until iframe load; approval rejection retains the live game; preview failure releases the screen and permits retry; mobile layout and reduced motion.'
+    elif args.ui_only:
+        report['checks'] = 'Desktop/mobile chat and game layout, tool drawer, remembered drafts and game state, isolated popout, fullscreen, restart and old-server compatibility.'
+    elif args.playtest_fix_only:
+        report['checks'] = 'Notes-only scoped bug fixing, observed investigation/code/application progress, browser dictation and exact reviewed application.'
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
     (output / 'REPORT.md').write_text('# Browser QA and restore rehearsal\n\n**' + ('PASS' if report['passed'] else 'FAIL') + '**\n\n' +
         report['basis'] + '\n\n' + report['checks'] + '\n\nSource unchanged: ' + str(unchanged) +

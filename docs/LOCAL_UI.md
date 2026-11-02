@@ -41,6 +41,11 @@ stay in the conversation. **Try proposed changes** opens a clearly marked previe
 on the right, above the current approved game. **Return to approved game** brings
 you back without resetting either preview.
 
+After **Approve & play**, the game panel shows **Applying your changes…** and
+then **Opening your updated game…**. It prevents interaction with the old game
+until the updated preview loads. An application or preview error clears the
+loading screen and displays the error so you can retry.
+
 The game opens automatically after approval. **Restart game** starts it over;
 **Fullscreen** enlarges the current play session. **Open in new window** opens the
 approved version in a fresh, isolated game window (or browser tab, depending on

@@ -53,23 +53,47 @@ const $=id=>document.getElementById(id);let current='',busy=false,activeSession=
 let smokeRun=null,detachedPreviewURL=null;
 let assetUpdateState=null;
 let fileApply=null;
+let buildLoading=null;
 let polishKey='';const polishURLs=[],polishDrafts=new Map();
 async function api(path,body){const r=await fetch('/api/'+path,{method:body?'POST':'GET',headers:{'X-Ember-Token':token,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(d.error);return d}
 function el(tag,text,parent){const n=document.createElement(tag);if(text!==undefined){if(['button','summary','a','h2'].includes(tag)&&EmberUI.actions[text])EmberUI.label(n,text);else n.textContent=text;}if(parent)parent.append(n);return n}
 function detail(title,data,parent){const d=el('details',undefined,parent);el('summary',title,d);el('pre',JSON.stringify(data,null,2),d)}
+function renderBuildLoading(){
+  const overlay=$('build-loading');if(!overlay)return;
+  const active=!!buildLoading&&buildLoading.sid===activeSession?.id;
+  overlay.hidden=!active;$('build-result').setAttribute('aria-busy',String(active));
+  overlay.parentElement.classList.toggle('is-applying',active);
+  for(const child of overlay.parentElement.children)if(child!==overlay)child.inert=active;
+  if(active){
+    $('build-loading-title').textContent=buildLoading.phase==='preview'?'Opening your updated game…':'Applying your changes…';
+    $('build-loading-detail').textContent=buildLoading.phase==='preview'?'Getting the new version ready to play.':'Your approved changes are being applied.';
+  }
+}
+function finishBuildLoading(state){
+  if(!state||buildLoading!==state)return;
+  clearTimeout(state.timer);buildLoading=null;renderBuildLoading();
+}
+function beginBuildLoading(ref){
+  finishBuildLoading(buildLoading);
+  const state={sid:activeSession?.id,ref,phase:'applying'};buildLoading=state;
+  $('build-loading').parentElement.scrollTop=0;renderBuildLoading();return state;
+}
 async function preview(ref,choice,parent){try{const r=await fetch('/api/image?'+new URLSearchParams({ref,...(choice?{choice}:{})}),{headers:{'X-Ember-Token':token}});if(!r.ok)throw Error((await r.json()).error);const url=URL.createObjectURL(await r.blob());urls.push(url);const img=el('img',undefined,parent);img.src=url;img.alt=choice||'Asset awaiting acceptance'}catch(e){el('p','Preview unavailable: '+e.message,parent)}}
 async function respond(ref,choice,label){
   if(busy||sending)return;
   const reviewed=lastState?.requests.find(r=>r.ref===ref)?.payload.body;
   const isBuild=buildReviewRef===ref,isPlan=!!reviewed?.project_plan,isWorkspace=!!(reviewed?.workspace||reviewed?.workspace_apply),quote=label||'Approve reviewed changes';
   busy=true;document.querySelectorAll('.decision').forEach(b=>b.disabled=true);
+  const loading=isBuild&&choice==='approve'?beginBuildLoading(ref):null;
   if(isBuild&&choice==='approve'&&lastState?.chat_activity?.kind==='playtest_fix'&&reviewed?.build?.turn_id===lastState.chat_activity.turn_id){fileApply={sid:activeSession.id,ref,state:'applying'};renderAgentActivity(lastState)}
   try{
     const result=await api('decide',{ref,choice,quote});
     if(isBuild&&choice==='approve'&&result.build?.status==='completed')autoPreviewRef=ref;
+    else finishBuildLoading(loading);
     current='';$('error').textContent='';await refresh();
+    if($('error').textContent)finishBuildLoading(loading);
     if(choice==='approve'&&(isPlan||isWorkspace))showWorkspace(lastState.requests.some(r=>!r.decision)?'chat':'plan');
-  }catch(e){$('error').textContent=e.message;if(fileApply?.ref===ref){fileApply.state='failed';fileApply.error=e.message;renderAgentActivity(lastState)}}
+  }catch(e){finishBuildLoading(loading);$('error').textContent=e.message;if(fileApply?.ref===ref){fileApply.state='failed';fileApply.error=e.message;renderAgentActivity(lastState)}}
   finally{busy=false;if(fileApply?.ref===ref&&fileApply.state==='applying'){fileApply=null;renderAgentActivity(lastState)}document.querySelectorAll('.decision').forEach(b=>b.disabled=b.dataset.needsScopeAck==='true')}
 }
 function decision(parent,text,ref,choice,cls=''){
@@ -314,6 +338,9 @@ function mountWorkspace(){
   // Keep the live iframe in one DOM position: moving it resets its game state.
   const common=el('div');common.id='interactive-workbench';common.className='workbench';$('chat').before(common);
   const preview=document.querySelector('.preview-column');common.append($('chat'),preview);preview.append(play);build.classList.remove('workbench');bench.classList.remove('workbench');
+  const loading=el('section',undefined,preview);loading.id='build-loading';loading.hidden=true;loading.setAttribute('role','status');loading.setAttribute('aria-live','polite');loading.setAttribute('aria-atomic','true');
+  const loadingContent=el('div',undefined,loading),spinner=el('span',undefined,loadingContent);spinner.className='build-loading-spinner';spinner.setAttribute('aria-hidden','true');
+  el('h3',undefined,loadingContent).id='build-loading-title';el('p',undefined,loadingContent).id='build-loading-detail';
   EmberUI.label(preview.querySelector('h2'),'Play & refine');
   const previewLabel=el('span','GAME VIEW',preview.querySelector('h2'));previewLabel.className='panel-tag';
   $('chat').removeAttribute('role');$('chat').setAttribute('aria-label','Chat with Ember');
@@ -1206,6 +1233,7 @@ function renderPlaytestSummary(s){
   }
 }
 function renderBuild(s){
+  if(buildLoading&&buildLoading.sid!==s.session?.id)finishBuildLoading(buildLoading);
   renderGameplay(s);
   renderPolish(s);renderHandoff(s);
   const b=s.build||{completed:[],resumable:[]};
@@ -1249,8 +1277,11 @@ function renderBuild(s){
   const popout=el('a','Open in new window',toolbar);popout.className='button';popout.id='game-popout';popout.target='_blank';popout.rel='noopener noreferrer';popout.hidden=true;popout.title='Open this approved version in a fresh play session';
   const deliver=el('button','Download',toolbar);deliver.className='button';deliver.onclick=()=>showWorkspace('report');
   preview.onclick=async()=>{try{
+    const loading=buildLoading?.sid===s.session?.id&&buildLoading.ref===last.request_ref?buildLoading:null;
+    if(loading){loading.phase='preview';renderBuildLoading()}
     const sid=s.session?.id;preview.disabled=true;const result=await api('build-preview');
     if(activeSession?.id!==sid||!box.isConnected||result.request_ref!==last.request_ref)return;
+    $('error').textContent='';
     box.querySelector('.playtest-area')?.remove();const panel=el('section');panel.className='playtest-area';toolbar.after(panel);
     const frame=prototypeFrame(panel,'Approved browser prototype');
     const details=el('details',undefined,panel);el('summary','Browser observations',details);
@@ -1275,10 +1306,14 @@ function renderBuild(s){
         save.disabled=false;
       }catch(e){$('error').textContent=e.message;save.disabled=false}};
     }
+    if(loading){
+      frame.addEventListener('load',()=>finishBuildLoading(loading),{once:true});
+      loading.timer=setTimeout(()=>{if(buildLoading===loading){finishBuildLoading(loading);$('error').textContent='The updated game is taking longer to open. Try Restart game.'}},15000);
+    }
     frame.srcdoc=previewDocument(result.html);
     fullscreen.disabled=!document.fullscreenEnabled;
     popout.href=detachedPreview(result.html,gameTitle+' · Version '+version);popout.hidden=false;
-  }catch(e){if(box.isConnected)$('error').textContent=e.message}finally{preview.disabled=!!b.resumable.length}};
+  }catch(e){if(box.isConnected){if(buildLoading?.sid===s.session?.id&&buildLoading.ref===last.request_ref)finishBuildLoading(buildLoading);$('error').textContent=e.message}}finally{preview.disabled=!!b.resumable.length}};
   if(!b.resumable.length){autoPreviewRef=null;preview.onclick()}
 }
 async function requestPlaytestFix(body){
