@@ -40,6 +40,11 @@ async function gameplay(browser){
             await game.page.locator('iframe').focus({timeout:800});
             await game.page.keyboard.press(step.key);
           }
+          else if(step.action==='hold'){
+            await game.page.locator('iframe').focus({timeout:800});
+            await game.page.keyboard.down(step.key);
+            try{await game.page.waitForTimeout(step.ms)}finally{await game.page.keyboard.up(step.key)}
+          }
           else if(step.action==='wait')await game.page.waitForTimeout(step.ms);
           else {
             const deadline=Date.now()+800;
@@ -87,16 +92,26 @@ async function gameplay(browser){
       if(await button.count()){
         try{await button.click({timeout:1500});steps.push('Clicked first visible enabled button')}catch{observations.push('First button could not be clicked')}
       }
+      const action=path.join(output,name+'-action.png');
       for(const key of ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown','Space','a','d']){
-        await page.locator('iframe').focus();await page.keyboard.down(key);await page.waitForTimeout(120);await page.keyboard.up(key);
+        await page.locator('iframe').focus();await page.keyboard.down(key);await page.waitForTimeout(120);
+        if(key==='ArrowRight')await page.screenshot({path:action,animations:'disabled'});
+        await page.keyboard.up(key);
       }
       steps.push('Sent arrow, space, A and D keyboard input');
       await page.waitForTimeout(500);
       const after=await body.evaluate(el=>({text:(el.innerText||'').slice(0,1000),overflow:el.ownerDocument.documentElement.scrollWidth>innerWidth+2,canvas:el.querySelectorAll('canvas').length}));
+      const sprites=await body.evaluate(()=>{
+        const plan=globalThis.EMBER_SPRITE_PLAN;if(!plan)return null;
+        const instances=globalThis.EmberSprites?.diagnostics?.()||[];
+        return {instances,missingEntities:plan.entities.filter(e=>e.activation==='startup'&&!instances.some(i=>i.entityId===e.id&&i.assetRef===e.asset_ref&&i.draws>0)).map(e=>e.id)};
+      });
+      if(sprites?.missingEntities.length)observations.push('Sprite entities were not observed drawing their bound artwork: '+sprites.missingEntities.join(', '));
       const screenshot=path.join(output,name+'.png');
       await page.screenshot({path:screenshot,animations:'disabled'});
-      results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,
+      results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,...(sprites?{sprites}:{}),
                     screenshot:path.basename(screenshot),sha256:hash(fs.readFileSync(screenshot)),
+                    action_screenshot:path.basename(action),action_sha256:hash(fs.readFileSync(action)),action_input:'ArrowRight held for 120ms',
                     before_screenshot:path.basename(initial),before_sha256:hash(fs.readFileSync(initial))});
       await context.close();
     }

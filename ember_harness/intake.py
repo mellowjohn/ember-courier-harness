@@ -18,7 +18,7 @@ AREAS = {
     "Concept Artist": {"visual_look", "vfx", "palette", "palette_mismatch", "concept"},
     "Herald": {"store_pages", "announcements", "public_posts"},
     "Comms": {"messages", "community", "messages_to_users"},
-    "Systems Designer": {"balance", "crafting", "loot", "progression"},
+    "Systems Designer": {"balance", "crafting", "loot", "progression", "browser_game", "gameplay"},
 }
 
 

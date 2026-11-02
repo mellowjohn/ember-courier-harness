@@ -1,6 +1,6 @@
 # Saved gameplay checks
 
-Open a saved game and expand **Gameplay checks** below its project brief. Give
+Open a saved game and choose **Playtest → Edit gameplay checks**. Give
 the plan a name, add desktop or mobile scenarios, then add the actions and
 expectations that describe behavior you want to preserve. **Save gameplay plan**
 keeps it with this session. **Use saved plan** reloads the saved version if your

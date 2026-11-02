@@ -1,7 +1,7 @@
 # Overnight polish
 
-Open a saved session with an approved browser game, then choose the **Overnight
-polish** tab. Give Ember a concrete direction: what should feel better, what it
+Open a saved session with an approved browser game, then choose **Playtest → Overnight
+polish**. Give Ember a concrete direction: what should feel better, what it
 must preserve, and the details you care about. The saved project brief is included
 as design guidance. Changes to the brief after preparation do not change this run.
 
@@ -13,7 +13,7 @@ as design guidance. Changes to the brief after preparation do not change this ru
 3. Choose **Approve scope & start polish**. This records your approval of the
    exact scope and worker contracts and starts a separate local worker. Keep the
    computer awake. The browser and Ember launcher may close while it works.
-4. Return to **Overnight polish · Ready** for the strongest completed candidate,
+4. Return to **Playtest → Overnight polish** for the strongest completed candidate,
    before/after screenshots, playable candidates, AI assessment and remaining
    issues. You can retain the original if no candidate qualifies.
 5. **Review exact changes** prepares an ordinary build proposal. Only your later
@@ -29,7 +29,8 @@ The original game is reconstructed from its approved version and frozen in the
 run's input snapshot. The host captures actual Chromium desktop and mobile
 screenshots before and after button/keyboard input. Muse receives screenshots,
 source, browser observations, the goal and brief for a critique. Each round
-generates a complete candidate from the current best, checks its source, runs the
+prefers targeted edits to the current best for the requested goal, retaining
+untouched code exactly. The host reconstructs a complete candidate, checks its source, runs the
 same browser inspection and requests a new screenshot-based critique. Candidate
 comparisons attach both candidate and current-best screenshots.
 
@@ -42,6 +43,19 @@ must also judge the core preserved; a clean candidate must receive a stronger
 assessment and explicit preference to replace an already clean best version.
 An equal or weaker latest attempt does not replace an earlier stronger candidate.
 These are conservative selection rules, not an objective guarantee of quality.
+
+When an attempt is rejected, the next generator still edits the selected best
+candidate. It also receives a bounded `rejected_attempt` summary: the rejected
+round and retained best, selection reasons, browser/overflow/gameplay failures,
+and separately labeled AI wins, problems and suggested changes. This lets it
+keep useful ideas without copying the rejected source or repeating the failure.
+The feedback is untrusted design guidance within the original goal; it adds no
+permissions or calls. An accepted improvement clears that rejection summary.
+The original and rejected candidates remain available in the existing history.
+
+Restart reconstructs feedback in round order using retained, verified candidate
+evidence. A later saved candidate cannot redirect an earlier request during
+replay; saved provider replies and completed steps retain their exact context.
 
 The UI separates real browser observations from AI ratings. Input dispatch and
 screenshots cannot establish correct scoring, a full game loop, accessibility,

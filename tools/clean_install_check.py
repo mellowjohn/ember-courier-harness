@@ -16,6 +16,7 @@ from tools.release_check import source_manifest, run_check
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--wheelhouse', required=True, help='local wheels for declared runtime and build dependencies')
+    parser.add_argument('--desktop-launch', action='store_true', help='Also rehearse the Windows launcher and Chromium session restart from the installed wheel')
     args = parser.parse_args(argv)
     wheelhouse = Path(args.wheelhouse).resolve()
     if not wheelhouse.is_dir() or not any(wheelhouse.glob('*.whl')):
@@ -70,6 +71,8 @@ print(json.dumps({'prefix': str(prefix), 'user_site_enabled': site.ENABLE_USER_S
         check('installed-imports-and-schemas', [python, '-I', '-c', probe])
         cli = environment / ('Scripts/contract-lock.exe' if sys.platform == 'win32' else 'bin/contract-lock')
         check('installed-entry-point', [cli, '--help'])
+        if args.desktop_launch:
+            check('desktop-launch', [python, '-I', validation / 'tools/desktop_launch_check.py'])
         check('full-release', [python, '-I', validation / 'tools/release_check.py'])
         reports = list((validation / '.harness/release-checks').glob('*/report.json'))
         if len(reports) != 1:

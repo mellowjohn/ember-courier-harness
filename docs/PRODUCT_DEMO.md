@@ -117,6 +117,36 @@ current working source snapshot, not a clean Git checkout or a live model test.
 No additional production dependency is required. Consult that run's `REPORT.md`
 and `report.json` for the tested Python, dependency versions and demo results.
 
+On Windows, include the real desktop launch and restart rehearsal:
+
+```powershell
+py -3.12 tools/clean_install_check.py --wheelhouse .harness/clean-install-wheelhouse --desktop-launch
+```
+
+This adds `tools/desktop_launch_check.py` to the same installed-wheel validation,
+using the [existing optional Node/Playwright/Chromium setup](CHAT_BUILDS.md#browser-smoke-checks).
+It copies the real launcher and examples into a fresh workspace without package
+source, launches through the installed virtual environment, and opens the actual
+private link in Chromium. The desktop UI creates a named session and saves a brief;
+a second launcher process reopens that exact session and remembered project
+location. Both desktop and mobile viewports exercise workflow navigation.
+The old token must fail, the fresh token must work, and both
+layouts must render without page errors or horizontal overflow. Launcher bytes
+are now included in the release source manifest.
+
+The isolated rehearsal workspace has a zero-credit ledger. Where Muse is installed,
+the real chat endpoint must refuse a request before provider dispatch. The ledger
+must remain unchanged and no model reply may appear. Private launch tokens are
+redacted from retained logs. Reports and four browser captures remain beneath the
+clean-install run's `validation/.harness/desktop-launch-checks/` directory. The
+script can also run directly with that installed environment's Python from the
+validation copy; it refuses a non-Windows or non-virtual-environment interpreter.
+
+These are automated desktop observations with synthetic session text. Live Muse
+quality, Johnathan's approvals and human gameplay acceptance remain separate.
+The source snapshot includes current uncommitted work; an actual clean Git-checkout
+handoff remains a later release gate.
+
 ## Real local coding agent at $0
 
 With Ollama and a local GGUF coding model already installed:

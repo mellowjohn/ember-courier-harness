@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ember_harness.muse_chat import CreditLedger, MODEL, run, settle_capture, UNEXPECTED_USAGE
+from ember_harness.muse_chat import CreditLedger, MODEL, run, settle_capture, provider_schema, structured_schema, decode_structured, UNEXPECTED_USAGE, execution_policy
 from ember_harness.core import digest
 
 
@@ -21,7 +21,183 @@ def retry_capture(request_id='historical-request'):
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def wire_reply(value, schema):
+    """Synthetic provider fixture in the native transport format."""
+    from jsonschema import Draft202012Validator
+    schema = provider_schema(schema)
+    for key in ('anyOf', 'oneOf'):
+        if key in schema and 'type' not in schema:
+            return wire_reply(value, next(child for child in schema[key]
+                if Draft202012Validator(child).is_valid(value)))
+    if schema.get('type') == 'object':
+        extra = schema.get('additionalProperties')
+        if isinstance(extra, dict):
+            if (extra.get('type') == 'object' and extra.get('additionalProperties') is False
+                    and 'key' not in extra.get('properties', {})
+                    and not any(key in extra for key in ('anyOf', 'oneOf', 'allOf'))):
+                return [dict(key=k, **wire_reply(v, extra)) for k, v in value.items()]
+            return [dict(key=k, value=wire_reply(v, extra)) for k, v in value.items()]
+        return {key: wire_reply(value[key], child) if key in value else None
+                for key, child in schema.get('properties', {}).items()}
+    if schema.get('type') == 'array':
+        return [wire_reply(item, schema['items']) for item in value]
+    return value
+
+
 class MuseChatTests(unittest.TestCase):
+    def test_sprite_chat_depth_and_native_markers_fit_provider_limit(self):
+        from copy import deepcopy
+        from jsonschema import Draft202012Validator, ValidationError
+        from ember_harness.chat_build import CHAT_SCHEMA
+        from ember_harness.muse_chat import structured_depth
+        from tools.sprite_scene_check import plan
+        reply = dict(message='Plan the sprite animation', build=None,
+            sprite_project=dict(intent='plan', expected_revision=0, plan=plan('a' * 64, 'b' * 64)))
+        wire = wire_reply(reply, CHAT_SCHEMA)
+        schema = structured_schema(CHAT_SCHEMA)
+        self.assertLessEqual(structured_depth(schema), 10)
+        states = wire['sprite_project']['plan']['entities'][0]['machine']['states']
+        self.assertTrue(all('key' in state and 'clip' in state and 'value' not in state for state in states))
+        Draft202012Validator(schema).validate(wire)
+        decoded = decode_structured(wire, CHAT_SCHEMA)
+        Draft202012Validator(CHAT_SCHEMA).validate(decoded)
+        self.assertEqual(decoded['sprite_project'], reply['sprite_project'])
+        duplicate = deepcopy(wire)
+        duplicate['sprite_project']['plan']['entities'][0]['machine']['states'].append(states[0])
+        with self.assertRaisesRegex(ValueError, 'duplicate map key'):
+            decode_structured(duplicate, CHAT_SCHEMA)
+        invalid = deepcopy(wire)
+        invalid['sprite_project']['plan']['entities'][0]['machine']['states'][0]['clip'] = 'INVALID CLIP'
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(schema).validate(invalid)
+
+    def test_oversized_schema_stops_before_reservation_and_reserved_keys_round_trip(self):
+        from unittest.mock import Mock
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.touch()
+            nested = dict(type='string')
+            for _ in range(11):
+                nested = dict(type='object', additionalProperties=False, required=['child'], properties=dict(child=nested))
+            with patch('ember_harness.muse_chat.subprocess.Popen') as provider:
+                with self.assertRaisesRegex(ValueError, '11 nesting levels.*limit is 10'):
+                    run(root, session, 'No dispatch', 'too-deep', binary=binary, output_schema=nested)
+                provider.assert_not_called()
+            self.assertEqual(CreditLedger(root).read()['requests'], {})
+        # A map value's own key field must never overwrite the map's row key.
+        schema = dict(type='object', additionalProperties=dict(type='object', additionalProperties=False,
+            required=['key'], properties=dict(key=dict(type='string'))))
+        value = {'outer': {'key': 'inner'}}
+        wire = wire_reply(value, schema)
+        self.assertEqual(wire, [dict(key='outer', value=dict(key='inner'))])
+        self.assertEqual(decode_structured(wire, schema), value)
+
+    def test_chat_selects_discussion_build_and_large_source_allowances(self):
+        import test_chat_build as builds
+        fixture = builds.ChatBuildTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+        response = dict(response=json.dumps(dict(message='Synthetic reply', build=None)))
+        with patch('ember_harness.session_chat.run_muse', return_value=response) as provider:
+            fixture.app.chat('Let us discuss controls.', 'discuss-controls-001')
+            self.assertEqual(provider.call_args.kwargs['execution']['profile'], 'conversation')
+            fixture.app.chat('Build an original platform game.', 'build-platformer-001')
+            self.assertEqual(provider.call_args.kwargs['execution']['profile'], 'build')
+        large = {**builds.PROJECT, 'app.js': builds.PROJECT['app.js'] + '\n/*' + 'x' * 50000 + '*/'}
+        ref = fixture.propose_project(large, 'large-source-game-001')
+        fixture.app.respond(ref, 'approve', 'SYNTHETIC TEST: large editable source')
+        with patch('ember_harness.session_chat.run_muse', return_value=response) as provider:
+            fixture.app.chat('Adjust the controls.', 'revise-platformer-001')
+            selected = provider.call_args.kwargs['execution']
+            self.assertEqual(selected['profile'], 'deep')
+            self.assertEqual(selected['timeout_seconds'], 1800)
+
+    def test_long_build_survives_old_deadline_reports_quiet_progress_and_pins_policy(self):
+        import subprocess
+        from unittest.mock import Mock
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            clock, reports = [0], []
+            execution = execution_policy('build')
+            def start(args, **kwargs):
+                self.assertEqual(args[args.index('--reasoning-effort') + 1], 'high')
+                self.assertEqual(args[args.index('--max-model-steps') + 1], '1')
+                def wait(timeout):
+                    clock[0] += 90
+                    if clock[0] < 360:
+                        raise subprocess.TimeoutExpired(args, timeout)
+                    event = dict(payload_type='run.terminal.completed', payload=dict(terminal='completed', text='Built'))
+                    kwargs['stdout'].write(json.dumps(event).encode()); kwargs['stdout'].flush()
+                    return 0
+                return Mock(wait=wait)
+            with patch('ember_harness.muse_chat.time.monotonic', side_effect=lambda: clock[0]), \
+                    patch('ember_harness.muse_chat.subprocess.Popen', side_effect=start) as provider:
+                capture = run(root, session, 'Build the game', 'long-build', binary=binary, execution=execution,
+                              progress=lambda phase, **values: reports.append(values))
+                self.assertEqual(capture['elapsed_seconds'], 360)
+                self.assertEqual(capture['execution'], execution)
+                self.assertEqual([row['elapsed_seconds'] for row in reports], [90, 180, 270, 360])
+                self.assertEqual(run(root, session, 'Build the game', 'long-build', binary=binary, execution=execution), capture)
+                with self.assertRaisesRegex(ValueError, 'context changed'):
+                    run(root, session, 'Build the game', 'long-build', binary=binary,
+                        execution=execution_policy('build', repair=True))
+                self.assertEqual(provider.call_count, 1)
+            self.assertEqual(CreditLedger(root).summary()['reserved_usd'], 5)
+
+    def test_execution_limit_stops_incomplete_work_and_preserves_credit_hold(self):
+        import subprocess
+        from unittest.mock import Mock
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            clock = [0]
+            def wait(timeout):
+                if timeout == 10:
+                    return 0
+                clock[0] = 1800
+                raise subprocess.TimeoutExpired('synthetic', timeout)
+            process = Mock(wait=wait)
+            with patch('ember_harness.muse_chat.time.monotonic', side_effect=lambda: clock[0]), \
+                    patch('ember_harness.muse_chat.subprocess.Popen', return_value=process) as provider:
+                with self.assertRaisesRegex(ValueError, '30-minute.*incomplete'):
+                    run(root, session, 'Repair', 'bounded-deep', binary=binary,
+                        execution=execution_policy('build', repair=True))
+                process.kill.assert_called_once(); self.assertEqual(provider.call_count, 1)
+            self.assertEqual(CreditLedger(root).summary()['reserved_usd'], 5)
+            with patch('ember_harness.muse_chat.subprocess.Popen') as provider:
+                with self.assertRaisesRegex(ValueError, 'limits'):
+                    run(root, session, 'Repair', 'invalid-profile', binary=binary,
+                        execution={**execution_policy('build'), 'timeout_seconds': 999999})
+                provider.assert_not_called()
+            self.assertEqual(CreditLedger(root).summary()['reserved_usd'], 5)
+
+    def test_lowered_credit_ceiling_matches_display_and_denies_dispatch(self):
+        scratch = ROOT / '.harness/test-temp'
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory)
+            ledger = CreditLedger(root)
+            ledger.path.write_text(json.dumps(dict(version=1, limit_micro_usd=6_000_000, requests={})))
+            ledger.reserve('held')
+            self.assertEqual(ledger.summary()['limit_usd'], 6)
+            self.assertEqual(ledger.summary()['available_usd'], 1)
+            with self.assertRaisesRegex(ValueError, 'cannot cover'):
+                ledger.reserve('over-limit')
+            ledger.path.write_text(json.dumps(dict(version=1, limit_micro_usd=0, requests={})))
+            self.assertEqual(ledger.summary()['limit_usd'], 0)
+            self.assertEqual(ledger.summary()['available_usd'], 0)
+            binary = root / 'never-executed.exe'
+            binary.touch()
+            session = root / 'session'
+            session.mkdir()
+            with patch('ember_harness.muse_chat.subprocess.Popen') as provider:
+                with self.assertRaisesRegex(ValueError, 'cannot cover'):
+                    run(root, session, 'Never dispatch', 'zero-budget', binary=binary)
+                provider.assert_not_called()
+            self.assertEqual(ledger.read()['requests'], {})
+
     def test_cancel_check_stops_a_quiet_provider_and_retains_the_reservation(self):
         from unittest.mock import Mock
         scratch=ROOT/'.harness/test-temp';scratch.mkdir(parents=True,exist_ok=True)
@@ -189,9 +365,8 @@ class MuseChatTests(unittest.TestCase):
             ledger = CreditLedger(root)
             ledger.reserve('historical-request')
             capture = retry_capture()
-            with self.assertRaisesRegex(ValueError, 'inspection'):
-                settle_capture(ledger, 'unused', capture)
-            self.assertEqual(ledger.read()['blocked'], UNEXPECTED_USAGE)
+            # A legacy blocked ledger can still be repaired without erasing its evidence.
+            ledger.freeze(UNEXPECTED_USAGE)
             inspection = ledger.retain_inspected_retry(capture)
             self.assertEqual(inspection['total_bound_micro_usd'], 4_494_009)
             self.assertEqual(ledger.summary()['reserved_usd'], 5)
@@ -252,6 +427,208 @@ class MuseChatTests(unittest.TestCase):
                 settle_capture(ledger, 'unused', capture)
             self.assertEqual(ledger.summary()['reserved_usd'], 5)
             self.assertEqual(ledger.read()['blocked'], 'Inspected Muse capture changed')
+
+    def test_failed_provider_request_retains_hold_without_credit_inspection(self):
+        from unittest.mock import Mock
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            events = [dict(payload_type='run.usage', payload=dict(calls=1, failed_calls=1, completed_calls=0, models=[])),
+                      dict(payload_type='run.terminal.failed', payload=dict(terminal='failed', reason='SYNTHETIC schema rejection'))]
+            def start(args, **kwargs):
+                kwargs['stdout'].write(('\n'.join(json.dumps(e) for e in events)).encode()); kwargs['stdout'].flush()
+                return Mock(wait=Mock(return_value=1))
+            with patch('ember_harness.muse_chat.subprocess.Popen', side_effect=start) as process:
+                for _ in range(2):
+                    with self.assertRaisesRegex(ValueError, 'SYNTHETIC schema rejection'):
+                        run(root, session, 'Hello', 'failed-call', binary=binary)
+                self.assertEqual(process.call_count, 1)
+            ledger = CreditLedger(root)
+            self.assertIsNone(ledger.summary()['blocked'])
+            self.assertEqual(ledger.summary()['reserved_usd'], 5)
+            ledger.reserve('next-message')
+            self.assertEqual(ledger.summary()['reserved_usd'], 10)
+
+    def test_uncertain_usage_does_not_freeze_other_sessions_or_release_funds(self):
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            ledger = CreditLedger(directory)
+            ledger.reserve('historical-request')
+            settle_capture(ledger, 'unused', retry_capture())
+            self.assertIsNone(ledger.summary()['blocked'])
+            self.assertEqual(ledger.summary()['reserved_usd'], 5)
+            ledger.reserve('another-session')
+            ledger.freeze(UNEXPECTED_USAGE)
+            self.assertIsNone(ledger.summary()['blocked'])
+            CreditLedger(directory).reserve('after-restart')
+            self.assertEqual(ledger.summary()['reserved_usd'], 15)
+            self.assertNotIn('blocked', ledger.read())
+            self.assertEqual(ledger.read()['retired_usage_inspections'], [UNEXPECTED_USAGE])
+            self.assertEqual(ledger.summary()['estimated_spent_usd'], 0)
+
+    def test_muse_receives_compatible_schema_while_local_checks_remain_strict(self):
+        from unittest.mock import Mock
+        from jsonschema import Draft202012Validator, ValidationError
+        from ember_harness.chat_build import CHAT_SCHEMA
+        compatible = provider_schema(CHAT_SCHEMA)
+        self.assertNotIn('uniqueItems', json.dumps(compatible))
+        self.assertNotIn('propertyNames', json.dumps(compatible))
+        self.assertNotIn('"$ref"', json.dumps(compatible))
+        self.assertIn('uniqueItems', json.dumps(CHAT_SCHEMA))
+        features = CHAT_SCHEMA['properties']['plan']['anyOf'][1]['properties']['scope']['properties']['features']
+        with self.assertRaises(ValidationError):
+            Draft202012Validator(features).validate(['Duplicate task', 'Duplicate task'])
+        # Schema property names are data and must not be removed as keywords.
+        self.assertEqual(provider_schema({'properties': {'uniqueItems': {'type': 'string'}}}),
+                         {'properties': {'uniqueItems': {'type': 'string'}}})
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            def start(args, **kwargs):
+                actual = json.loads(Path(args[args.index('--output-schema') + 1]).read_bytes())
+                self.assertEqual(actual, structured_schema(CHAT_SCHEMA))
+                prompt = Path(args[args.index('--prompt-file') + 1]).read_text(encoding='utf-8')
+                supplied = json.loads(prompt.split('\n', 1)[1].split('\nRequest:\n', 1)[0])
+                self.assertEqual(supplied, actual)
+                response = wire_reply(dict(message='Synthetic reply', build=None), CHAT_SCHEMA)
+                event = dict(payload_type='run.terminal.completed', payload=dict(terminal='completed', text=json.dumps(response)))
+                kwargs['stdout'].write(json.dumps(event).encode()); kwargs['stdout'].flush()
+                return Mock(wait=Mock(return_value=0))
+            with patch('ember_harness.muse_chat.subprocess.Popen', side_effect=start):
+                capture = run(root, session, 'Plan', 'schema-check', binary=binary, output_schema=CHAT_SCHEMA)
+                self.assertEqual(json.loads(capture['response']), dict(message='Synthetic reply', build=None,
+                    brief_updates=None, plan=None, asset=None, image_request=None, image_requests=None, sprite_project=None,gameplay_checks=None))
+
+    def test_native_plan_and_optional_updates_round_trip_without_encoded_json(self):
+        from jsonschema import Draft202012Validator
+        from ember_harness.chat_build import CHAT_SCHEMA
+        from ember_harness.project_plan import starter
+        reply = dict(message='Review the amended plan.', build=None, plan=starter(ROOT),
+                     brief_updates=dict(controls='Space to shoot'))
+        wire = wire_reply(reply, CHAT_SCHEMA)
+        self.assertIsInstance(wire['plan'], dict)
+        self.assertIsInstance(wire['plan']['scope']['asset_budget'], list)
+        Draft202012Validator(structured_schema(CHAT_SCHEMA)).validate(wire)
+        decoded = decode_structured(wire, CHAT_SCHEMA)
+        Draft202012Validator(CHAT_SCHEMA).validate(decoded)
+        self.assertEqual(decoded['plan'], reply['plan'])
+        self.assertEqual(decoded['brief_updates'], reply['brief_updates'])
+        wire['plan']['scope']['asset_budget'].append(wire['plan']['scope']['asset_budget'][0])
+        with self.assertRaisesRegex(ValueError, 'duplicate map key'):
+            decode_structured(wire, CHAT_SCHEMA)
+
+    def test_native_build_keeps_edits_and_drops_unused_optional_files(self):
+        from jsonschema import Draft202012Validator
+        from ember_harness.chat_build import CHAT_SCHEMA
+        reply = dict(message='Review the change.', build=dict(title='Movement', summary='Animate movement',
+            edits=[dict(path='app.js', before='const speed=1;', after='const speed=2;')]))
+        wire = wire_reply(reply, CHAT_SCHEMA)
+        self.assertIsNone(wire['build']['files'])
+        Draft202012Validator(structured_schema(CHAT_SCHEMA)).validate(wire)
+        decoded = decode_structured(wire, CHAT_SCHEMA)
+        self.assertEqual(decoded['build'], reply['build'])
+        Draft202012Validator(CHAT_SCHEMA).validate(decoded)
+
+    def test_planning_references_validate_locally_and_in_the_dispatched_schema(self):
+        from copy import deepcopy
+        from jsonschema import Draft202012Validator, ValidationError
+        from ember_harness.chat_build import CHAT_SCHEMA
+        from ember_harness.project_plan import starter, validate_document
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            plan = starter(directory)
+            plan['art_direction']['references'] = [dict(path='original-art.png', sha256='a' * 64, note='Original direction')]
+            reply = dict(message='Review this plan.', build=None, plan=plan)
+            Draft202012Validator(CHAT_SCHEMA).validate(reply)
+            self.assertEqual(validate_document(plan), plan)
+            compatible = provider_schema(CHAT_SCHEMA)
+            Draft202012Validator(compatible).validate(reply)
+            self.assertNotIn('"$ref"', json.dumps(compatible))
+            self.assertNotIn('"$defs"', json.dumps(compatible))
+            invalid = deepcopy(reply)
+            invalid['plan']['art_direction']['references'][0]['sha256'] = 'invalid hash'
+            for schema in (CHAT_SCHEMA, compatible):
+                with self.assertRaises(ValidationError):
+                    Draft202012Validator(schema).validate(invalid)
+            with self.assertRaises(ValidationError):
+                validate_document(invalid['plan'])
+
+    def test_broken_or_recursive_schema_refs_stop_before_dispatch_or_credit_reservation(self):
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            schemas = [dict(properties=dict(hash={'$ref': '#/$defs/missing'})),
+                       {'$ref': 'https://example.org/schema'},
+                       {'$defs': {'loop': {'$ref': '#/$defs/loop'}}, '$ref': '#/$defs/loop'}]
+            with patch('ember_harness.muse_chat.subprocess.Popen') as provider:
+                for index, schema in enumerate(schemas):
+                    with self.assertRaisesRegex(ValueError, 'schema'):
+                        run(root, session, 'Never dispatch', 'invalid-schema-' + str(index),
+                            binary=binary, output_schema=schema)
+                provider.assert_not_called()
+            self.assertEqual(CreditLedger(root).read()['requests'], {})
+        schema = {'$defs': {'escaped/key~': {'type': 'string', 'minLength': 2}},
+                  'properties': {'name': {'$ref': '#/$defs/escaped~1key~0'}},
+                  'enum': [{'$ref': 'literal data'}]}
+        self.assertEqual(provider_schema(schema), {'properties': {'name': {'type': 'string', 'minLength': 2}},
+                                                 'enum': [{'$ref': 'literal data'}]})
+
+    def test_invalid_structured_reply_is_saved_and_rejected_without_redispatch(self):
+        from unittest.mock import Mock
+        from ember_harness.chat_build import CHAT_SCHEMA
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            invalid = dict(message='Invalid controls', build=None, brief_updates=dict(controls=42))
+            events = [dict(payload_type='run.terminal.completed', payload=dict(terminal='completed',
+                           text=json.dumps({**wire_reply(dict(message='Valid fixture', build=None), CHAT_SCHEMA),
+                                           **invalid}))),
+                      dict(payload_type='run.usage', payload=dict(calls=1, completed_calls=1, failed_calls=0,
+                           models=[dict(model=MODEL, calls=1, input_tokens=10, output_tokens=10)]))]
+            def start(args, **kwargs):
+                kwargs['stdout'].write(('\n'.join(json.dumps(e) for e in events)).encode()); kwargs['stdout'].flush()
+                return Mock(wait=Mock(return_value=0))
+            with patch('ember_harness.muse_chat.subprocess.Popen', side_effect=start) as provider:
+                for _ in range(2):
+                    with self.assertRaisesRegex(ValueError, 'invalid structured reply') as failure:
+                        run(root, session, 'Plan', 'invalid-payload', binary=binary, output_schema=CHAT_SCHEMA)
+                    self.assertIn('Reported credit usage has been recorded', str(failure.exception))
+                    self.assertNotIn('reservation remains counted', str(failure.exception))
+                self.assertEqual(provider.call_count, 1)
+            saved = json.loads((session / 'muse-captures/invalid-payload.json').read_bytes())
+            self.assertIsNone(saved['response'])
+            self.assertEqual(saved['events'], events)
+            ledger = CreditLedger(root)
+            self.assertIsNone(ledger.summary()['blocked'])
+            self.assertEqual(ledger.summary()['reserved_usd'], 0)
+            self.assertEqual(ledger.summary()['estimated_spent_usd'], .000055)
+
+    def test_malformed_json_is_never_salvaged_or_redispatched_on_replay(self):
+        from unittest.mock import Mock
+        from ember_harness.chat_build import CHAT_SCHEMA
+        scratch = ROOT / '.harness/test-temp'; scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as directory:
+            root = Path(directory); session = root / 'session'; session.mkdir()
+            binary = root / 'synthetic.exe'; binary.write_bytes(b'Never executed')
+            valid = json.dumps(wire_reply(dict(message='Review', build=None), CHAT_SCHEMA))
+            bad = valid + '}'  # The original extra-closing-brace failure.
+            event = dict(payload_type='run.terminal.completed', payload=dict(terminal='completed', text=bad))
+            def start(args, **kwargs):
+                kwargs['stdout'].write(json.dumps(event).encode()); kwargs['stdout'].flush()
+                return Mock(wait=Mock(return_value=0))
+            with patch('ember_harness.muse_chat.subprocess.Popen', side_effect=start) as process:
+                for _ in range(2):
+                    with self.assertRaisesRegex(ValueError, 'Extra data'):
+                        run(root, session, 'Plan', 'bad-json', binary=binary, output_schema=CHAT_SCHEMA)
+                self.assertEqual(process.call_count, 1)
+            saved = json.loads((session / 'muse-captures/bad-json.json').read_bytes())
+            self.assertIsNone(saved['response'])
+            self.assertEqual(saved['events'], [event])
+            self.assertEqual(CreditLedger(root).summary()['reserved_usd'], 5)
 
 
 if __name__ == '__main__':

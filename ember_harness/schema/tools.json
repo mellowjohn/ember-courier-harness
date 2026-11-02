@@ -1,4 +1,13 @@
 {
+  "workspace.scan": {"class": "read", "args": ["root"], "paths": {"root": "read"}},
+  "workspace.write_report": {"class": "write", "args": ["dest", "expected_sha256"], "paths": {"dest": "write"}},
+  "workspace.scaffold_plan": {"class": "write", "args": ["dest", "expected_sha256"], "paths": {"dest": "write"}},
+  "workspace.scaffold_apply": {"class": "scaffold_write", "args": ["plan_sha256", "dest", "paths"], "paths": {"dest": "write"}},
+  "asset.produce": {
+    "class": "compute",
+    "args": ["script", "design", "destination", "binary_sha256"],
+    "paths": {"script": "read", "design": "read", "destination": "write"}
+  },
   "agent.propose": {
     "class": "compute",
     "args": ["source", "model", "binary_sha256"],

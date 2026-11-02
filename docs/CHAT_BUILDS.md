@@ -8,8 +8,21 @@ Inline code still works. Limits are 64 KiB per file and 256 KiB per project. Ord
 current implementation does not edit arbitrary repositories, run package
 installations or commands, or build engine projects.
 
+Prepared [Blender asset workshops](ASSET_PIPELINE.md) can additionally include
+`engine.js` (up to 1 MiB) and canonical `asset.js` (up to 512 KiB). Ordinary source
+keeps the limits above. The asset package includes validated GLB bytes and requires
+individual owner acceptance when changed. It uses the same offline preview flow.
+
+Known asset references and their recorded Blender/GLB/specification paths are
+included in chat. Ask about an asset by name and use follow-ups such as “put it
+in the scene”; the host selects the verified snapshot and prepares the same
+normal review. Discussion does not accept an asset. The host retains `asset.js`
+and `engine.js` during source-only revisions, without asking Muse to copy their
+large payloads. See [asset-aware conversation](ASSET_PIPELINE.md#talk-about-an-existing-asset).
+
 The latest 20 conversation messages, saved project brief and complete current
-session project are supplied to Muse. The brief preserves design guidance across
+session project are supplied to Muse, together with the approved project plan and
+selected task when configured. The brief preserves design guidance across
 long conversations; it never grants action authority. See [the local workspace guide](LOCAL_UI.md#project-brief-and-preview-workspace). A
 structured reply contains a message and either a concrete build proposal or
 `null`. The host validates the proposed path, file count, size, HTML structure,
@@ -18,7 +31,42 @@ references, and JavaScript modules are rejected. Model output cannot grant permi
 another directory. Asking for an unsupported target should produce an explanation
 rather than an unrelated implementation.
 
+Bulk edits use one build proposal with up to 64 exact, non-overlapping replacements
+across the current project's files. Every replacement matches the original
+source, so one edit cannot depend on another edit's output. The combined diff
+receives one build review; untouched bytes remain intact. For bulk artwork,
+ask for up to eight independent image requests; see [bulk artwork generation](ASSETS_2D.md#bulk-artwork-generation).
+
 ## Inline approval
+
+New chat build proposals automatically run a read-only verification stage before
+the reply finishes. Muse supplies bounded `gameplay_checks` for the actual
+interaction and visible result. The host retains existing saved checks, runs
+the exact candidate and current source in Chromium, and attaches actual
+desktop/mobile screenshots plus poses captured while movement input is held to
+a separate Muse review. Spark supports image input; the installed CLI's repeatable
+`--image` option carries the PNG bytes. See [Meta's multimodal input documentation](https://dev.meta.ai/docs/quickstart).
+
+**Game verification** shows gameplay outcomes separately from the AI visual
+judgment, concrete issues, and the saved screenshots. The reviewer compares
+the user request, brief and approved design with source, checks and pixels;
+it must assess coverage as well as appearance. A positive model response cannot
+override failed assertions, runtime errors, missing artwork, overflow or missing
+evidence. No assertions, unavailable browser/model tooling or credit exhaustion
+leave verification incomplete. Old saved proposals are not silently rechecked.
+
+**Fix verification issues** sends the exact proposed source, original request,
+retained results and actual screenshots into a revision, then checks that revision
+again. It does not apply the candidate. This stage uses one additional bounded
+Muse request (a $5 maximum reservation) within the existing shared promotional
+ceiling; screenshots and reports stay under the ignored session directory.
+Matching files, checks, reports and images are verified before evidence can be
+reused. Changed bytes make the report stale. Human playtesting and exact approval
+remain separate; screenshots do not establish animation smoothness or game feel.
+
+Run the offline rehearsal with `py -3.12 tools/quality_check.py`. It exercises
+real browser input, PNG capture and UI repair with synthetic model responses,
+without live provider calls or credits.
 
 The chat shows a compact proposal with its title, summary and changed files.
 **Approve & play** records your click as approval of the exact file changes,
@@ -34,18 +82,25 @@ It never approves the old proposal or writes its files. If the reply fails, the
 saved request can be retried from chat without another discard. The replacement
 still requires its own **Approve & play** decision.
 
-Approval uses the existing owner-review host to approve an exact root scope and
-one child coding contract. Each permits only the reviewed `fs.write` paths and
+In a session with an approved [project plan](PROJECT_PLAN.md), approval uses the
+existing owner-review host to approve one exact coding child of the persistent
+root, retaining the plan version, task and inherited art direction. Legacy
+sessions approve a per-build root scope and one child coding contract until they
+adopt a plan. The exact coding contracts permit only the reviewed `fs.write` paths and
 contents. Each changed file has a separate gated action and evidence check. Changed
 inputs require a fresh proposal. The prior source is preserved as an immutable
 input snapshot so new output evidence can verify without treating an intentional
 revision as input corruption. The output hash, human receipts, gate decision,
 and completion are recorded in the build audit.
 
-Files are saved under `.harness/projects/SESSION_ID/`. Contracts,
-review packets, before snapshots and evidence are saved under the session's
-`build-authority` folder. These are ignored local artifacts. No changes are
-written into the Ember source checkout.
+Files are saved in the session's assigned **Project folder**, initially
+`.harness/projects/SESSION_ID/`. New sessions can select a parent folder with the
+native picker or an absolute path. The preference and each session's exact
+destination survive restart and are supplied with project context to Muse.
+**Save approved project as…** prepares a separately reviewed copy at a new location.
+See [project locations](LOCAL_UI.md) for the flow and backup behavior.
+Contracts, review packets, before snapshots and evidence remain under the
+session's ignored `build-authority` folder.
 
 Choose **Try proposed changes** to play the pending revision before approving it.
 The card labels this **Proposal preview · not applied**. Your current game stays
@@ -77,8 +132,20 @@ local scripts and styles are embedded as data URLs; no file server is exposed.
 The preview opens the index page only. Modules, dynamic imports, local fetches,
 CSS imports, multipage navigation and packages are outside this build target.
 
-Describe the next revision in chat; Muse receives the complete project and proposes
-another exact diff. Proposals include unchanged files; deletion is not supported.
+Describe the next revision in chat; Muse receives the complete project and is
+instructed to improve it in place, preserving unrelated systems, controls,
+visuals and file organization. Revisions prefer targeted source edits. Each edit
+must match exactly once in the supplied source; overlapping, ambiguous or missing
+matches stop the request. The host carries untouched code and files forward byte
+for byte, reconstructs the complete candidate, and uses the existing validation,
+preview, exact-diff approval, saved versions and export flow. New files can accompany
+targeted edits. These checks preserve bytes outside edits; they do not prove that
+the edited behavior is correct or that an edit is necessary.
+
+First builds and requested or necessary rewrites can still return complete files.
+Muse is instructed to explain necessary broader changes in the proposal summary;
+this remains model guidance, not a semantic guarantee. File deletion is not supported.
+Retries retain their original project snapshot and stop if the project changes.
 Finish pending reviews and resume approved interrupted builds before another build.
 Results shows the project and its files. **Verify current evidence** refreshes every file,
 receipt, HTML and evidence checks. These static checks do not establish JavaScript
@@ -147,7 +214,9 @@ for older builds remain in history but are not supplied as current observations.
 For repeatable application QA, run `py -3.12 tools/browser_check.py` with Node and
 Playwright available. Optional flags are `--node`, `--playwright-module` (an
 installed module directory), and `--browser-executable` (a Chromium executable).
-For example, install developer tooling under the ignored workspace:
+On Windows, the [setup helper](INSTALL.md#optional-browser-checks) installs these
+tools with `& ".\Setup Ember.cmd" --browser`. For a manual developer installation
+under the ignored workspace:
 
 ```powershell
 npm install --prefix .harness/browser-tools playwright

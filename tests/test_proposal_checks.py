@@ -126,9 +126,8 @@ class ProposalCheckTests(unittest.TestCase):
         self.assertEqual(supplied['proposal_context']['comparison'][0]['change'],'regression')
         self.assertNotIn(str(self.folder),json.dumps(supplied['proposal_context']))
         fresh=App(self.root);fresh.resume(self.sid)
-        revised={**build_fixture.PROJECT,'style.css':'body {background:green}'}
         reply=dict(message='SYNTHETIC reviewed replacement',build=dict(title='Fixed proposal',summary='Preserve improvements and fix scoring',
-            files=[dict(path=name,content=content) for name,content in revised.items()]))
+            edits=[dict(path='index.html',before='SYNTHETIC_BROKEN',after='SYNTHETIC_FIXED')]))
         def finished(*args,**kwargs):prompts.append(args[2]);return dict(response=json.dumps(reply))
         with patch('ember_harness.session_chat.run_muse',side_effect=finished) as model:
             fresh.chat(saved['text'],turn)
@@ -137,6 +136,9 @@ class ProposalCheckTests(unittest.TestCase):
         self.assertEqual(prompts[0],prompts[1])
         state=fresh.snapshot()['build'];self.assertEqual(len(state['completed']),1)
         self.assertEqual(state['requests'][-2]['decision']['choice'],'decline');self.assertIsNone(state['requests'][-1]['decision'])
+        self.assertEqual(fresh.proposal_preview(self.sid,state['requests'][-1]['ref'])['manifest'],
+                         {name:chat_build.sha256(content.replace('SYNTHETIC_BROKEN','SYNTHETIC_FIXED').encode()).hexdigest()
+                          for name,content in self.files.items()})
         self.assertEqual(chat_build.context(self.root,self.folder)['files'],[dict(path=name,content=content) for name,content in sorted(build_fixture.PROJECT.items())])
 
     def test_http_authorization_and_session_binding(self):

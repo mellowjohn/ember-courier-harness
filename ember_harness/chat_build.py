@@ -8,16 +8,24 @@ from base64 import b64encode
 import os
 from pathlib import Path
 import re
+import tempfile
 
 from jsonschema import Draft202012Validator
 
-from .core import Harness, digest, timestamp
+from .core import Harness, digest, timestamp, SCHEMA
 from .owner_review import OwnerReview, decide, load_request, validate_history
 from .recovery import exclusive
-from .scope import propose
+from .scope import propose, BRIEF_SCHEMA
+from .project_brief import UPDATE_SCHEMA
+from .asset_2d import GENERATION_SCHEMA
+from . import sprite_project
 
 MAX_FILES = 8
+MAX_IMAGE_REQUESTS = 8
 PATH_PATTERN = r'^[a-z][a-z0-9_-]{0,63}\.(html|css|js)$'
+LARGE_FILES = {'engine.js': 1048576, 'asset.js': 524288, 'sprite-assets.js': 4*1024*1024, 'sprite-plan.js':131072}
+PROTECTED_FILES = ('asset.js', 'engine.js', 'sprite-player.js','sprite-assets.js','sprite-plan.js','ember-audio.js')
+AUTO_PROJECT_SCOPE = object()
 
 BUILD_SCHEMA = {
     'type': 'object', 'additionalProperties': False, 'required': ['title', 'summary', 'files'],
@@ -27,14 +35,60 @@ BUILD_SCHEMA = {
         'files': {'type': 'array', 'minItems': 1, 'maxItems': MAX_FILES, 'items': {
             'type': 'object', 'additionalProperties': False, 'required': ['path', 'content'],
             'properties': {'path': {'type': 'string', 'pattern': PATH_PATTERN},
-                           'content': {'type': 'string', 'minLength': 1, 'maxLength': 65536}}}},
+                           'content': {'type': 'string', 'minLength': 1, 'maxLength': 1048576}}}},
     },
 }
+PROPOSAL_SCHEMA = deepcopy(BUILD_SCHEMA)
+PROPOSAL_SCHEMA.update(required=['title', 'summary'], anyOf=[{'required': ['files']}, {'required': ['edits']}])
+PROPOSAL_SCHEMA['properties']['edits'] = {
+    'type': 'array', 'minItems': 1, 'maxItems': 64, 'items': {
+        'type': 'object', 'additionalProperties': False, 'required': ['path', 'before', 'after'],
+        'properties': {'path': {'type': 'string', 'pattern': PATH_PATTERN},
+                       'before': {'type': 'string', 'minLength': 1, 'maxLength': 65536},
+                       'after': {'type': 'string', 'maxLength': 65536}}}}
+REVISION_INSTRUCTION = (
+    'Improve the supplied existing game in place. Make the smallest coherent change needed for the request. '
+    'Preserve unrelated systems, controls, visuals, file organization and gameplay targets. '
+    'Do not rebuild, simplify away features, restyle or replace working systems unless the user requests it '
+    'or it is necessary to implement the requested change; explain any necessary broader change in summary. '
+    'For revisions return build {title,summary,edits:[{path,before,after}]}, with exact source text in before '
+    'that occurs once in the supplied file. All edits match the supplied source, not the result of another edit; '
+    'edits must not overlap. The host retains every untouched byte and file. '
+    'To add new files with edits, include files:[{path,content}] containing only new files. '
+    'Do not edit engine.js, asset.js, sprite-player.js, sprite-assets.js, sprite-plan.js or ember-audio.js; the host retains these. '
+    'Use complete files only for a first build or when a requested or necessary rewrite needs them. '
+)
 CHAT_SCHEMA = {
+    '$defs': deepcopy(SCHEMA['$defs']),
     'type': 'object', 'additionalProperties': False, 'required': ['message', 'build'],
     'properties': {'message': {'type': 'string', 'minLength': 1, 'maxLength': 8000},
-                   'build': {'anyOf': [BUILD_SCHEMA, {'type': 'null'}]}},
+                   'image_request': {'anyOf': [GENERATION_SCHEMA, {'type': 'null'}]},
+                   'image_requests': {'anyOf': [{'type': 'array', 'minItems': 1,
+                       'maxItems': MAX_IMAGE_REQUESTS, 'items': GENERATION_SCHEMA}, {'type': 'null'}]},
+                   'sprite_project': {'anyOf':[sprite_project.RESPONSE_SCHEMA,{'type':'null'}]},
+                   'brief_updates': {'anyOf': [UPDATE_SCHEMA, {'type': 'null'}]},
+                   'plan': {'anyOf': [{'type': 'null'}, {
+                       'type': 'object', 'additionalProperties': False, 'required': ['scope', 'art_direction'],
+                       'properties': {'scope': {**BRIEF_SCHEMA, 'required': list(BRIEF_SCHEMA['properties'])},
+                                      'art_direction': SCHEMA['properties']['art_direction']}}]},
+                   'asset': {'anyOf': [{'type': 'null'}, {'type': 'object', 'additionalProperties': False,
+                       'required': ['ref', 'intent'], 'properties': {
+                           'ref': {'type': 'string', 'pattern': '^[0-9a-f]{64}$'},
+                           'intent': {'enum': ['discuss', 'use']}}}]},
+                   'build': {'anyOf': [PROPOSAL_SCHEMA, {'type': 'null'}]}},
 }
+
+# The fixed runner validates exact action fields and its total time budget in gameplay.validate.
+CHECK_STEP_SCHEMA = dict(type='object',additionalProperties=False,required=['action'],properties=dict(
+    action=dict(type='string',minLength=1,maxLength=24),selector=dict(type='string',maxLength=160),
+    key=dict(type='string',maxLength=16),ms=dict(type='integer',minimum=1,maximum=2000),
+    value=dict(anyOf=[dict(type='string',maxLength=200),dict(type='number')])))
+CHECKS_SCHEMA = dict(type='object',additionalProperties=False,required=['title','scenarios'],properties=dict(
+    title=dict(type='string',minLength=1,maxLength=120),
+    scenarios=dict(type='array',minItems=1,maxItems=4,items=dict(type='object',additionalProperties=False,
+        required=['name','viewport','steps'],properties=dict(name=dict(type='string',minLength=1,maxLength=120),
+            viewport=dict(enum=['desktop','mobile']),steps=dict(type='array',minItems=1,maxItems=16,items=CHECK_STEP_SCHEMA))))))
+CHAT_SCHEMA['properties']['gameplay_checks'] = dict(anyOf=[CHECKS_SCHEMA,dict(type='null')])
 
 
 def harness(folder):
@@ -42,13 +96,8 @@ def harness(folder):
 
 
 def project(root, folder):
-    session_id = Path(folder).name
-    if not re.fullmatch('[0-9a-f]{24}', session_id):
-        raise ValueError('A saved session is required for building')
-    destination = Path(root).resolve() / '.harness/projects' / session_id
-    if destination.resolve() != destination or destination.is_symlink():
-        raise ValueError('Project path changed or escaped the session')
-    return destination
+    from .project_locations import destination
+    return destination(root, folder)
 
 
 def file_hash(path):
@@ -88,7 +137,7 @@ def context(root, folder):
             files[target.name] = target.read_bytes().decode('utf-8')
     validate_files(files, empty=True)
     manifest = {name: sha256(content.encode('utf-8')).hexdigest() for name, content in files.items()}
-    return dict(workspace_kind='browser project', file='index.html',
+    return dict(workspace_kind='browser project', directory=str(destination), file='index.html',
                 sha256=manifest_hash(manifest), content=files.get('index.html'),
                 files=[dict(path=name, content=content) for name, content in files.items()], manifest=manifest)
 
@@ -100,6 +149,43 @@ def manifest_hash(manifest):
     return digest(manifest)
 
 
+def materialize_build(build, base):
+    """Resolve exact edits in memory; approvals still bind the complete resulting files."""
+    Draft202012Validator(PROPOSAL_SCHEMA).validate(build)
+    if 'edits' not in build:
+        return deepcopy(build)  # Existing full-file proposals and saved replies remain valid.
+    if not base:
+        raise ValueError('Targeted edits require an existing project')
+    files = dict(base)
+    additions = build.get('files', [])
+    names = [item['path'] for item in additions]
+    if len(set(names)) != len(names) or set(names) & set(base):
+        raise ValueError('With targeted edits, files may only add unique new file paths')
+    spans = {}
+    for edit in build['edits']:
+        name, before, after = edit['path'], edit['before'], edit['after']
+        if name in PROTECTED_FILES:
+            raise ValueError('Targeted edits must preserve prepared assets and runtime')
+        if name not in base:
+            raise ValueError('Targeted edit names a missing existing file: ' + name)
+        source = base[name]
+        start = source.find(before)
+        # Check overlapping occurrences too; str.count alone misses these.
+        if start < 0 or source.find(before, start + 1) >= 0:
+            raise ValueError('Targeted edit must match exactly once in ' + name)
+        end = start + len(before)
+        matches = spans.setdefault(name, [])
+        if any(start < prior_end and prior_start < end for prior_start, prior_end, _ in matches):
+            raise ValueError('Targeted edits overlap in ' + name)
+        matches.append((start, end, after))
+    for name, matches in spans.items():
+        for start, end, after in sorted(matches, reverse=True):
+            files[name] = files[name][:start] + after + files[name][end:]
+    files.update({item['path']: item['content'] for item in additions})
+    return dict(title=build['title'], summary=build['summary'],
+                files=[dict(path=name, content=content) for name, content in sorted(files.items())])
+
+
 def validate_files(files, *, empty=False):
     if empty and not files:
         return
@@ -108,8 +194,13 @@ def validate_files(files, *, empty=False):
     if any(not re.fullmatch(PATH_PATTERN, name) for name in files):
         raise ValueError('Use flat lowercase HTML, CSS and JavaScript file names')
     sizes = [len(content.encode('utf-8')) for content in files.values()]
-    if any(size > 65536 for size in sizes) or sum(sizes) > 262144:
+    if any(size > LARGE_FILES.get(name, 65536) for name, size in zip(files, sizes)) or sum(
+            size for name, size in zip(files, sizes) if name not in LARGE_FILES) > 262144:
         raise ValueError('Browser project exceeds the file or total size limit')
+    if 'asset.js' in files:
+        from .asset_pipeline import unpack
+        unpack(files['asset.js'])
+    sprite_project.validate_files(files)
     for name, content in files.items():
         if name.endswith('.html'):
             validate_html(content)
@@ -165,13 +256,18 @@ class ResourcePreview(HTMLParser):
         self.output.append('<!' + decl + '>')
 
 
-def propose_build(root, folder, turn_id, intent, build, *, expected_before=None, restore_from=None):
+def propose_build(root, folder, turn_id, intent, build, *, expected_before=None, restore_from=None, asset_source=None, project_scope=AUTO_PROJECT_SCOPE):
     Draft202012Validator(BUILD_SCHEMA).validate(build)
     files = {item['path']: item['content'] for item in build['files']}
     if len(files) != len(build['files']):
         raise ValueError('Duplicate file paths in browser project')
     validate_files(files)
     h = harness(folder)
+    from . import project_plan
+    plan = project_plan.context(root, folder)
+    if project_scope is AUTO_PROJECT_SCOPE:
+        project_scope = plan['binding'] if plan else None
+    parent_scope = project_plan.check_binding(root, folder, project_scope)
     destination = project(root, folder)
     target = destination / 'index.html'
     existing = list_requests(folder)
@@ -190,6 +286,7 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None,
     if current['sha256'] != expected_before:
         raise ValueError('Project changed while Muse was preparing the build; ask for a fresh proposal')
     old_files = {item['path']: item['content'] for item in current['files']}
+    sprite_project.validate_files(files,old_files)
     if set(old_files) - set(files):
         raise ValueError('Include every existing project file; file deletion is not supported')
     manifest = {name: sha256(value.encode('utf-8')).hexdigest() for name, value in files.items()}
@@ -213,6 +310,32 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None,
         scope['allowed_actions'].append(dict(action_id=row['action_id'], tool='fs.write', **{'class': 'write'},
             args_constraints=dict(path={'equals': row['path']}, content={'equals': files[row['name']]})))
         scope['required_evidence'][row['action_id']] = [dict(kind='file_hash', params=dict(path=row['path'], sha256=row['after_sha256']))]
+    asset_actions = []
+    if 'asset.js' in files and parent_scope is None:
+        from .asset_pipeline import unpack
+        _, asset_spec, _ = unpack(files['asset.js'])
+        scope['art_direction']['style'] = asset_spec['art_direction']
+    elif sprite_project.ASSETS_FILE in files and parent_scope is None:
+        scope['art_direction']['style']=sprite_project.asset_rows(files)[0]['spec']['art_direction']
+    if sprite_project.ASSETS_FILE in files and parent_scope is None:
+        planned_assets=sprite_project.asset_rows(files)
+        scope['extensions']['scope']['asset_budget']={'sprite_atlases':len(planned_assets)}
+        if 'asset.js' in files and manifest['asset.js'] not in {a['package_sha256'] for a in planned_assets}:
+            scope['extensions']['scope']['asset_budget']['retained_asset']=1
+    changed_assets=[]
+    if any(row['name']=='asset.js' for row in rows):
+        changed_assets.append(dict(path='asset.js',package_sha256=manifest['asset.js']))
+    prior_hashes={a['package_sha256'] for a in sprite_project.asset_rows(old_files)}
+    if 'asset.js' in old_files: prior_hashes.add(sha256(old_files['asset.js'].encode()).hexdigest())
+    seen={a['package_sha256'] for a in changed_assets}
+    for asset in sprite_project.asset_rows(files):
+        if asset['package_sha256'] not in prior_hashes|seen:
+            changed_assets.append(asset);seen.add(asset['package_sha256'])
+    for index,asset in enumerate(changed_assets):
+        scope['allowed_actions'].append(dict(action_id='accept-asset' if len(changed_assets)==1 else 'accept-asset-'+str(index+1),
+            tool='asset.accept',**{'class':'asset_acceptance'},args_constraints=dict(
+                path={'equals':(destination/asset['path']).as_posix()},sha256={'equals':asset['package_sha256']}),allow_no_evidence=True))
+    scope['limits']['max_calls']=max(scope['limits']['max_calls'],len(rows)+len(changed_assets))
     scope['inputs'] = []
     for name, before_text in old_files.items():
         snapshot = h.root / 'build-inputs' / suffix / name
@@ -226,8 +349,22 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None,
     child = deepcopy(scope)
     child.update(id='ct-chat-build-' + suffix + '-0001', agent='ember-build-worker')
     child['extensions']['orchestration']['role'] = 'coding'
-    child['limits']['max_calls'] = len(rows)
-    for contract in (scope, child):
+    child['limits']['max_calls'] = len(rows) + len(changed_assets)
+    if parent_scope is not None:
+        from .core import subset
+        child['art_direction'] = deepcopy(parent_scope['art_direction'])
+        child['limits']['time_window'] = deepcopy(parent_scope['limits']['time_window'])
+        child['allowed_paths']['read'] = deepcopy(parent_scope['allowed_paths']['read'])
+        child['extensions']['scope'] = deepcopy(parent_scope['extensions']['scope'])
+        child['extensions']['lineage'].update(scope_id=parent_scope['id'], scope_version=parent_scope['version'])
+        child['extensions']['project_task'] = deepcopy(project_scope)
+        if not subset(child, parent_scope):
+            raise ValueError('Build exceeds the approved project scope')
+    for asset in changed_assets:
+        asset_actions.append(dict(agent=child['agent'], contract_id=child['id'], contract_version=1,
+            tool='asset.accept', args=dict(path=(destination / asset['path']).as_posix(), sha256=asset['package_sha256']),
+            paths=dict(read=[(destination / asset['path']).as_posix()], write=[]), spend=0))
+    for contract in ((child,) if parent_scope else (scope, child)):
         h.save_draft(contract)
     diff = ''.join(''.join(unified_diff(old_files.get(row['name'], '').splitlines(keepends=True), files[row['name']].splitlines(keepends=True),
                                 fromfile='current/' + row['name'], tofile='proposed/' + row['name'])) + '\n' for row in rows)
@@ -237,9 +374,26 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None,
                            files=rows, manifest=manifest, before_manifest=current['manifest'],
                            checks=['HTML parsed and local script/stylesheet references checked', str(len(files)) + ' files in this session project; ' + str(len(rows)) + ' changed',
                                    'No server commands, packages, deployment or engine edits']))
+    if parent_scope is not None:
+        body['contracts'] = [dict(contract=child, parent_id=parent_scope['id'])]
+        body['build']['project_scope'] = deepcopy(project_scope)
+        body['build']['checks'].append('Exact child contract is a subset of the existing approved project scope; task acceptance remains separate')
     if restore_from is not None:
         body['build']['restore_from'] = restore_from
         body['build']['checks'].append('Historical approved bytes and evidence verified; restoration requires this new approval')
+    if asset_actions:
+        body['asset_actions'] = asset_actions
+    if asset_actions and 'asset.js' in files:
+        from .asset_pipeline import unpack
+        _, spec, report = unpack(files['asset.js'])
+        body['build']['asset'] = dict(spec=spec, report=report, package_sha256=manifest['asset.js'])
+        body['build']['checks'].append('Acceptance includes this exact asset package; technical checks do not judge visual quality')
+    if sprite_project.ASSETS_FILE in files:
+        body['build']['sprite_assets']=sprite_project.asset_rows(files)
+        body['build']['sprite_plan']=sprite_project.unpack_plan(files[sprite_project.PLAN_FILE])
+        body['build']['checks'].append('Entity roles, required clips, state graphs and exact draw replacements checked; '+str(len(asset_actions))+' changed assets require individual acceptance receipts')
+    if asset_source is not None:
+        body['build']['asset_source']=deepcopy(asset_source)
     return OwnerReview()._request(h, 'contracts', body, wait=False)
 
 
@@ -251,7 +405,7 @@ def list_requests(folder):
     decisions = {e['request_ref']: e for e in entries if e['kind'] == 'owner_decision'}
     return [dict(ref=e['request_ref'], payload=load_request(h, e['request_ref']),
                  decision=decisions.get(e['request_ref']), origin='chat_build')
-            for e in entries if e['kind'] == 'owner_request']
+            for e in entries if e['kind'] == 'owner_request' and 'build' in load_request(h, e['request_ref'])['body']]
 
 
 def _target(root, folder, payload):
@@ -267,6 +421,9 @@ def respond(root, folder, ref, choice, quote):
         payload = load_request(h, ref)
         _target(root, folder, payload)
         build = payload['body']['build']
+        if choice != 'decline' and build.get('project_scope'):
+            from .project_plan import check_binding
+            check_binding(root, folder, build['project_scope'])
         before = build.get('before_manifest', {'index.html': build['before_sha256']})
         if choice != 'decline' and any(file_hash(project(root, folder) / name) != value for name, value in
                                      {**dict.fromkeys(build.get('manifest', {})), **before}.items()):
@@ -290,7 +447,10 @@ def apply(root, folder, ref):
         raise ValueError('Explicit owner approval is required before building')
     build = payload['body']['build']
     _target(root, folder, payload)
-    child_id = payload['body']['contracts'][1]['contract']['id']
+    if build.get('project_scope'):
+        from .project_plan import check_binding
+        check_binding(root, folder, build['project_scope'])
+    child_id = payload['body']['contracts'][-1]['contract']['id']
     active = h._active(entries)
     contract = h._authority(active[child_id], active)
     if 'files' not in build:
@@ -353,14 +513,20 @@ def apply_project(root, folder, ref, h, payload, entries, contract):
                     raise ValueError('Build denied: ' + permitted['reason'])
                 prior = dict(seq=permitted['audit_seq'])
             target.parent.mkdir(parents=True, exist_ok=True)
-            temp = Path(folder) / 'build-output.tmp'
-            with temp.open('wb') as stream:
-                stream.write(content.encode('utf-8'))
-                stream.flush()
-                os.fsync(stream.fileno())
-            if file_hash(target) != row['before_sha256'] or target.resolve() != target:
-                raise ValueError('Project changed during build; no overwrite performed')
-            os.replace(temp, target)
+            # Stage on the destination volume so a chosen folder can be on another drive.
+            temp = None
+            try:
+                with tempfile.NamedTemporaryFile(dir=destination.parent, prefix='.ember-output-', suffix='.tmp', delete=False) as stream:
+                    temp = Path(stream.name)
+                    stream.write(content.encode('utf-8'))
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                if file_hash(target) != row['before_sha256'] or target.resolve() != target:
+                    raise ValueError('Project changed during build; no overwrite performed')
+                os.replace(temp, target)
+            finally:
+                if temp is not None:
+                    temp.unlink(missing_ok=True)
         evidence = h.verify_evidence(contract['id'], row['action_id'], [dict(kind='file_hash',
             params=dict(path=target.as_posix(), sha256=row['after_sha256']))], decision_seq=prior['seq'])
         if evidence['status'] != 'complete':
@@ -368,6 +534,14 @@ def apply_project(root, folder, ref, h, payload, entries, contract):
     check_project_names(destination, build['manifest'])
     if any(file_hash(destination / name) != expected for name, expected in build['manifest'].items()):
         raise ValueError('Project changed before completion; inspection required')
+    for action in payload['body'].get('asset_actions', []):
+        prior = next((e for e in h._entries() if e['kind'] == 'decision' and e.get('decision') == 'allow' and e.get('action') == action), None)
+        if prior is None:
+            accepted = h.check(action)
+            if accepted['decision'] != 'allow':
+                raise ValueError('Explicit owner asset acceptance required before completing this build')
+    if sprite_project.PLAN_FILE in contents:
+        sprite_project.sync_applied(folder,sprite_project.unpack_plan(contents[sprite_project.PLAN_FILE]),ref)
     with h._lock():
         h._append('chat_build_completed', request_ref=ref, contract_id=contract['id'],
                   path=build['path'], sha256=build['after_sha256'], manifest=build['manifest'])
@@ -409,7 +583,7 @@ def proposal_snapshot(root, folder, ref, *, allow_declined=False):
         raise ValueError('Project changed since this proposal; request fresh changes before previewing')
     before_files = {row['path']: row['content'] for row in current['files']}
     files = dict(before_files)
-    child = payload['body']['contracts'][1]['contract']
+    child = payload['body']['contracts'][-1]['contract']
     actions = {a['action_id']: a for a in child['allowed_actions']}
     rows = build.get('files', [dict(name='index.html', path=build['path'], action_id='write', after_sha256=build['after_sha256'])])
     for row in rows:
@@ -465,14 +639,16 @@ def preview(root, folder):
 
 def verify(root, folder):
     preview(root, folder)  # Validates original file sizes before embedding resources.
+    from . import project_versions
     h = harness(folder)
     entries = h._entries()
-    validate_history(h, entries)
     last = [e for e in entries if e['kind'] == 'chat_build_completed'][-1]
-    payload = load_request(h, last['request_ref'])
-    for row in payload['body']['build'].get('files', [dict(action_id='write')]):
-        if h.step_status(last['contract_id'], row['action_id'])['status'] != 'complete':
-            raise ValueError('Current build evidence did not verify')
+    # Inspection is historical proof, not a new use of a retired write contract.
+    # The existing version reader checks the owner receipt, original gate decisions
+    # and immutable file evidence. New work still needs today's active scope.
+    saved = project_versions.snapshot(root, folder, last['request_ref'])
+    if context(root, folder)['manifest'] != saved['manifest']:
+        raise ValueError('Project changed during build verification')
     return dict(passed=True, path=last['path'], sha256=last['sha256'], audit=h.audit_verify(),
                 manifest=last.get('manifest', {'index.html': last['sha256']}),
                 checks=['Approved bytes match every project file', 'HTML and local references checked', 'Owner receipts and evidence verified'],

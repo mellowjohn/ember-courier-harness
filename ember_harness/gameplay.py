@@ -14,6 +14,7 @@ SELECTOR = r'(?:[a-z][a-z0-9-]*)?(?:#[a-zA-Z_][a-zA-Z0-9_-]*|\[data-testid="[a-z
 ACTIONS = {
     'click': {'action', 'selector'}, 'tap': {'action', 'selector'},
     'press': {'action', 'key'}, 'wait': {'action', 'ms'},
+    'hold': {'action', 'key', 'ms'},
     'visible': {'action', 'selector'}, 'hidden': {'action', 'selector'},
     'text': {'action', 'selector', 'value'}, 'contains': {'action', 'selector', 'value'},
     'number_at_least': {'action', 'selector', 'value'},
@@ -44,11 +45,11 @@ def validate(plan):
             if 'selector' in step and (not isinstance(step['selector'], str) or not step['selector'] or
                     len(step['selector']) > 160 or not re.fullmatch(SELECTOR, step['selector'])):
                 raise ValueError('Choose a simple tag, #id or [data-testid="name"] target')
-            if action == 'press' and step['key'] not in KEYS:
+            if action in ('press','hold') and step['key'] not in KEYS:
                 raise ValueError('Choose a supported gameplay key')
             if action == 'tap' and scenario['viewport'] != 'mobile':
                 raise ValueError('Use a mobile scenario for real touch taps')
-            if action == 'wait' and (type(step['ms']) is not int or not 1 <= step['ms'] <= 2000):
+            if action in ('wait','hold') and (type(step['ms']) is not int or not 1 <= step['ms'] <= 2000):
                 raise ValueError('Waits must be 1–2000 milliseconds')
             if action in ('text', 'contains') and (not isinstance(step['value'], str) or not 1 <= len(step['value']) <= 200):
                 raise ValueError('Expected text must contain 1–200 characters')
@@ -56,7 +57,7 @@ def validate(plan):
                     not math.isfinite(step['value']) or abs(step['value']) > 1_000_000):
                 raise ValueError('Expected score must be a finite number within one million')
             assertions += action in ('visible', 'hidden', 'text', 'contains', 'number_at_least')
-            cost += step['ms'] if action == 'wait' else 1000
+            cost += step['ms'] if action in ('wait','hold') else 1000
         if not assertions:
             raise ValueError('Each scenario needs at least one observable assertion')
     if cost > 20000:

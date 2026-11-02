@@ -74,6 +74,7 @@ class SessionChatTests(unittest.TestCase):
             def provider(*args, **kwargs):
                 kwargs['progress']('muse_working')
                 kwargs['progress']('receiving', response_chars=42)
+                kwargs['progress']('receiving', response_chars=43)
                 entered.set()
                 if not release.wait(5):
                     raise TimeoutError('Test did not release inference')
@@ -89,7 +90,9 @@ class SessionChatTests(unittest.TestCase):
                 try:
                     self.assertTrue(entered.wait(5))
                     live = app.snapshot()['chat_activity']
-                    self.assertEqual((live['state'], live['phase'], live['response_chars']), ('active', 'receiving', 42))
+                    self.assertEqual((live['state'], live['phase'], live['response_chars']), ('active', 'receiving', 43))
+                    self.assertTrue(live['detail'])
+                    self.assertEqual(live['events'][-1]['detail'], live['detail'])
                     fresh = App(root)
                     self.assertEqual(fresh.resume(sid)['chat_activity'], live)
                 finally:

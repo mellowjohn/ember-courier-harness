@@ -48,11 +48,13 @@ def main():
                         core_preserved=True,prefer_candidate=not phase.endswith('-0'),wins=['More cohesive hierarchy and button feedback'],
                         problems=[],next_changes=['Keep the counter and original controls'])
         else:
-            files={**FILES,'style.css':STYLE}
+            files=json.loads(prompt.split('\n',1)[1])['files']
             if phase.endswith('-2'):
-                files['app.js']=files['app.js'].replace('if(e.key==="ArrowRight")','if(e.key==="SYNTHETIC_DISABLED_CONTROL")')
+                edits=[dict(path='app.js',before='if(e.key==="ArrowRight")',after='if(e.key==="SYNTHETIC_DISABLED_CONTROL")')]
+            else:
+                edits=[dict(path='style.css',before=files['style.css'],after=STYLE)]
             result=dict(title='Warm, responsive counter',summary='Cohesive color, hierarchy and tactile button motion',
-                        files=[dict(path=k,content=v) for k,v in files.items()])
+                        edits=edits)
         return dict(response=json.dumps(result))
     def launch(root,folder,run_id,**kwargs):
         thread=threading.Thread(target=polish.Worker(root,folder,run_id).run,daemon=True);workers.append(thread);thread.start()

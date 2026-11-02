@@ -1,20 +1,32 @@
 # Local workflow app
 
 On Windows, double-click `Start Ember.cmd` in the repository folder. Leave its
-window open while using Ember and open the private link it prints. Each launch
+window open while using Ember. The first launch runs setup if needed and opens
+the private link in your default browser; you can also open the printed link
+manually. Each launch
 chooses an available port and a fresh private link; use the new link after a
 restart. Closing the launcher stops the server, while saved sessions remain on
 disk. This launcher runs directly on your desktop rather than in a temporary
 agent command session.
 
+The launcher prefers `.venv\Scripts\python.exe` in the repository, then the
+activated `%VIRTUAL_ENV%`, then `py -3.12`. If the selected environment is missing
+Python 3.12+ or required modules, it runs **Setup Ember.cmd** to prepare a private
+`.venv` before launching. See [installation and troubleshooting](INSTALL.md).
+Launch failures retain
+their exit code and print a setup reminder before the window pauses. Command-line
+arguments, such as `--port 8765`, are passed to the existing local host. Automated
+rehearsals may set `EMBER_NO_PAUSE=1`; ordinary double-click launches still pause
+after the app stops.
+
 From the repository folder, run:
 
 ```powershell
-py -3.12 -m ember_harness.local_ui
+.\.venv\Scripts\python.exe -m ember_harness.local_ui --open-browser
 ```
 
 Open the private loopback link printed by the launcher in a browser or the Codex
-browser panel. Keep the launcher running. After installation, `ember-ui --root
+browser panel. Keep the launcher running. After installation, `.\.venv\Scripts\ember-ui.exe --root
 "D:\Ember Harness\ember-courier-harness"` provides the same launcher. The source
 checkout is required because the app reuses the existing product example.
 
@@ -23,7 +35,81 @@ auto-detect or start Ollama or another local model. The main view is a chat: typ
 a prompt and send it to Muse Spark 1.3. New sessions start as conversations;
 **Start sample workflow** explicitly starts the bounded product workflow. Review
 packets appear inline in the chat. Model text cannot approve a contract or execute
-an action. Activity and Results remain separate views beside Chat.
+an action. The workspace keeps one conversation on the left and **Play & refine**
+on the right. Plan your game and request improvements in chat; exact approvals
+stay in the conversation. **Try proposed changes** opens a clearly marked preview
+on the right, above the current approved game. **Return to approved game** brings
+you back without resetting either preview.
+
+The game opens automatically after approval. **Restart game** starts it over;
+**Fullscreen** enlarges the current play session. **Open in new window** opens the
+approved version in a fresh, isolated game window (or browser tab, depending on
+your browser settings). It starts a separate play session and stays on that
+version until you open a newer one from Ember. Return to the chat to request
+changes. Playtest notes and feedback sit below the game; saved gameplay checks,
+findings and overnight polish are under **Checks & advanced refinement**.
+
+Press **Enter** to send a message or **Shift+Enter** to add a new line.
+
+**Project tools** opens a side panel containing **Plan & project**, **Known assets**,
+**Versions & downloads**, **Activity & audit**, and **Typography & icons**.
+The live [typography and iconography library](UI_LIBRARY.md) provides the shared
+type scale, original line icons and friendly messages for observed work stages.
+It holds the design, tasks, brief, folder
+setup, saved versions, handoff and detailed evidence. Close it with **Back to
+game** or Escape. Opening these tools preserves game state and unsaved check
+edits. On smaller screens, the conversation and preview stack vertically; use
+**Go to game** to jump to the preview.
+
+In **New session**, use **Save projects in** to enter an existing folder or
+**Choose folder…** to open the native folder picker. Ember creates a dedicated
+subfolder for the project and remembers the parent for future sessions, including
+after restart. At the top of **Project tools**, **Project folder** shows the
+selected session’s name and exact project destination, above the expandable
+sections. It updates when you switch sessions; chat also receives the destination.
+The folder is created when a reviewed build is applied.
+If the native picker is unavailable, entering the absolute path works.
+
+For an existing build, choose **Project tools → Project folder → Save approved project
+as…**. Pick a name and parent folder to create a separate saved session with the
+latest approved game, project brief and gameplay plan. Review and approve the
+copy to write its files. This local operation makes no model call. The original
+project and its history remain available. Unapproved proposals and manual file
+edits are not part of the approved copy. Native Blender sources stay at their
+recorded locations; this copies the browser project, not its source art directory.
+
+Existing sessions retain their assigned locations. A location is fixed for that
+session because contracts name exact file paths; use **Save approved project as…**
+for another location. Conversations, versions and evidence stay under
+`.harness/ui/sessions/`, even when project files live elsewhere. Back up the
+session history and selected project folders together to retain the full workspace.
+
+**Existing workspace · scan & setup** adds a reviewed read-only inventory of a
+selected folder, a setup diff and a separately approved create-only sandbox
+rehearsal. Source files stay in their original location; imported-project editing
+and execution remain outside this slice. See [workspace onboarding](WORKSPACE.md)
+for scan limits, exclusions, exact approvals and recovery.
+
+**Project plan & tasks** lets you adopt a persistent approved game scope and
+ordered task list. Exact builds then reuse that root and inherit its art
+direction; task outcomes need their own version-bound human acceptance. See
+[project planning](PROJECT_PLAN.md) for amendments, expiry, recovery and the
+explicit legacy-session compatibility boundary.
+
+The active card's **Run task with Muse** prepares a separate worker/verifier
+permission review. It requires saved gameplay expectations and browser tooling.
+See [bounded task execution](TASK_RUNS.md) for retries, recovery, independent
+evidence and the final exact review.
+
+**Create chest/gate directions** adds the selected-task [asset-production loop](ASSET_PRODUCTION.md):
+three real rendered studies, explicit human pick, bounded Blender source edits,
+independent checks, retained native versions and separate exact asset acceptance.
+
+**Findings & fixes** turns a recorded problem into a reviewed, build-bound bug.
+Supply reproducible details, select a saved regression scenario, review a scoped
+fix and its independent evidence, then apply the exact proposal and separately
+approve closure. See [findings and verified fixes](FINDINGS.md) for classification,
+three-attempt escalation, critical closure and recurrence.
 
 Muse Code must be installed and signed in. The Windows installation is detected
 from its version marker. Each chat request runs one model step using the empty
@@ -46,10 +132,15 @@ message IDs return the saved reply without another model call.
 The chat shows an activity panel immediately after sending. Saved checkpoints
 show context preparation, Muse startup, observed provider start, response
 streaming, reply validation and proposal preparation. The panel shows elapsed
-time and received response character counts. During a quiet period it explicitly
-says it is waiting for Muse's next update; it does not invent completion
-percentages. **Request activity** expands the timestamped history, which is also
-available under **Activity & audit**.
+time, the actual current step with a plain-language explanation, and the five
+latest timestamped steps without expanding anything. Game verification distinguishes
+testing the current game, trying the proposed version on desktop and mobile,
+Muse reviewing actual captured screenshots, and the saved review result (including
+issues or an incomplete review). During a quiet period the message describes the
+step that is still running; it does not invent completion percentages or infer
+success from advancing to another step. **Request activity · full history** expands
+all recorded steps, their explanations and received response character counts.
+The history is also available under **Activity & audit**.
 
 Progress survives a refresh or reopening the same session. A pending request is
 shown as running only while its OS-held chat lock is active; an abandoned request
@@ -65,8 +156,9 @@ fixtures; intake is a fixture and the verifier is deterministic. The local app k
 local-agent example adapter remains available for offline regression coverage;
 the app does not launch it, including for older saved sessions.
 
-Activity shows execution output and the latest 100 audit entries. Results shows
-the completed report; **Verify current evidence** refreshes the manifest and
+**Project tools → Activity & audit** shows execution output and the latest 100
+audit entries. **Versions & downloads** shows the current game and [project handoff download](PROJECT_HANDOFF.md), plus saved
+versions. **Inspect verification evidence → Verify current evidence** refreshes the manifest and
 current file checks rather than relying on the saved PASS. Run logs remain in
 `.harness/ui/sessions/`; projects, review receipts and evidence remain in the normal
 `.harness/demos/` folders.
@@ -117,20 +209,23 @@ explicit synthetic test responses, not owner approvals.
 
 ## Project brief and preview workspace
 
-Open **Project brief** to save the game goal, controls, visual direction and
-constraints (up to 2000 characters per field). **Save brief** persists the four
-fields for this session across restarts. **Use saved brief** discards local edits.
-The saved brief is included independently of the latest 20 conversation messages
-in each new Muse request. Unsaved edits are marked and are not sent to Muse.
-Editing a brief does not call Muse, change a game, approve a contract, or grant
-broader permissions. Existing sessions start with an empty brief.
+Plan in chat: describe the idea, answer Ember's next useful question, and change
+direction whenever needed. Ember is instructed to ask one question at a time,
+use known answers and gather details when they matter. It returns partial brief
+updates for explicit user decisions; the host validates and saves them without
+a separate form or Save gesture. A **Remembered** receipt appears on the reply.
+The read-only **Project brief** in Plan shows the game goal, controls, visual
+direction and constraints, with up to 2000 characters each. **Continue planning
+in chat** returns to the conversation. Missing answers do not force a setup wizard.
 
-Each request retains its original brief snapshot, including on retry after a
-failure; the next new request uses the latest saved brief. Saves are blocked while
-Muse is running. A stale save from another window is rejected; use the saved brief
-to reload it before editing again. Chat drafts and unsaved brief edits stay with
-their session while switching within this browser page; save the brief before
-refreshing or closing the page. Conversation turns still save automatically.
+Answers persist per session across restarts and are included independently of
+the latest 20 conversation messages in every new Muse request. Each request keeps
+its original brief snapshot on retry; a retry cannot overwrite newer answers.
+Interrupted saves use a turn marker to avoid duplicate revisions. Chat drafts
+stay with their session while switching within this browser page. The retained
+local brief API supports existing integrations with revision and lock checks.
+Brief updates remain guidance; they cannot approve builds or amend approved scope.
+Ask for a plan change in chat to prepare the existing inline project-plan review.
 
 On wide screens chat and **Play & refine** appear side by side. Smaller screens
 stack the preview below chat. The latest completed build opens automatically after
@@ -146,7 +241,7 @@ N** prepares a new approval before restoring historical files. See
 [browser checks and restoration](CHAT_BUILDS.md#browser-smoke-checks) for behavior,
 limits and the repeatable Chromium rehearsal.
 
-The **Overnight polish** tab adds upfront-approved autonomous iterations in an
+Under **Checks & advanced refinement**, **Overnight polish** adds upfront-approved autonomous iterations in an
 isolated copy, real browser screenshots, an AI critique loop and a morning review.
 The current game changes only after a separate exact-diff approval. See
 [overnight polish](OVERNIGHT_POLISH.md) for setup, budgets, stopping and recovery.

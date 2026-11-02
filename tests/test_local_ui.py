@@ -16,6 +16,34 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class LocalUITest(unittest.TestCase):
+    def test_ui_library_resources_are_public_but_host_bound(self):
+        scratch = ROOT / '.harness/test-temp'
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as folder:
+            (Path(folder) / 'examples').mkdir()
+            (Path(folder) / 'examples/product_demo.py').touch()
+            http = server(App(Path(folder)))
+            worker = threading.Thread(target=http.serve_forever, daemon=True)
+            worker.start()
+            base = f'http://127.0.0.1:{http.server_port}'
+            try:
+                for route, mime in (('/ui-library.css', 'text/css'), ('/ui-library.js', 'text/javascript'), ('/voice-input.js', 'text/javascript')):
+                    with urlopen(base + route) as response:
+                        self.assertEqual(response.headers.get_content_type(), mime)
+                        self.assertGreater(len(response.read()), 0)
+                    with self.assertRaises(HTTPError) as denied:
+                        urlopen(Request(base + route, headers={'Host': 'untrusted.example'}))
+                    self.assertEqual(denied.exception.code, 403)
+                # The resource whitelist must not expose nearby source or API state.
+                for route in ('/ui_library.js', '/local_ui.py', '/api/state', '/ui-library/../local_ui.py'):
+                    with self.assertRaises(HTTPError) as denied:
+                        urlopen(base + route)
+                    self.assertEqual(denied.exception.code, 403)
+            finally:
+                http.shutdown()
+                http.server_close()
+                worker.join()
+
     def test_session_history_validation_and_interrupted_worker(self):
         scratch = ROOT / '.harness/test-temp'
         scratch.mkdir(parents=True, exist_ok=True)

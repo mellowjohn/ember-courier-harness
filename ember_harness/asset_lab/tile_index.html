@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tile workshop</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101b29;color:#edf3f8;font:16px system-ui}main{max-width:1000px;margin:auto;padding:24px}h1{margin-top:0}canvas{display:block;width:100%;height:auto;background-color:#203044;background-image:conic-gradient(#2c3e53 25%,transparent 0 50%,#2c3e53 0 75%,transparent 0);background-size:20px 20px;border:1px solid #50627b}#controls{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin:16px 0}select,input{font:inherit}select{padding:8px}small{line-height:1.6}#error{color:#ffb7a5}
+</style></head><body><main id="sprite-workshop"><h1 id="title">Tile workshop</h1><p id="description"></p>
+<canvas id="stage" width="900" height="520" aria-label="Tile atlas, repeated tile edges and sample tilemap"></canvas>
+<div id="controls"><label>Tile <select id="tile" disabled></select></label><label><input id="repeat" type="checkbox" checked disabled>Repeat tile</label></div>
+<p id="load-state" role="status">Loading PNG</p><p id="status"></p><p id="repeat-state">Repeated 4 × 4</p><p id="error" role="alert"></p>
+<small>Inspect tile boundaries, repeated edges, palette and scale. Solid flags are authored collision hints. Sample placement does not prove different terrain edges match. Technical checks do not establish seamlessness or visual quality. Accept this exact asset through Ember after review.</small>
+</main><script src="asset.js"></script><script src="sprite-player.js"></script><script src="app.js"></script></body></html>

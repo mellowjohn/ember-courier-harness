@@ -23,8 +23,9 @@ def discover(root, *, fingerprints=True):
     module = next((p.resolve() for p in modules if (p / 'package.json').is_file()), None)
     browser = os.environ.get('EMBER_BROWSER_EXECUTABLE')
     if not browser:
-        cache = Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local'))) / 'ms-playwright'
-        installed = list(cache.glob('chromium-*/chrome-win64/chrome.exe'))
+        caches = {Path(os.environ.get('LOCALAPPDATA', str(Path.home() / 'AppData/Local'))) / 'ms-playwright',
+                  Path.home() / 'AppData/Local/ms-playwright'}
+        installed = [p for cache in caches for p in cache.glob('chromium-*/chrome-win64/chrome.exe')]
         browser = str(max(installed, key=lambda p: int(p.parents[1].name.split('-')[-1]))) if installed else None
     if not Path(node).is_file() or module is None or not browser or not Path(browser).is_file():
         raise ValueError('Overnight polish needs Node, Playwright and Chromium. See docs/OVERNIGHT_POLISH.md for setup')
@@ -33,6 +34,13 @@ def discover(root, *, fingerprints=True):
         return paths
     return {**paths, 'hashes': {key: file_digest(paths[key]) for key in ('node', 'browser', 'driver')},
             'module_hash': file_digest(module / 'package.json')}
+
+
+def review_images(output):
+    """Actual desktop/mobile renders followed by any captured movement poses."""
+    output = Path(output)
+    return [output / (name + suffix + '.png') for suffix in ('', '-action') for name in ('desktop', 'mobile')
+            if not suffix or (output / (name + suffix + '.png')).is_file()]
 
 
 def validate(runtime):
@@ -85,6 +93,11 @@ def verified_report(source, output):
             target = output / name
             if target.is_symlink() or file_digest(target) != row.get(key):
                 raise ValueError('Browser screenshot evidence changed')
+        if row.get('action_screenshot'):
+            name = row['name'] + '-action.png'
+            target = output / name
+            if row['action_screenshot'] != name or target.is_symlink() or file_digest(target) != row.get('action_sha256'):
+                raise ValueError('Browser movement capture changed')
     request = read_json(source)
     if 'gameplay_plan' in request:
         if request.get('gameplay_plan_sha256') != gameplay.digest(request['gameplay_plan']):

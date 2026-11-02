@@ -14,7 +14,9 @@ Contract-driven game-dev harness; demo sample game **Ember Courier**. Read `docs
 - Meta model and rules claims marked [UNVERIFIED] stay so until checked against the official event page.
 
 ## Status
-Concept, pipeline, and triage docs are documentation-only until Meta agents build them.
+The broader engine asset pipeline remains a specification. The local browser app,
+contract library and bounded Blender-to-Three.js prop workflows are implemented;
+see `README.md` and `docs/ASSET_PIPELINE.md` for current behavior.
 
 ## Test ID prefixes
 `CT-` contracts · `CS-T` concept step · `PL-` pipeline · `TR-` triage.

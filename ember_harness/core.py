@@ -153,6 +153,14 @@ def draft(contract_id, agent, intent_text, *, role="coding", extensions=None):
             "approved_by": None, "approved_at": None, "content_hash": None}
 
 
+def path_subset(child, parent):
+    """Prove only identity or a descendant of a literal recursive directory."""
+    if child == parent:
+        return True
+    prefix = parent[:-2] if parent.endswith('/**') else None
+    return bool(prefix and not any(c in prefix for c in '*?') and child.startswith(prefix))
+
+
 def subset(child, parent):
     """Conservative scope proof. Unknown inclusions fail closed.
 
@@ -166,7 +174,8 @@ def subset(child, parent):
     if child.get("approval_mode", "each") == "approve_all" and parent.get("approval_mode", "each") != "approve_all":
         return False
     for mode in ("read", "write"):
-        if any(p not in parent["allowed_paths"][mode] for p in child["allowed_paths"][mode]):
+        if any(not any(path_subset(p, ceiling) for ceiling in parent["allowed_paths"][mode])
+               for p in child["allowed_paths"][mode]):
             return False
     if any(child["limits"][k] > parent["limits"][k] for k in ("max_calls", "spend_usd")):
         return False
@@ -192,6 +201,10 @@ def subset(child, parent):
                 if own is None:
                     return False
                 if set(own) == {"equals"} and constraints_ok({key: own["equals"]}, {key: rule}, True):
+                    continue
+                if set(own) == {"one_of"} and all(constraints_ok({key: value}, {key: rule}, True) for value in own['one_of']):
+                    continue
+                if set(own) == set(rule) == {"path_within"} and path_subset(own['path_within'], rule['path_within']):
                     continue
                 for constraint, value in rule.items():
                     candidate = own.get(constraint)

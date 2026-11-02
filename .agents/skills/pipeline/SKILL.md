@@ -5,3 +5,7 @@
 **Specs:** `docs/pipeline/` — held spec `PIPELINE_SUBSYSTEM.md`; iteration addendum and fixes alongside. Architecture Part 3: `docs/architecture/ARCHITECTURE_DRAFT_v4.md`.
 
 Pipeline contracts must not list `git.push` or `git.open_pr`. Inherit `art_direction` from the approved scope contract.
+
+For the implemented Blender-to-browser prop workflow, use
+[`asset-pipeline`](../asset-pipeline/SKILL.md). The older broad engine pipeline
+specifications remain design documents; this slice uses the local browser harness.

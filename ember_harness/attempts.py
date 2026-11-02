@@ -10,6 +10,71 @@ from .core import canonical, digest, normal, constraints_ok, content_hash
 LIMIT = 3
 
 
+class TaskAttempts:
+    """The same three-attempt circuit breaker for planned work, without bug closure.
+
+    Allocation and explicit extra-attempt receipts live in the existing audit.
+    A process restart reuses its allocation; a new run cannot reset the count.
+    """
+    def __init__(self, harness, identity):
+        self.h, self.identity = harness, identity
+
+    def status(self):
+        events = [e for e in self.h._entries() if e.get('task_identity') == self.identity]
+        starts = [e for e in events if e['kind'] == 'task_attempt_started']
+        ends = {e['attempt_seq']: e for e in events if e['kind'] == 'task_attempt_finished'}
+        extra = [e for e in events if e['kind'] == 'task_attempt_decision' and e['choice'] == 'retry']
+        stopped = bool(events and events[-1]['kind'] == 'task_attempt_decision' and events[-1]['choice'] == 'stop')
+        rows = [dict(number=e['number'], run_id=e['run_id'], seq=e['seq'],
+                     outcome=ends.get(e['seq'], {}).get('outcome', 'running')) for e in starts]
+        result = dict(attempts=rows, limit=LIMIT, allowance=LIMIT + len(extra),
+                      next_attempt=len(rows) + 1, stopped=stopped,
+                      blocked=stopped or len(rows) >= LIMIT + len(extra))
+        result['state_hash'] = digest(result)
+        return result
+
+    def begin(self, run_id, index):
+        with self.h._lock():
+            existing = next((e for e in self.h._entries() if e['kind'] == 'task_attempt_started'
+                and e['task_identity'] == self.identity and e['run_id'] == run_id and e['index'] == index), None)
+            if existing:
+                return existing
+            state = self.status()
+            if state['blocked'] or any(a['outcome'] == 'running' for a in state['attempts']):
+                raise ValueError('Task attempt limit reached or an earlier attempt needs recovery')
+            return self.h._append('task_attempt_started', task_identity=self.identity,
+                run_id=run_id, index=index, number=state['next_attempt'])
+
+    def finish(self, attempt, report, path):
+        with self.h._lock():
+            prior = next((e for e in self.h._entries() if e['kind'] == 'task_attempt_finished'
+                          and e['attempt_seq'] == attempt['seq']), None)
+            if prior:
+                return prior
+            return self.h._append('task_attempt_finished', task_identity=self.identity,
+                attempt_seq=attempt['seq'], run_id=attempt['run_id'], index=attempt['index'],
+                outcome='qualified' if report['qualified'] else 'failed',
+                report_path=Path(path).as_posix(), report_sha256=sha256(Path(path).read_bytes()).hexdigest())
+
+    def decide(self, choice, expected_state_hash, quote):
+        if choice not in ('retry', 'stop') or not isinstance(quote, str) or not quote.strip():
+            raise ValueError('An explicit owner retry or stop decision is required')
+        with self.h._lock():
+            current = self.status()
+            if not current['blocked'] or current['state_hash'] != expected_state_hash or any(
+                    a['outcome'] == 'running' for a in current['attempts']):
+                raise ValueError('Review the current blocked task before deciding')
+            return self.h._append('task_attempt_decision', task_identity=self.identity,
+                choice=choice, expected_state_hash=expected_state_hash, actor='johnathan', actor_type='human', quote=quote)
+
+    def abandon(self, run_id, reason):
+        with self.h._lock():
+            for attempt in self.status()['attempts']:
+                if attempt['run_id'] == run_id and attempt['outcome'] == 'running':
+                    self.h._append('task_attempt_finished', task_identity=self.identity,
+                        attempt_seq=attempt['seq'], run_id=run_id, outcome='stopped', reason=reason)
+
+
 def snapshot(state):
     running = next((a for a in state["attempts"] if a["status"] == "running"), None)
     if state["stopped"]:
@@ -98,11 +163,11 @@ def status(entries, bug_id):
                 state["attempts"].append(item)
                 by_id[cid] = item
             state["basis"] = event["seq"]
-        elif event["kind"] == "state_transition" and event.get("detail", {}).get("scope") == "bug_attempt":
+        elif event["kind"] == "state_transition" and event.get("detail", {}).get("scope") in ("bug_attempt", "browser_bug_attempt", "browser_bug_abandoned"):
             item = by_id.get(event["contract_id"])
             if not item or item not in state["attempts"] or item["status"] != "running" or event["attempt_number"] != item.get("origin_number", item["number"]):
                 raise ValueError("duplicate or unbound attempt outcome")
-            item.update(status="failed", outcome_seq=event["seq"])
+            item.update(status="abandoned" if event['detail']['scope'] == 'browser_bug_abandoned' else "failed", outcome_seq=event["seq"])
             state["basis"] = event["seq"]
         elif event["kind"] == "state_transition" and event.get("status") == "closed" and event.get("fix_contract_id") in by_id:
             item = by_id[event["fix_contract_id"]]
@@ -250,6 +315,12 @@ def validate_history(harness, entries):
                 if identity != binding["bug_id"]:
                     raise ValueError("attempt binding differs from contract snapshot")
                 bugs.add(binding["bug_id"])
+        elif event["kind"] == "state_transition" and event.get("detail", {}).get("scope") == "browser_bug_abandoned":
+            from .findings import validate_abandonment
+            validate_abandonment(harness, event)
+        elif event["kind"] == "state_transition" and event.get("detail", {}).get("scope") == "browser_bug_attempt":
+            from .findings import validate_failure
+            validate_failure(harness, event)
         elif event["kind"] == "state_transition" and event.get("detail", {}).get("scope") == "bug_attempt":
             if event.get("attempt_status") != "failed":
                 raise ValueError("invalid attempt outcome")

@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
+from jsonschema import ValidationError
 
 from ember_harness import project_brief
 from ember_harness.local_ui import App, server
@@ -120,6 +121,70 @@ class ProjectBriefTests(unittest.TestCase):
         self.assertEqual(saved['fields'], self.fields)
         with self.assertRaises(HTTPError):
             request(body)
+
+    def test_conversation_collects_partial_answers_and_remembers_changes_after_restart(self):
+        def reply(text, turn, updates, question):
+            result = dict(message=question, build=None, brief_updates=updates)
+            with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(result))) as muse:
+                self.app.chat(text, turn)
+            return json.loads(muse.call_args.args[2].split('\n', 1)[1])
+        initial = reply('Deliver parcels in a cozy village', 'brief-intake-turn-0001',
+            dict(goal='Deliver parcels in a cozy village'), 'How should the player control the game?')
+        self.assertEqual(initial['brief_intake']['missing'], list(project_brief.FIELDS))
+        second = reply('Arrow keys, and no combat', 'brief-intake-turn-0002',
+            dict(controls='Arrow keys', constraints='No combat'), 'What should it look like?')
+        self.assertNotIn('goal', second['brief_intake']['missing'])
+        reply('Use touch instead', 'brief-intake-turn-0003', dict(controls='Touch'), 'Remembered.')
+        saved = App(self.root).resume(self.sid)['project_brief']
+        self.assertEqual(saved['revision'], 3)
+        self.assertEqual(saved['fields'], dict(goal='Deliver parcels in a cozy village',
+            controls='Touch', visual_direction='', constraints='No combat'))
+        self.assertEqual(transcript(self.folder)[-1]['brief_updates'], dict(controls='Touch'))
+        self.assertEqual(self.app.snapshot()['build']['requests'], [])
+        self.app.start('Separate conversation', new_session=True, chat_only=True)
+        self.assertEqual(self.app.snapshot()['project_brief']['revision'], 0)
+
+    def test_chat_saving_recovers_without_duplicate_revisions(self):
+        result = dict(message='Remembered. What should it look like?', build=None,
+                      brief_updates=dict(goal='Deliver parcels'))
+        from ember_harness.recovery import atomic_json as write
+        def interrupted(path, data):
+            if Path(path).name == 'chat.json' and any(m['role'] == 'assistant' for m in data):
+                raise KeyboardInterrupt('SYNTHETIC process death after brief save')
+            return write(path, data)
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(result))):
+            with patch('ember_harness.session_chat.atomic_json', side_effect=interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.app.chat('Deliver parcels', 'brief-recovery-0001')
+            self.assertEqual(project_brief.load(self.folder)['revision'], 1)
+            self.app.chat('Deliver parcels', 'brief-recovery-0001')
+            self.app.chat('Deliver parcels', 'brief-recovery-0001')
+        self.assertEqual(project_brief.load(self.folder)['revision'], 1)
+        self.assertEqual(len(transcript(self.folder)), 2)
+
+    def test_stale_retries_and_invalid_model_answers_cannot_overwrite_brief(self):
+        with patch('ember_harness.session_chat.run_muse', side_effect=ValueError('SYNTHETIC interruption')):
+            with self.assertRaises(ValueError):
+                self.app.chat('Use arrows', 'brief-stale-retry-0001')
+        saved = self.app.save_brief(self.sid, self.fields, 0)
+        result = dict(message='Remembered', build=None, brief_updates=dict(controls='Arrows'))
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(result))):
+            with self.assertRaisesRegex(ValueError, 'changed since this message'):
+                self.app.chat('Use arrows', 'brief-stale-retry-0001')
+        self.assertEqual(project_brief.load(self.folder), saved)
+        for index, updates in enumerate([dict(approve=True), dict(goal='x' * 2001), dict(goal=42)]):
+            result['brief_updates'] = updates
+            with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(result))):
+                with self.assertRaises(ValidationError):
+                    self.app.chat('Plan', f'brief-invalid-model-{index:04}')
+            self.assertEqual(project_brief.load(self.folder), saved)
+
+    def test_explicit_clear_preserves_other_answers(self):
+        self.app.save_brief(self.sid, self.fields, 0)
+        result = dict(message='I cleared the controls preference.', build=None, brief_updates=dict(controls=''))
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(result))):
+            self.app.chat('Forget my controls preference', 'brief-clear-answer-0001')
+        self.assertEqual(project_brief.load(self.folder)['fields'], {**self.fields, 'controls': ''})
 
 
 if __name__ == '__main__':

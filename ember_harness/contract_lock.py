@@ -199,6 +199,12 @@ def verify(store, *, repo=None, base=None, staged_message=None):
                 errors.append(f"evidence audit #{entry['seq']}: {error}")
     heads = {e["entry_hash"] for e in entries}
     try:
+        from .findings import validate_history as validate_browser_findings
+        if validate_browser_findings(h, entries):
+            checks.append("browser finding closures, frozen regression evidence and explicit owner receipts")
+    except Exception as error:
+        errors.append(f"browser finding history: {error}")
+    try:
         from .intake import validate_history as validate_intake
         intake_count = validate_intake(h, entries)
         if intake_count:

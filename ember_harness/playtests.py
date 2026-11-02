@@ -1,6 +1,7 @@
 """Human playtest observations tied to exact approved browser builds."""
 import re
 import secrets
+from hashlib import sha256
 
 from . import chat_build
 from .recovery import exclusive
@@ -68,3 +69,29 @@ def record(root, folder, report_id, request_ref, outcome, note, observations):
         with h._lock():
             return h._append('chat_playtest_recorded', **body, manifest=verified['manifest'],
                              basis='human_playtest', browser_observations_trusted=False)
+
+
+def fix_identity(report):
+    return 'playtest-fix-' + sha256(report['report_id'].encode()).hexdigest()[:40]
+
+
+def request_fix(root, folder, report_id):
+    """Investigate a recorded note and propose a fix using the normal chat authority."""
+    from .session_chat import send, transcript
+    report = next((e for e in chat_build.harness(folder)._entries()
+                   if e['kind'] == 'chat_playtest_recorded' and e['report_id'] == report_id), None)
+    if not report or report['outcome'] != 'problem':
+        raise ValueError('Choose a recorded problem from this session')
+    turn = fix_identity(report)
+    messages = transcript(folder)
+    if any(m.get('reply_to') == turn for m in messages):
+        return dict(report_id=report_id, turn_id=turn, messages=messages)
+    state = chat_build.status(root, folder)
+    verified = chat_build.verify(root, folder)
+    if state['completed'][-1]['request_ref'] != report['request_ref'] or verified['manifest'] != report['manifest']:
+        raise ValueError('This playtest is stale. Describe the problem on the current game')
+    if state['resumable'] or any(not r['decision'] for r in state['requests']):
+        raise ValueError('Review or discard the pending changes before starting another fix')
+    text = 'Fix the bug in my playtest notes:\n' + report['note']
+    messages = send(folder, text, turn, 'muse', root=root, playtest_report=report)
+    return dict(report_id=report_id, turn_id=turn, messages=messages)

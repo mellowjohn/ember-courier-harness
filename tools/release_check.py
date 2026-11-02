@@ -17,15 +17,15 @@ DEMOS = ('contract', 'amendment', 'staged_fix', 'round', 'attempt', 'intake',
 
 
 def source_manifest():
-    paths = [ROOT / 'pyproject.toml', ROOT / 'AGENTS.md', ROOT / '.agents/skills/repo-hygiene/SKILL.md']
-    for folder in ('ember_harness', 'examples', 'tests', 'tools'):
+    paths = [ROOT / 'pyproject.toml', ROOT / 'Start Ember.cmd', ROOT / 'Setup Ember.cmd', ROOT / 'AGENTS.md', ROOT / '.agents/skills/repo-hygiene/SKILL.md']
+    for folder in ('ember_harness', 'examples', 'tests', 'tools', '.agents/skills'):
         paths.extend(p for p in (ROOT / folder).rglob('*')
-                     if p.suffix in ('.py', '.json', '.html', '.js') and '__pycache__' not in p.parts)
+                     if p.suffix in ('.py', '.json', '.html', '.js', '.css', '.md') and '__pycache__' not in p.parts)
     return {p.relative_to(ROOT).as_posix(): sha256(p.read_bytes()).hexdigest()
             for p in sorted(paths)}
 
 
-def run_check(name, args, output, timeout=1200, *, require_tests=False, cwd=None):
+def run_check(name, args, output, timeout=1800, *, require_tests=False, cwd=None):
     env = dict(os.environ)
     env.pop('PYTHONOPTIMIZE', None)  # Demo assertions are acceptance checks.
     env.pop('PYTHONPATH', None)

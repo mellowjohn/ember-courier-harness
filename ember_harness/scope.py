@@ -15,7 +15,7 @@ BRIEF_SCHEMA = {
         'out_of_scope': TEXTS, 'done_criteria': TEXTS,
         'asset_budget': {'type': 'object', 'minProperties': 1, 'maxProperties': 20,
                          'propertyNames': TEXT,
-                         'additionalProperties': {'type': 'integer', 'minimum': 0, 'maximum': 16}},
+                         'additionalProperties': {'type': 'integer', 'minimum': 0}},
     },
 }
 DEFAULTS = {
@@ -45,8 +45,6 @@ def propose(contract_id, agent, intent, workspace, *, brief=None, asset_workflow
     if any(c in root for c in '*?[]{}'):
         raise ValueError('workspace cannot contain glob characters')
     scope = {'game_concept': intent, **deepcopy(DEFAULTS), **brief}
-    if sum(scope['asset_budget'].values()) > 16:
-        raise ValueError('sample asset budget cannot exceed 16 assets')
     proposal = {
         'compiler': 'deterministic-v1', 'workspace': root,
         'assumed_fields': sorted(set(scope) - set(brief) - {'game_concept'}),

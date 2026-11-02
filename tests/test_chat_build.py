@@ -22,6 +22,8 @@ PROJECT = {
 
 class ChatBuildTests(unittest.TestCase):
     def setUp(self):
+        self.quality_patch=patch('ember_harness.proposal_quality.run',return_value=dict(status='unavailable',issues=['SYNTHETIC: verification tested separately']))
+        self.quality_patch.start();self.addCleanup(self.quality_patch.stop)
         scratch = ROOT / '.harness/test-temp'
         scratch.mkdir(parents=True, exist_ok=True)
         self.temp = tempfile.TemporaryDirectory(dir=scratch)
@@ -74,6 +76,87 @@ class ChatBuildTests(unittest.TestCase):
         (self.target.parent / 'app.js').write_text('changed', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'changed'):
             fresh.build_preview()
+
+    def test_bulk_edits_across_files_share_one_review_and_preserve_unrelated_source(self):
+        files={**PROJECT,'style.css':PROJECT['style.css']+'\n'+''.join(f'/* old-{i} */\n' for i in range(32)),
+               'app.js':PROJECT['app.js']+'\n'+''.join(f'// old-{i}\n' for i in range(32))}
+        original=self.propose_project(files)
+        self.app.respond(original,'approve','SYNTHETIC TEST: initial bulk fixture')
+        edits=[dict(path=name,before=f'old-{i}'+(' */' if name.endswith('.css') else '\n'),
+                    after=f'new-{i}'+(' */' if name.endswith('.css') else '\n'))
+               for name in ('style.css','app.js') for i in range(32)]
+        reply=dict(message='Review all 64 edits.',build=dict(title='Bulk update',summary='Update both files.',edits=edits))
+        with patch('ember_harness.session_chat.run_muse',return_value=dict(response=json.dumps(reply))):
+            self.app.chat('Update all 64 markers across both files','synthetic-bulk-edits-12345678')
+        pending=chat_build.list_requests(self.folder)[-1]
+        self.assertFalse(pending['decision'])
+        self.assertEqual(len(chat_build.list_requests(self.folder)),2)
+        self.assertEqual({name:(self.target.parent/name).read_text() for name in files},files)
+        self.assertEqual(len(pending['payload']['body']['build']['files']),2)
+        self.app.respond(pending['ref'],'approve','SYNTHETIC TEST: approve one bulk diff')
+        for name in ('style.css','app.js'):
+            self.assertEqual((self.target.parent/name).read_text(),files[name].replace('old-','new-'))
+        self.assertEqual(self.target.read_text(),files['index.html'])
+
+    def test_targeted_revision_preserves_untouched_bytes_through_review_and_saved_versions(self):
+        from ember_harness import project_versions
+        files = {**PROJECT, 'style.css': '/* Café\r\n original */\r\n' + PROJECT['style.css']}
+        ref = self.propose_project(files)
+        self.app.respond(ref, 'approve', 'SYNTHETIC TEST: original game')
+        before = {name: (self.target.parent / name).read_bytes() for name in files}
+        reply = dict(message='Change only the counter increment.', build=dict(title='Increment by two', summary='Keep the current game.',
+            edits=[dict(path='app.js', before=' + 1;', after=' + 2;')]))
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(reply))):
+            self.app.chat('Increment by two; keep everything else.', 'targeted-revision-01')
+        request = chat_build.list_requests(self.folder)[-1]
+        self.assertEqual([row['name'] for row in request['payload']['body']['build']['files']], ['app.js'])
+        self.assertEqual({name: (self.target.parent / name).read_bytes() for name in files}, before)
+        self.assertEqual(set(self.app.proposal_preview(self.sid, request['ref'])['manifest']), set(files))
+        self.app.respond(request['ref'], 'approve', 'SYNTHETIC TEST: exact targeted revision')
+        snapshot = project_versions.snapshot(self.root, self.folder, request['ref'])
+        for name in ('index.html', 'style.css'):
+            self.assertEqual((self.target.parent / name).read_bytes(), before[name])
+            self.assertEqual(snapshot['files'][name].encode('utf-8'), before[name])
+        self.assertIn(' + 2;', snapshot['files']['app.js'])
+
+    def test_targeted_edits_reject_ambiguous_missing_overlapping_and_protected_changes(self):
+        base = {**PROJECT, 'app.js': 'aaaa; first(); second();', 'engine.js': 'prepared runtime'}
+        invalid = [
+            [dict(path='app.js', before='aa', after='b')],
+            [dict(path='app.js', before='missing', after='b')],
+            [dict(path='missing.js', before='first()', after='b')],
+            [dict(path='app.js', before='first()', after='x'), dict(path='app.js', before='first(); second()', after='y')],
+            [dict(path='../app.js', before='first()', after='x')],
+            [dict(path='engine.js', before='prepared runtime', after='replacement')],
+            [dict(path='app.js', before='', after='replacement')],
+        ]
+        for edits in invalid:
+            with self.subTest(edits=edits), self.assertRaises(Exception):
+                chat_build.materialize_build(dict(title='Rejected', summary='Invalid edit', edits=edits), base)
+        build = dict(title='Two edits and new system', summary='Preserve intervening source.', edits=[
+            dict(path='app.js', before='first()', after='firstImproved()'),
+            dict(path='app.js', before='second()', after='secondImproved()')],
+            files=[dict(path='system.js', content='const newSystem = true;')])
+        result = {row['path']: row['content'] for row in chat_build.materialize_build(build, base)['files']}
+        self.assertEqual(result['app.js'], 'aaaa; firstImproved(); secondImproved();')
+        self.assertEqual(result['engine.js'], base['engine.js'])
+        self.assertEqual(result['system.js'], 'const newSystem = true;')
+        build['files'] = [dict(path='app.js', content='replacement')]
+        with self.assertRaisesRegex(ValueError, 'unique new'):
+            chat_build.materialize_build(build, base)
+
+    def test_targeted_revision_cannot_rebase_cached_response_after_project_changes(self):
+        ref = self.propose_project()
+        self.app.respond(ref, 'approve', 'SYNTHETIC TEST: original game')
+        with patch('ember_harness.session_chat.run_muse', side_effect=ValueError('SYNTHETIC interrupted provider')):
+            with self.assertRaisesRegex(ValueError, 'interrupted provider'):
+                self.app.chat('Improve the counter', 'targeted-retry-01')
+        (self.target.parent / 'style.css').write_bytes(b'body { color: red; }')
+        with patch('ember_harness.session_chat.run_muse') as model:
+            with self.assertRaisesRegex(ValueError, 'changed since this request'):
+                self.app.chat('Improve the counter', 'targeted-retry-01')
+            model.assert_not_called()
+        self.assertEqual(len(chat_build.list_requests(self.folder)), 1)
 
     def test_proposal_preview_does_not_approve_write_or_call_muse(self):
         ref = self.propose_project()

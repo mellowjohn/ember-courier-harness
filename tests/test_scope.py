@@ -46,14 +46,19 @@ class ScopeTests(unittest.TestCase):
 
     def test_invalid_and_oversized_briefs_fail(self):
         for brief in ({'features': []}, {'core_loop': ' '}, {'asset_budget': {'a': True}},
-                      {'asset_budget': {'a': 17}}, {'out_of_scope': ['x', 'x']}):
+                      {'asset_budget': {'a': -1}}, {'out_of_scope': ['x', 'x']}):
             with self.subTest(brief=brief), self.assertRaises(ValidationError):
                 self.proposal(brief=brief)
-        with self.assertRaises(ValueError):
-            self.proposal(brief={'asset_budget': {'a': 10, 'b': 10}})
         for intent in (' ', '', 'x' * 8001):
             with self.assertRaises(ValidationError):
                 self.proposal(intent)
+
+    def test_artwork_estimates_do_not_limit_scope_or_change_spending_permissions(self):
+        for counts in ({'artwork':0},{'a':100,'b':100}):
+            c=self.proposal(brief={'asset_budget':counts})
+            self.assertEqual(review(c)['proposed_game']['asset_budget'],counts)
+            self.assertEqual(c['limits']['spend_usd'],0)
+            self.assertEqual(c['allowed_actions'],self.proposal()['allowed_actions'])
 
     def test_real_cli_lifecycle(self):
         from examples.scope_demo import main

@@ -5,6 +5,12 @@ This is Johnathan's delivery target. Official event eligibility, rules, dates an
 submission requirements remain unverified. This plan does not authorize
 submission, deployment, publishing, paid fallback or cash spending.
 
+This delivery calendar does not redefine the original MVP as the existing browser
+demo. [The MVP implementation checklist](MVP_STATUS.md) tracks the full approved
+architecture and later product requests, separating usable features from library
+code, scripted demonstrations and missing integration. Passing release gates is
+necessary validation of implemented behavior, not proof that the whole MVP is done.
+
 ## Product status — October 31
 
 Ember now builds browser games through a saved Muse conversation. Johnathan
@@ -14,9 +20,34 @@ report, not a claim that arbitrary generated games pass automated gameplay tests
 Implemented in the local app:
 
 - Saved named sessions and durable conversation turns.
+- Remembered project folders, native folder selection and reviewed copies of
+  approved projects into new sessions and locations.
+- Bounded Blender-to-Three.js props with exact asset acceptance, recorded source
+  locations and durable asset references in conversation. Revised exports can be
+  reviewed in the same session while preserving approved scene code, runtime,
+  brief and gameplay checks. Current and proposed assets remain separate until
+  individual acceptance; engine imports and broader asset families remain paused.
 - Persistent per-session project briefs and a responsive chat/preview workspace.
   Brief snapshots remain bound to requests and retries; previews retain game state
   during polling and recorded playtest updates.
+- Opt-in persistent project scopes and ordered tasks in the app: entered design,
+  exclusions, asset budget, completion criteria and inherited art direction;
+  scope-bound exact builds, reviewed amendments/renewals and separate human task
+  acceptance tied to saved versions; see [project plans](PROJECT_PLAN.md).
+- Reviewed bounded browser task execution: one Muse coding worker, a separate
+  verifier request with real Chromium gameplay/captures, isolated candidates,
+  audit-backed three-attempt limits, explicit extra-attempt decisions, recovery
+  and final exact promotion. See [task execution](TASK_RUNS.md). Arbitrary-project
+  Git workers and clean Git bug rounds remain separate integration work.
+- Original prop production in the app: three procedural Blender studies, explicit
+  direction pick, locked specifications, bounded source-parameter refinement,
+  editable native/export versions, independent geometry/gameplay/capture review
+  and separate exact asset acceptance. See [asset production](ASSET_PRODUCTION.md).
+- Browser findings and fixes: reviewed human playtest intake, reproducible details,
+  QA severity/duplicate review, paused-route checks, one approved bug attempt per
+  scoped run, failing frozen baseline, separate passing candidate checks, exact
+  application, explicit closure and recurrence with preserved attempt history.
+  See [findings](FINDINGS.md); general Git rounds remain separate library work.
 - One reviewed proposal for up to eight HTML/CSS/JavaScript files; exact gated
   writes, file evidence, changed-input rejection and interrupted-build recovery.
 - Compact review, Approve & play, direct revision requests, and feedback-to-fix.
@@ -51,7 +82,120 @@ in the bounded integrated sample. Engine work remains paused. See
 [chat builds and versions](CHAT_BUILDS.md), and
 [models and credits](MODELS_AND_CREDITS.md) for exact behavior and limitations.
 
-## Remaining priorities
+## Next product milestones
+
+Persistent project planning is the first integrated slice of the broader MVP.
+Bounded browser task execution now connects a selected task to the existing
+gate, attempt ledger, evidence/checkpoint executor and independent verification.
+The bounded chest/waygate production-and-refinement task now connects rendered
+directions, source edits, native exports and independent checks. Browser findings
+now connect human reports to intake, scoped fixes, separate verification and
+explicit closure. Existing-workspace onboarding now adds bounded read-only
+inventory, reviewed setup contents/conflicts and exact create-only sandbox
+application; see [workspace onboarding](WORKSPACE.md) for limitations. The integrated
+sample and verified handoff now connect these browser slices; see
+[project handoff](PROJECT_HANDOFF.md). Next: installed desktop launch/restart,
+live Muse quality and human playtesting, followed by clean Git-checkout handoff.
+The engine pause and all approval, credit and publication restrictions continue
+to apply.
+
+## Remaining delivery gates
+
+November 1 desktop checkpoint: the real Windows launcher and installed wheel
+pass Chromium session creation, desktop/mobile navigation, saved-brief recovery,
+restart, fresh-link authorization and zero-credit dispatch denial. The launcher now honors
+project/activated virtual environments, and lower credit ceilings display
+correctly. See [the MVP evidence](MVP_STATUS.md#explicit-boundaries-retained) and
+[installation rehearsal instructions](PRODUCT_DEMO.md#clean-installation-check).
+The same fresh wheel passes all 510 Python tests and twelve demos, dependency
+and installed-entry checks, with unchanged source manifests. The retained parent
+report is `.harness/clean-installs/9c3a1e01/REPORT.md`.
+Live Muse quality, human playtesting and actual clean Git-checkout handoff remain
+open; no live model call or human approval is claimed by this checkpoint.
+
+Latest implementation checkpoint — October 31: existing-workspace scan/setup
+passed 491 tests and twelve demos from a clean-installed wheel, plus 18 focused
+checkout regressions. Final-source Chromium exercised real scan/plan/review
+controls, conflicts, mobile layout, retained pending approval, exact sandbox
+creation and source preservation, alongside the existing browser and finding
+flows. Both final reports bind the same implementation and unchanged source:
+`.harness/clean-installs/1ee8f851/` and
+`.harness/browser-checks/20261031T232548Z-8ab64106/`. Workspace and finding
+contract-lock checks passed. Provider replies and owner responses are synthetic;
+no live Muse calls, credits or human quality acceptance are claimed. See
+[workspace onboarding](WORKSPACE.md) for the bounded inventory and setup
+rehearsal; arbitrary source import/editing and complete Git/engine inventories
+remain separate work. Clean-checkout launch and the integrated human rehearsal
+remain delivery gates.
+
+Prior implementation checkpoint — October 31: browser findings and verified
+fixes passed 473 tests and twelve demos from the checkout and a clean-installed
+wheel. The final Chromium rehearsal used real keyboard/touch regressions, intake
+and review controls, exact promotion/application, explicit closure, reload,
+recurrence, stopped-attempt accounting and owner escalation. Contract-lock
+rechecks the retained closure after reopening. This checkpoint's reports match
+the finished source manifest:
+`.harness/release-checks/20261031T223658Z-4bbe49f7/`,
+`.harness/clean-installs/4fec65cf/` and
+`.harness/browser-checks/20261031T223658Z-55b8e698/`. Provider replies and owner
+decisions are synthetic; no live Muse calls, credit use or human quality
+acceptance is claimed. See [the findings guide](FINDINGS.md) for the exact browser
+boundary and remaining Git integration.
+
+Prior implementation checkpoint — October 31: original prop production passed
+459 tests and twelve demos from the checkout and a clean-installed wheel. The
+actual app rehearsal used real Blender renders/native sources/exports and
+Chromium to choose a direction, reject an oversized collider despite positive
+AI judgment, refine its source, verify the result, accept the exact asset and
+separately accept the task outcome. The existing waygate, browser and overnight
+rehearsals pass too. All reports match the finished source manifest:
+`.harness/release-checks/20261031T214230Z-a4538be3/`,
+`.harness/clean-installs/0d9b852a/`,
+`.harness/asset-production-checks/20261031T213800Z-90173f31/`,
+`.harness/asset-checks/20261031T213800Z-e1e3d1be/`,
+`.harness/browser-checks/20261031T214230Z-49cd6577/` and
+`.harness/polish-checks/20261031T214230Z-7a99c95c/`. The installed packaged Blender
+generator also passed real native/export/render smoke verification under
+`.harness/production-dev/installed-177395d0/`. Model replies and owner decisions
+are synthetic; no live Muse calls or credits were used. Clean-checkout desktop
+launch, live artistic quality and human playtesting remain outstanding.
+
+Earlier task-execution checkpoint — October 31: bounded browser-task execution
+passed 450 tests and all twelve demos. The browser QA/restore rehearsal exercises
+the actual task controls, reviewed coder/verifier contracts, real frozen
+desktop/touch checks, retained independent report after reload, exact promotion
+and separate acceptance of the applied task outcome. Overnight-polish Chromium
+checks passed too. All reports match the finished implementation manifest:
+`.harness/release-checks/20261031T205900Z-56afd2c2/`,
+`.harness/browser-checks/20261031T205900Z-5477a1b3/` and
+`.harness/polish-checks/20261031T205900Z-446dc79c/`. Provider replies and owner
+decisions are synthetic. No live Muse calls or credits were used; latest-wheel
+installation, live model quality and human playtesting remain outstanding.
+
+Earlier planning checkpoint — October 31: persistent project scope/task
+planning passed 438 tests and all twelve demos. The browser QA/restore rehearsal
+also exercised the plan editor, selected-task context, an exact child build under
+the existing approved root, separate task acceptance and a reviewed amendment.
+The overnight-polish Chromium rehearsal passed too. All three reports match the
+finished implementation manifest. Reports are retained under
+`.harness/release-checks/20261031T195210Z-b3a7e15b/`,
+`.harness/browser-checks/20261031T195211Z-75d326a7/` and
+`.harness/polish-checks/20261031T195211Z-58520c72/`. Model replies and owner
+decisions were synthetic; no live Muse calls were made. This checkpoint does
+not establish completion of the broader MVP or replace the outstanding latest
+clean-installation and real-user rehearsals.
+
+Earlier asset-update checkpoint — October 31: the asset-update implementation passed
+424 tests and all twelve demos, with an unchanged implementation manifest.
+A separate Chromium rehearsal consumed a real revised Blender export, rejected
+an invalid export, preserved the running preview and approved scene code,
+compared desktop/touch gameplay, reopened a pending update and verified the
+separately accepted GLB in the ZIP. Owner decisions and model replies were
+synthetic; no live Muse calls were made. Reports are retained under
+`.harness/release-checks/20261031T185831Z-fbd67592/` and
+`.harness/asset-chat-checks/20261031T185654Z-d579d44b/`. The earlier clean-installed
+wheel checkpoint below predates the asset and project-location changes; repeating
+clean installation remains part of the release rehearsal.
 
 1. **Reproducible checkpoint and clean installation — verified October 31.**
    The current proposal-comparison source passed all 390 tests and twelve demos

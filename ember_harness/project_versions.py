@@ -6,7 +6,7 @@ import re
 import zipfile
 
 from . import chat_build
-from .core import digest
+from .core import canonical, digest
 from .owner_review import validate_history
 from .recovery import exclusive, read_json
 
@@ -39,7 +39,12 @@ def snapshot(root, folder, ref):
         if not request['decision'] or request['decision']['choice'] != 'approve':
             raise ValueError('Version has no owner approval')
         body = request['payload']['body']
-        build, child = body['build'], body['contracts'][1]['contract']
+        build, child = body['build'], body['contracts'][-1]['contract']
+        for action in body.get('asset_actions', []):
+            accepted = next((e for e in entries[:complete['seq'] - 1] if e['kind'] == 'decision' and
+                e.get('decision') == 'allow' and e.get('action') == action and e.get('reason') == 'one_time_approval_consumed'), None)
+            if not accepted:
+                raise ValueError('Historical asset lacks its individual acceptance decision')
         if complete['contract_id'] != child['id']:
             raise ValueError('Version contract differs from the approved build')
         actions = {a['action_id']: a for a in child['allowed_actions']}
@@ -135,6 +140,21 @@ def export(root, folder, ref):
         metadata = {key: value for key, value in saved.items() if key != 'files'}
         metadata['verification'] = 'Reviewed bytes, owner receipts and historical gate/evidence records verified. Gameplay is not automatically verified.'
         files = {name: content.encode('utf-8') for name, content in saved['files'].items()}
+        if 'asset.js' in saved['files']:
+            from .asset_pipeline import unpack
+            raw, spec, report = unpack(saved['files']['asset.js'])
+            files[spec['id'] + ('.png' if spec.get('profile') == 'sprite-atlas-v1' else '.glb')] = raw
+            files['asset-spec.json'] = json.dumps(spec, indent=2).encode('utf-8')
+            files['asset-report.json'] = json.dumps(report, indent=2).encode('utf-8')
+        from . import sprite_project,asset_2d
+        if sprite_project.ASSETS_FILE in saved['files']:
+            for asset_ref,data in sprite_project.unpack_assets(saved['files'][sprite_project.ASSETS_FILE]).items():
+                raw,spec,report=asset_2d.unpack(asset_2d.PREFIX+canonical(data).decode()+asset_2d.SUFFIX)
+                prefix='sprites/'+asset_ref+'/'
+                files[prefix+spec['id']+'.png']=raw
+                files[prefix+'asset-spec.json']=json.dumps(spec,indent=2).encode()
+                files[prefix+'asset-report.json']=json.dumps(report,indent=2).encode()
+            files['sprite-plan.json']=json.dumps(sprite_project.unpack_plan(saved['files'][sprite_project.PLAN_FILE]),indent=2).encode()
         files['ember-build.json'] = json.dumps(metadata, indent=2, ensure_ascii=False).encode('utf-8')
         files['README.txt'] = b'Extract this ZIP, then open index.html in a browser.\nThis export is a saved approved version. Test gameplay before sharing it.\n'
         output = io.BytesIO()

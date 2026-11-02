@@ -164,6 +164,16 @@ def decide(h, ref, choice, quote):
                     result = h.approve(c['id'], c['version'], approver='johnathan', quote=quote,
                         expected_hash=content_hash(c), parent_id=item['parent_id'])
                     refs.append(result['approval_seq'])
+            for action in body.get('asset_actions', []):
+                if action['tool'] != 'asset.accept':
+                    raise ValueError('Only asset acceptance may accompany build approval')
+                exact = digest({k: action[k] for k in ('agent', 'tool', 'args', 'paths', 'spend')})
+                prior = next((e for e in h._entries() if e['kind'] == 'approval' and e.get('scope') == 'action' and
+                    e.get('action_hash') == exact and e.get('contract_id') == action['contract_id'] and
+                    e.get('contract_version') == action['contract_version'] and e.get('quote') == quote and e['seq'] > request_seq), None)
+                if prior is None and not h.verify_inputs(action['contract_id']):
+                    raise ValueError('Reviewed asset inputs changed before acceptance')
+                refs.append(prior['seq'] if prior else h.approve_action(action, approver='johnathan', quote=quote)['seq'])
         else:
             if kind == 'choice':
                 option = next((v for v in body['options'] if v['choice'] == choice), None)
@@ -226,13 +236,19 @@ def validate_history(h, entries):
             if event['choice'] != 'approve':
                 raise ValueError('invalid owner contract response')
             expected = payload['body']['contracts']
-            if len(approvals) != len(expected):
+            asset_actions = payload['body'].get('asset_actions', [])
+            if len(approvals) != len(expected) + len(asset_actions):
                 raise ValueError('owner contract batch is incomplete')
             for approval, item in zip(approvals, expected):
                 c = item['contract']
                 if (approval.get('scope') != 'contract' or approval['contract_id'] != c['id'] or
                     approval['contract_version'] != c['version'] or approval['reviewed_hash'] != content_hash(c)):
                     raise ValueError('owner approval differs from reviewed draft')
+            for approval, action in zip(approvals[len(expected):], asset_actions):
+                if (action['tool'] != 'asset.accept' or approval.get('scope') != 'action' or
+                        approval.get('contract_id') != action['contract_id'] or approval.get('contract_version') != action['contract_version'] or
+                        approval.get('action_hash') != digest({k: action[k] for k in ('agent', 'tool', 'args', 'paths', 'spend')})):
+                    raise ValueError('owner asset acceptance differs from reviewed package')
         else:
             body = payload['body']
             if payload['kind'] == 'action' and event['choice'] != 'approve':

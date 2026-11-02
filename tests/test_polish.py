@@ -15,7 +15,7 @@ from PIL import Image
 
 import test_chat_build as fixture
 import test_gameplay as gameplay_fixture
-from ember_harness import chat_build, polish, polish_runtime, gameplay
+from ember_harness import chat_build, polish, polish_runtime, gameplay, project_plan
 from ember_harness.core import content_hash, digest, timestamp
 from ember_harness.local_ui import App, server
 from ember_harness.muse_chat import CreditLedger
@@ -86,6 +86,24 @@ class PolishTests(unittest.TestCase):
         with patch('ember_harness.polish.run_muse', side_effect=self.model), patch('ember_harness.polish_runtime.inspect', side_effect=self.browser):
             polish.Worker(self.root, self.folder, run_id).run()
 
+    def test_changed_project_scope_stops_polish_before_a_model_call(self):
+        document=project_plan.starter(self.folder)
+        ref=project_plan.prepare(self.root,self.folder,document,None)['request_ref']
+        self.app.respond(ref,'approve','SYNTHETIC TEST: project scope for polish')
+        run_id=self.prepare(rounds=1);self.approve(run_id)
+        frozen=polish.load(self.folder,run_id)[3]['project_plan']
+        self.assertEqual(frozen['binding']['ref'],ref)
+        changed=deepcopy(document);changed['scope']['features'].append('New reviewed feature')
+        amended=project_plan.prepare(self.root,self.folder,changed,ref)['request_ref']
+        project_plan.acknowledge(self.root,self.folder,amended,'SYNTHETIC TEST: separate scope acknowledgement')
+        self.app.respond(amended,'approve','SYNTHETIC TEST: amend project before polish inference')
+        self.run_worker(run_id)
+        state=polish.history(self.root,self.folder)[0]
+        self.assertEqual(state['status'],'interrupted')
+        self.assertIn('scope changed',state['error'])
+        self.assertEqual(self.calls,[])
+        self.assertEqual((chat_build.project(self.root,self.folder)/'style.css').read_text(),fixture.PROJECT['style.css'])
+
     def test_scope_review_then_isolated_iterations_and_separate_promotion(self):
         run_id = self.prepare(rounds=1)
         self.assertEqual(polish.history(self.root, self.folder)[0]['status'], 'awaiting_approval')
@@ -116,6 +134,111 @@ class PolishTests(unittest.TestCase):
         self.app.respond(ref, 'approve', 'SYNTHETIC TEST: final exact polish diff')
         self.assertIn('transition', (destination/'style.css').read_text())
         self.assertEqual(len(self.app.snapshot()['build']['completed']), 2)
+
+    def test_targeted_polish_rounds_build_on_the_best_existing_candidate(self):
+        original_model = self.model
+        def incremental(root, folder, prompt, request_id, **kwargs):
+            if request_id.startswith('generate'):
+                before,after=('rgb(20, 30, 40)','rgb(30, 40, 50)') if request_id.endswith('-1') else ('rgb(30, 40, 50)','rgb(40, 50, 60)')
+                return dict(response=json.dumps(dict(title='Targeted polish', summary='Adjust only the requested color.',
+                    edits=[dict(path='style.css',before=before,after=after)])))
+            return original_model(root,folder,prompt,request_id,**kwargs)
+        run_id=self.prepare(rounds=2);self.approve(run_id)
+        with patch.object(self,'model',side_effect=incremental):
+            self.run_worker(run_id)
+        state=polish.history(self.root,self.folder)[0]
+        self.assertEqual(state['status'],'ready_review',state.get('error'))
+        work=polish.run_folder(self.folder,run_id)
+        for index in (1,2):
+            for name in ('index.html','app.js'):
+                self.assertEqual((work/'candidates'/str(index)/name).read_bytes(),fixture.PROJECT[name].encode())
+        self.assertIn('rgb(40, 50, 60)',(work/'candidates/2/style.css').read_text())
+        self.assertEqual((chat_build.project(self.root,self.folder)/'style.css').read_bytes(),fixture.PROJECT['style.css'].encode())
+
+    def test_rejected_attempt_feedback_repairs_best_and_replays_identically(self):
+        gameplay.save(self.folder, gameplay_fixture.PLAN, 0)
+        run_id = self.prepare(rounds=2); self.approve(run_id)
+        captured = {}
+        prompts = {}
+        def model(root, folder, prompt, phase, **kwargs):
+            if phase in captured:
+                self.assertEqual(prompt, prompts[phase], 'Replay must restore the exact rejection feedback')
+                return captured[phase]
+            prompts[phase] = prompt
+            data = json.loads(prompt.split('\n', 1)[1])
+            if phase.startswith('generate'):
+                if phase == 'generate-1':
+                    self.assertIsNone(data['rejected_attempt'])
+                    result = dict(title='Attractive broken attempt', summary='Synthetic failed experiment', edits=[
+                        dict(path='app.js', before=fixture.PROJECT['app.js'], after=fixture.PROJECT['app.js']+'\nthrow Error("SYNTHETIC broken control");')])
+                else:
+                    self.assertEqual(data['files'], fixture.PROJECT)
+                    feedback = data['rejected_attempt']
+                    self.assertEqual(feedback['index'], 1)
+                    self.assertEqual(feedback['selected_best_index'], 0)
+                    self.assertEqual(feedback['browser_observations']['gameplay']['outcome'], 'failed')
+                    self.assertIn('SYNTHETIC broken control', feedback['browser_observations']['viewports'][0]['observations'])
+                    self.assertEqual(feedback['ai_judgment']['problems'], ['Counter feedback was lost'])
+                    self.assertEqual(feedback['ai_judgment']['next_changes'], ['Retain the readable spacing but restore controls'])
+                    result = dict(title='Working repair', summary='Improve the original without the broken script', edits=[
+                        dict(path='style.css', before=fixture.PROJECT['style.css'], after=fixture.PROJECT['style.css']+'\nbutton{padding:20px}')])
+            else:
+                result = critique(5 if phase == 'critique-0' else 10 if phase == 'critique-1' else 8, preferred=phase != 'critique-0')
+                if phase == 'critique-1':
+                    result.update(problems=['Counter feedback was lost'], next_changes=['Retain the readable spacing but restore controls'])
+            captured[phase] = dict(response=json.dumps(result))
+            return captured[phase]
+
+        def browser(runtime, source, output, **kwargs):
+            result = self.browser(runtime, source, output, **kwargs)
+            if source.parent.name == '1':
+                result['viewports'][0]['observations'] = ['SYNTHETIC broken control']
+                result['gameplay'] = gameplay_fixture.result(gameplay_fixture.PLAN, failed=True)
+                atomic_json(output/'report.json', result)
+            return result
+
+        original_task = polish.Worker.task
+        def interrupted(worker, phase, action_id, tool, args, reads, writes, artifact, perform):
+            if phase == 'generate-2':
+                original_perform = perform
+                def crash_after_capture():
+                    original_perform()
+                    raise OSError('SYNTHETIC interruption after second generation capture')
+                perform = crash_after_capture
+            return original_task(worker, phase, action_id, tool, args, reads, writes, artifact, perform)
+
+        with patch('ember_harness.polish.run_muse', side_effect=model), patch('ember_harness.polish_runtime.inspect', side_effect=browser):
+            with patch.object(polish.Worker, 'task', interrupted):
+                polish.Worker(self.root, self.folder, run_id).run()
+            self.assertEqual(polish.history(self.root, self.folder)[0]['status'], 'interrupted')
+            # Save the repaired candidate but stop before finish; replay now has a
+            # later candidate in its audit and must not use it for earlier rounds.
+            with patch.object(polish.Worker, 'finish', side_effect=OSError('SYNTHETIC final checkpoint interruption')):
+                polish.Worker(self.root, self.folder, run_id).run()
+            self.assertEqual(polish.history(self.root, self.folder)[0]['status'], 'interrupted')
+            polish.Worker(self.root, self.folder, run_id).run()
+        row = polish.history(self.root, self.folder)[0]
+        self.assertEqual(row['status'], 'ready_review', row.get('error'))
+        self.assertEqual(row['best_index'], 2)
+        self.assertEqual(list(captured), ['critique-0', 'generate-1', 'critique-1', 'generate-2', 'critique-2'])
+        self.assertEqual(polish.candidate_files(self.folder, run_id, 0), fixture.PROJECT)
+        self.assertIn('SYNTHETIC broken control', polish.candidate_files(self.folder, run_id, 1)['app.js'])
+        self.assertEqual(polish.candidate_files(self.folder, run_id, 2)['app.js'], fixture.PROJECT['app.js'])
+        self.assertEqual((chat_build.project(self.root,self.folder)/'style.css').read_text(), fixture.PROJECT['style.css'])
+
+    def test_rejection_feedback_is_bounded_and_separates_ai_from_observations(self):
+        verdict = critique(10, preferred=True)
+        for key in ('wins', 'problems', 'next_changes'):
+            verdict[key] = ['Untrusted suggestion ' * 500] * 50
+        candidate = dict(index=1, critique=verdict, observations=dict(viewports=[
+            dict(name='desktop', loaded=True, after=dict(overflow=True), observations=['Diagnostic ' * 1000] * 100)]))
+        feedback = polish.rejection_feedback(candidate, dict(index=0))
+        self.assertLess(len(json.dumps(feedback)), 20000)
+        self.assertIn('Browser or frozen gameplay checks failed', feedback['reasons'])
+        self.assertTrue(feedback['browser_observations']['viewports'][0]['overflow'])
+        self.assertNotIn('wins', feedback['browser_observations'])
+        candidate['observations']['viewports'][0].update(after=dict(overflow=False), observations=[])
+        self.assertIn('No qualifying improvement', polish.rejection_feedback(candidate, dict(index=0))['reasons'][0])
 
     def test_gameplay_plan_is_frozen_in_review_and_required_for_all_candidates(self):
         saved=gameplay.save(self.folder,gameplay_fixture.PLAN,0)

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ember · Sound garden</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#111b20;color:#eef4ec;font:17px/1.6 system-ui,sans-serif}
+main{max-width:1000px;margin:auto;padding:44px 24px}h1{font-size:clamp(36px,7vw,64px);line-height:1.1;margin:8px 0 20px}
+.eyebrow{color:#eebd76;letter-spacing:.13em;font-size:13px;text-transform:uppercase}p{max-width:660px;color:#b8cbc7}
+.stage{border:1px solid #415c58;background:linear-gradient(130deg,#213735,#17242c);padding:28px;border-radius:18px;margin:28px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}button,select{font:inherit;border:1px solid #68857c;background:#21332f;color:#f5f7eb;border-radius:9px;padding:10px 16px;cursor:pointer}
+button:hover{background:#345046}button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #ffc47c;outline-offset:4px}
+.primary{background:#efbd7c;color:#192522;border:0;font-weight:650}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+fieldset{border:1px solid #415c58;border-radius:12px;padding:18px;display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+fieldset label{display:grid;gap:6px;min-width:160px;flex:1}fieldset [role=status]{width:100%;color:#b8cbc7}input{width:100%;accent-color:#efbd7c}
+#event{min-height:32px;color:#ffcf8b}#score{font-variant-numeric:tabular-nums}.hint{font-size:14px}h2{font-size:22px;margin-top:28px}
+</style></head><body><main>
+<div class="eyebrow">Ember audio workshop</div><h1>Sound garden</h1>
+<p>Give a courier’s journey its own rhythm. Try the game cues, layer a music loop with ambience, and shape the mix.</p>
+<div class="stage"><div class="row"><button class="primary" id="start">Start sound demo</button><button id="pause">Pause</button><button id="stop">Stop all sounds</button></div>
+<p id="event" role="status">Sound is off until you start.</p><div id="score">Parcels delivered: 0</div>
+<p class="hint">After starting, use Space to jump, P to collect a parcel, and H for a hit. The buttons also work on touch screens.</p></div>
+<h2>Gameplay cues</h2><div id="effects" class="grid"></div>
+<h2>Music & ambience</h2><div class="row">
+<label>Music <select id="music"><option value="">Off</option><option value="courier">Courier · warm & playful</option><option value="explore">Explore · quiet & spacious</option><option value="tension">Tension · urgent pulse</option></select></label>
+<label>Ambience <select id="ambience"><option value="">Off</option><option value="wind">Wind</option><option value="embers">Embers</option></select></label></div>
+<h2>Your mix</h2><div id="mixer"></div><p class="hint">Original synthesized audio. Works offline. No microphone or account needed.</p>
+<script src="app.js"></script></main></body></html>
