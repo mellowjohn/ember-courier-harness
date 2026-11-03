@@ -9,6 +9,7 @@ const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE||'playwright');
     const editChecks=async()=>{await view('playtest');if(await page.locator('#gameplay-form').isHidden())await page.locator('#gameplay-edit').click()};
 
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await require('./workspace_browser').stubPlanBuild(page);
   await page.goto(process.env.EMBER_BROWSER_URL+'#'+process.env.EMBER_BROWSER_TOKEN);
   await view('plan');
   await page.getByRole('button',{name:'Create chest directions',exact:true}).click();
@@ -48,6 +49,7 @@ const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE||'playwright');
     assert(await page.getByRole('button',{name:'Approve project plan',exact:true}).isDisabled());
     await page.getByRole('button',{name:'Acknowledge scope changes',exact:true}).click();
     await page.getByRole('button',{name:'Approve project plan',exact:true}).click();
+    await page.waitForFunction(()=>!busy&&!sending);
     await view('plan');
     const dispatch=page.locator('[data-task-id="task-2"]');
     await dispatch.getByRole('button',{name:'Work on this task',exact:true}).click();

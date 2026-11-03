@@ -1,4 +1,9 @@
 // Exercise the same on-demand tools and refinement controls used in the UI.
+// Specialist rehearsals test their own build route; the main browser rehearsal
+// exercises the real automatic plan-start endpoint separately.
+exports.stubPlanBuild = async page => {
+  await page.route('**/api/plan-build', route => route.fulfill({json: {messages: []}}));
+};
 exports.view = async (page, id) => {
   const drawer = page.locator('#workspace-tools');
   if (await drawer.evaluate(node => node.open)) await page.locator('#workspace-tools-close').click();

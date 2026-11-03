@@ -232,10 +232,11 @@ explicit synthetic test responses, not owner approvals.
 
 ## Project brief and preview workspace
 
-Plan in chat: describe the idea, answer a short batch of planning questions together,
-and change direction whenever needed. Ember is instructed to group important
-unanswered decisions, usually 3–6 questions, use known answers and accept partial
-replies. Follow-ups cover consequential gaps or decisions revealed by your answers.
+Plan in chat: describe the idea and Ember drafts an initial plan in its reply,
+using known answers and clearly labeled suggested defaults. Ask questions or
+request changes to refine the draft. Ember asks for a brief idea if none is
+available; it does not require a design questionnaire before proposing a plan.
+The welcome suggestions and **Plan together in chat** start this draft-first flow.
 It returns partial brief
 updates for explicit user decisions; the host validates and saves them without
 a separate form or Save gesture. A **Remembered** receipt appears on the reply.
@@ -250,7 +251,11 @@ Interrupted saves use a turn marker to avoid duplicate revisions. Chat drafts
 stay with their session while switching within this browser page. The retained
 local brief API supports existing integrations with revision and lock checks.
 Brief updates remain guidance; they cannot approve builds or amend approved scope.
-Ask for a plan change in chat to prepare the existing inline project-plan review.
+Discuss plan changes in chat to revise the draft. Ask to prepare the plan for
+approval, or to implement it, to open the existing inline project-plan review.
+Approving that plan keeps chat open and starts preparing its selected task.
+The **Plan approved · Building mode** notice names the task, with **Building**
+in the header and progress below. Finished builds still need exact review.
 
 On wide screens chat and **Play & refine** appear side by side. Smaller screens
 stack the preview below chat. The latest completed build opens automatically after

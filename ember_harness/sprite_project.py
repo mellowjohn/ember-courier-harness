@@ -79,6 +79,9 @@ INSTRUCTION = (
     'When sprite-plan.js is already present, assign replacement artwork through its entity plan rather than the single-asset use shortcut. '
     'Host supplies sprite-assets.js, sprite-plan.js and sprite-player.js; omit them from returned files and never invent PNG bytes. '
     'Use const scene=await EmberSprites.createScene(EMBER_SPRITE_PLAN,EMBER_SPRITE_ASSETS); '
+    'For implement, every entity including backgrounds and on-demand effects requires a non-null binding '
+    'naming an actual proposed source file. Create each declared entity with its literal ID in that file '
+    'and use its artwork in the game; do not leave planned entities unconnected or draw their art as placeholders. '
     'const hero=scene.createEntity("hero"); use that literal entity ID in its declared binding.file. '
     'Bind hero.update(dtSeconds,{moving:Math.abs(vx)>0.01,grounded,dead:hp<=0},["attack"]) to real game state and edge-triggered events. '
     'hero.draw(ctx,x,y,{scale:1,flipX:vx<0}) draws the actual bound atlas. Spawn independent instances with createEntity(id). '
@@ -220,22 +223,41 @@ def validate_files(files, before=None):
     check_bindings(plan,files,before)
 
 
+class BindingError(ValueError):
+    """A proposed entity plan is not connected to its game source."""
+
+
 def check_bindings(plan,files,before=None):
     prior=unpack_plan(before[PLAN_FILE]) if before is not None and PLAN_FILE in before else {'entities':[]}
     if before is not None and not {e['id'] for e in prior['entities']} <= {e['id'] for e in plan['entities']}:
         raise ValueError('Keep existing sprite entities when implementing replacements')
     for entity in plan['entities']:
         binding=entity['binding']
-        if binding is None or binding['file'] not in files: raise ValueError('Entity draw binding names a missing file: '+entity['id'])
+        if binding is None:
+            raise BindingError('Entity '+entity['id']+' has no draw binding; provide its source file and createEntity call')
+        if binding['file'] not in files:
+            raise BindingError('Entity '+entity['id']+' draw binding names a missing source file: '+binding['file'])
         source=files[binding['file']]
         pattern=r'\.createEntity\(\s*([\'"])'+re.escape(entity['id'])+r'\1\s*\)'
-        if not re.search(pattern,source): raise ValueError('Entity must be created at its declared draw binding: '+entity['id'])
+        if not re.search(pattern,source): raise BindingError('Entity must be created at its declared draw binding: '+entity['id'])
         if before is not None and binding['replace']:
             old=before.get(binding['file'],''); snippet=binding['replace']
             # Only a new/revised binding must remove its reviewed old snippet.
             previous=next((e for e in prior['entities'] if e['id']==entity['id']),None)
             if previous is None or previous['binding']!=binding:
-                if old.count(snippet)!=1 or snippet in source: raise ValueError('Replacement must remove exactly the declared old draw snippet: '+entity['id'])
+                if old.count(snippet)!=1 or snippet in source: raise BindingError('Replacement must remove exactly the declared old draw snippet: '+entity['id'])
+
+
+def corrected_bindings(original, corrected):
+    """A source-binding correction cannot change artwork choices or inventory."""
+    Draft202012Validator(RESPONSE_SCHEMA).validate(corrected)
+    def inventory(response):
+        result=deepcopy(response)
+        for entity in result['plan']['entities']: entity.pop('binding')
+        return result
+    if inventory(original)!=inventory(corrected):
+        raise BindingError('Artwork correction must preserve every entity, asset choice and animation requirement')
+    return corrected
 
 
 def asset_rows(files):

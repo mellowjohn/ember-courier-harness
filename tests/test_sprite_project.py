@@ -145,6 +145,57 @@ class SpriteProjectTests(unittest.TestCase):
         self.assertEqual({r['path']:r['content'] for r in chat_build.context(self.root,self.folder)['files']},original)
         self.assertEqual(len(chat_build.list_requests(self.folder)),1)
 
+    def test_missing_bindings_get_one_correction_before_generation_and_exact_review(self):
+        before=self.baseline();good=plan(self.hero,self.impact);bad=deepcopy(good)
+        for entity in bad['entities']: entity['binding']=None
+        original=dict(message='SYNTHETIC initial code',build=integration_edits(),
+            sprite_project=dict(intent='implement',expected_revision=0,plan=bad))
+        fixed=dict(message='SYNTHETIC corrected code bindings',build=integration_edits(),
+            sprite_project=dict(intent='implement',expected_revision=0,plan=good))
+        def provider(root,folder,prompt,turn,**kwargs):
+            if 'Correct this unapproved artwork implementation.' in prompt:
+                self.assertIn('has no draw binding',prompt)
+                self.assertEqual(len(chat_build.list_requests(folder)),1)
+                return dict(response=json.dumps(fixed))
+            return dict(response=json.dumps(original))
+        with patch('ember_harness.session_chat.run_muse',side_effect=provider) as muse,patch('ember_harness.muse_image.generate') as images,redirect_stdout(StringIO()):
+            self.app.chat('Use the planned character and effect artwork','sprite-binding-repair-12345678')
+        self.assertEqual(muse.call_count,2);images.assert_not_called()
+        self.assertNotEqual(muse.call_args_list[0].args[3],muse.call_args_list[1].args[3])
+        request=chat_build.list_requests(self.folder)[-1]
+        self.assertIsNone(request['decision'])
+        candidate=chat_build.proposal_snapshot(self.root,self.folder,request['ref'])['files']
+        sprite_project.validate_files(candidate,before)
+        self.assertEqual({r['path']:r['content'] for r in chat_build.context(self.root,self.folder)['files']},before)
+
+    def test_correction_cannot_drop_unbound_entities_or_switch_artwork(self):
+        self.baseline();document=plan(self.hero,self.impact)
+        document['entities'][1]['binding']=None
+        original=dict(message='SYNTHETIC missing effect binding',build=integration_edits(),
+            sprite_project=dict(intent='implement',expected_revision=0,plan=document))
+        for change in ('drop','switch'):
+            corrected=deepcopy(original)
+            if change=='drop':corrected['sprite_project']['plan']['entities'].pop()
+            else:corrected['sprite_project']['plan']['entities'][0]['asset_ref']=self.impact
+            with patch('ember_harness.session_chat.run_muse',side_effect=[dict(response=json.dumps(original)),dict(response=json.dumps(corrected))]) as muse,patch('ember_harness.muse_image.generate') as images:
+                with self.assertRaisesRegex(sprite_project.BindingError,'preserve every entity'):
+                    self.app.chat('Fix the missing entity binding','sprite-binding-'+change+'-12345678')
+                self.assertEqual(muse.call_count,2);images.assert_not_called()
+        self.assertEqual(len(chat_build.list_requests(self.folder)),1)
+
+    def test_repeated_invalid_binding_stops_after_one_correction_without_images(self):
+        self.baseline();document=plan(self.hero,self.impact)
+        document['entities'][0]['binding']=None
+        with patch('ember_harness.muse_image.generate') as images:
+            response=dict(message='SYNTHETIC still invalid',build=integration_edits(),
+                sprite_project=dict(intent='implement',expected_revision=0,plan=document))
+            with patch('ember_harness.session_chat.run_muse',return_value=dict(response=json.dumps(response))) as muse:
+                with self.assertRaisesRegex(sprite_project.BindingError,'has no draw binding'):
+                    self.app.chat('Connect the artwork','sprite-binding-repeated-12345678')
+                self.assertEqual(muse.call_count,2)
+            images.assert_not_called()
+        self.assertEqual(len(chat_build.list_requests(self.folder)),1)
+
     def test_reexport_of_a_bound_sheet_keeps_other_art_and_syncs_the_applied_inventory(self):
         self.baseline();self.send();first=chat_build.list_requests(self.folder)[-1]['ref'];self.approve(first)
         before=project_versions.snapshot(self.root,self.folder,first)['files']

@@ -179,6 +179,24 @@ class App:
         messages = send(folder, text, turn_id, 'muse', root=self.root)
         return dict(messages=messages)
 
+    def start_plan_build(self, session_id, plan_ref):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before starting its build')
+            folder = self.sessions_dir / session_id
+            plan = project_plan.status(self.root, folder)
+            if not plan['active'] or plan['approved']['ref'] != plan_ref:
+                raise ValueError('Reopen the active approved project plan before starting its build')
+            turn_id = 'plan-build-' + plan_ref[:40]
+            previous = next((m for m in transcript(folder) if m['id'] == turn_id), None)
+            task = next(t for t in plan['tasks'] if t['id'] == plan['selected_task'])
+            start = previous['plan_start'] if previous else dict(plan_ref=plan_ref, task_id=task['id'], title=task['title'])
+            text = previous['text'] if previous else (
+                'My project plan is approved. Start implementing its selected task: ' + task['title'] +
+                '. Prepare the build for review using the approved design and art direction. Do not restart planning.')
+        # Use the ordinary saved, metered chat/build path, outside the UI lock.
+        return dict(messages=send(folder, text, turn_id, 'muse', root=self.root, plan_start=start))
+
     def review_asset_update(self, session_id, asset_ref, current_ref):
         from .asset_workshop import review_updated_export
         with self.lock:
@@ -988,6 +1006,8 @@ def server(app, port=0):
                     result = app.review_asset_update(body['session_id'], body['asset_ref'], body['current_ref'])
                 elif self.path == '/api/chat':
                     result = app.chat(body['text'], body['id'])
+                elif self.path == '/api/plan-build':
+                    result = app.start_plan_build(body['session_id'], body['plan_ref'])
                 elif self.path == '/api/build-resume':
                     result = app.resume_build(body['ref'])
                 elif self.path == '/api/request-changes':

@@ -141,6 +141,8 @@ def main(argv=None):
                 plan='Remove the exception and preserve the counter controls.')))
         data=json.loads(prompt.split('\n',1)[1])
         text=data['conversation'][-1]['content']
+        if text.startswith('My project plan is approved. Start implementing its selected task:'):
+            return dict(response=json.dumps(dict(message='SYNTHETIC automatic build request received',build=None)))
         if data.get('playtest_fix'):
             note_calls.append('fix');kwargs['progress']('muse_working');time.sleep(3)
             return dict(response=json.dumps(dict(message='Proposed fix from your notes. Try it before applying.',build=dict(

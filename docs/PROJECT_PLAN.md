@@ -1,14 +1,16 @@
 # Persistent project scope and ordered tasks
 
 Plan through the session's chat, or choose **Plan → Plan together in chat**.
-Ember groups the important unanswered decisions into one short numbered batch,
-usually 3–6 questions, so you can answer them together. It uses known answers,
-accepts partial replies and follows up only on consequential gaps or decisions
-revealed by your answers. It remembers explicit answers in the project brief and
-gathers the game concept, core loop, features, exclusions, artwork estimates,
-completion criteria and art direction. You can change
-these decisions through conversation. No project-plan form is required.
-When enough decisions are known, ask Ember to prepare the plan for review.
+Ember drafts an initial plan directly in chat from your game idea, using saved
+answers and sensible, clearly labeled assumptions for unspecified details.
+The draft covers the core loop, controls, visual direction, first playable scope,
+later features and success criteria. You can ask questions or request changes;
+Ember shows the revised draft without requiring a design questionnaire.
+If you have not described an idea yet, it asks for a brief description first.
+It saves explicit user decisions in the project brief; suggested defaults stay
+proposals. No project-plan form is required.
+When ready, ask Ember to prepare the plan for approval or implement the draft.
+Conversational drafts do not open a pending approval review by themselves.
 The model returns a structured design proposal; the host validates it and uses
 the existing scope compiler. Features become ordered task cards. Artwork counts are planning estimates,
 not enforced limits; exceeding an estimate does not require an amendment. The existing local planning API remains available.
@@ -16,8 +18,13 @@ not enforced limits; exceeding an estimate does not require an amendment. The ex
 Read the inline review's complete design, art direction and
 scope permissions, then choose **Approve project plan** or discard it. The plan
 is an actual root scope in the existing contract store, not an approval flag in
-the brief. Approval saves authority for up to 24 hours; it does not create or
-modify project files, start a worker, accept an asset or complete a task.
+the brief. Approval saves authority for up to 24 hours and immediately asks Muse
+to prepare the selected task's build, keeping you in chat. A **Plan approved ·
+Building mode** notice names the task, and the header shows **Building** while
+the request runs. The notice changes when the build needs review or stops.
+The automatic request is bound to that session and exact plan; retries reuse
+the saved turn. You still review exact file changes, accept assets and accept
+task outcomes separately.
 
 ## Work on one task
 

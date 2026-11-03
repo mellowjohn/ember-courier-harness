@@ -415,6 +415,14 @@ entity using a literal ID in that file. Existing entity IDs are retained during
 replacements. These are structural checks; the actual render and game behavior
 still require browser checks and review.
 
+An implementation must bind every entity, including backgrounds and on-demand
+effects. If generated code omits a binding or its declared entity creation,
+Ember requests one metered Muse correction before image generation. That
+correction may fix bindings and source but must retain every entity, artwork
+choice and animation requirement. It passes the same validation and exact-build
+review; another invalid correction stops the request. A failed binding reply
+offers **Try a new reply** so an older invalid capture does not trap retries.
+
 Missing artwork uses the existing bounded Muse Image adapter and shared credit
 ledger. Identical requests within a turn share a generation, and stable request
 IDs replay saved provider captures. If later generation is blocked, completed

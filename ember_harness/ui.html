@@ -83,6 +83,7 @@ async function respond(ref,choice,label){
   if(busy||sending)return;
   const reviewed=lastState?.requests.find(r=>r.ref===ref)?.payload.body;
   const isBuild=buildReviewRef===ref,isPlan=!!reviewed?.project_plan,isWorkspace=!!(reviewed?.workspace||reviewed?.workspace_apply),quote=label||'Approve reviewed changes';
+  const sid=activeSession?.id;let startBuild=null;
   busy=true;document.querySelectorAll('.decision').forEach(b=>b.disabled=true);
   const loading=isBuild&&choice==='approve'?beginBuildLoading(ref):null;
   if(isBuild&&choice==='approve'&&lastState?.chat_activity?.kind==='playtest_fix'&&reviewed?.build?.turn_id===lastState.chat_activity.turn_id){fileApply={sid:activeSession.id,ref,state:'applying'};renderAgentActivity(lastState)}
@@ -92,9 +93,16 @@ async function respond(ref,choice,label){
     else finishBuildLoading(loading);
     current='';$('error').textContent='';await refresh();
     if($('error').textContent)finishBuildLoading(loading);
-    if(choice==='approve'&&(isPlan||isWorkspace))showWorkspace(lastState.requests.some(r=>!r.decision)?'chat':'plan');
+    if(choice==='approve'&&isPlan&&activeSession?.id===sid){
+      showWorkspace('chat');
+      if(lastState.project_plan?.active&&lastState.project_plan.approved.ref===ref){
+        const task=lastState.project_plan.tasks.find(t=>t.id===lastState.project_plan.selected_task);
+        startBuild={sid,planRef:ref,title:task?.title};
+      }
+    }else if(choice==='approve'&&isWorkspace)showWorkspace(lastState.requests.some(r=>!r.decision)?'chat':'plan');
   }catch(e){finishBuildLoading(loading);$('error').textContent=e.message;if(fileApply?.ref===ref){fileApply.state='failed';fileApply.error=e.message;renderAgentActivity(lastState)}}
   finally{busy=false;if(fileApply?.ref===ref&&fileApply.state==='applying'){fileApply=null;renderAgentActivity(lastState)}document.querySelectorAll('.decision').forEach(b=>b.disabled=b.dataset.needsScopeAck==='true')}
+  if(startBuild&&activeSession?.id===sid)await sendMessage('Plan approved. Start building: '+startBuild.title,'plan-build-'+ref.slice(0,40),startBuild);
 }
 function decision(parent,text,ref,choice,cls=''){
   const button=el('button',text,parent);button.className='decision '+cls;button.disabled=busy||sending;
@@ -132,7 +140,7 @@ function renderReview(s){
     el('p','Estimated artwork: '+Object.entries(doc.scope.asset_budget).map(([name,count])=>name+': '+count).join(' · ')+' (planning only)',p);
     detail('Art direction',doc.art_direction,p);
     el('p','Approval saves this project scope for up to 24 hours. Each build still needs its exact review, and every changed asset needs acceptance. Tasks are not marked complete by applying files.',p);
-    el('p','This local plan uses your entered design and ordered feature list. It does not interpret the design with Muse or start workers.',p).className='subtitle';
+    el('p','Approving starts Muse on the first selected task and keeps you in chat. A Building mode notice shows its progress; you review the resulting changes before applying them.',p).className='subtitle';
     const amendment=body.project_plan.amendment,needsAck=!!amendment?.warnings.length;
     if(amendment){detail('Changes from the previous scope',amendment,p);if(needsAck)el('p','Review and acknowledge these scope changes separately before approving the amendment.',p)}
     const actions=el('div',undefined,p);actions.className='actions';
@@ -387,7 +395,7 @@ function renderTaskFocus(s){
   area.hidden=!s.session||!task;if(area.dataset.key===key)return;area.dataset.key=key;area.replaceChildren();
   el('span',task?'CURRENT TASK':'BUILD YOUR GAME',area).className='eyebrow';
   el('h2',task?task.title:'Describe what you want to make',area);
-  el('p',task?(plan.active?'Work within your approved project scope. Review the candidate before applying it.':plan.reason):'Tell Ember your idea. It will ask the important questions and remember your answers as you go.',area);
+  el('p',task?(plan.active?'Work within your approved project scope. Review the candidate before applying it.':plan.reason):'Tell Ember your idea. It will draft a plan in chat for you to refine.',area);
   const tasks=el('button',task?'View plan & tasks':'Plan together in chat',area);tasks.className='button';tasks.onclick=()=>task?showWorkspace('plan'):planningChat();
   if(task?.state==='applied_needs_review'&&task.build_ref===s.build?.completed.at(-1)?.request_ref){
     const accept=el('button','Accept task outcome',area);accept.className='button primary';accept.disabled=busy||sending||!plan.active;
@@ -697,7 +705,7 @@ function renderSpritePlan(plan,parent,s,generated=[],urls=imageChatURLs){
     prepare.disabled=busy||sending||s.chat_activity?.state==='active'||s.build?.requests.some(r=>!r.decision);
     prepare.onclick=()=>sendMessage('Generate the missing artwork from this saved entity plan and prepare the actual game changes for review. Entities: '+missing.map(e=>e.id+' ('+e.generation.id+')').join(', ')+'. Use the latest saved artwork plan, preserve unrelated artwork and gameplay, and choose routine animation timing from the saved design.',crypto.randomUUID());}
 }
-function planningChat(prompt=''){
+function planningChat(prompt='Draft an initial project plan from my game idea and saved details. Show it in chat with suggested defaults so I can ask questions or request changes.'){
   showWorkspace('chat');
   if(prompt&&!$('chat-input').value.trim())$('chat-input').value=prompt;
   $('chat-input').focus();
@@ -707,8 +715,8 @@ function renderProjectPlan(s){
   if(!$('project-plan')){const area=workspacePanel('project-plan','Project plan & tasks','plan-main');el('div',undefined,area).id='project-plan-status';
     const edit=el('button','Plan together in chat',area);edit.id='project-plan-edit';edit.className='button';
     edit.onclick=()=>{if(busy||sending)return;planningChat(lastState.project_plan?.approved?
-      'I want to change the project plan. Help me work through the changes.':
-      'Help me plan this project. Ask me the next important question and save my answers as we go.');};
+      'I want to discuss changes to the project plan. Show a revised draft in chat based on my feedback before preparing a new approval review.':
+      'Draft an initial project plan from my game idea and saved details. Show it in chat with suggested defaults so I can ask questions or request changes.');};
     el('div',undefined,area).id='project-task-list';
   }
   const area=$('project-plan'),sid=s.session?.id,plan=s.project_plan;renderTaskFocus(s);area.hidden=!sid;
@@ -1179,7 +1187,8 @@ function renderAgentActivity(s){
   if(area.hidden)return;
   const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(a.started_at))/1000));
   const task=s.project_plan?.tasks.find(t=>t.id===s.project_plan.selected_task);
-  const key=JSON.stringify([a.turn_id,a.state,a.phase,a.title,a.detail,a.error,review,task?.title,a.events,a.diagnosis,a.execution]);
+  const planBuild=a.kind==='plan_build';
+  const key=JSON.stringify([a.turn_id,a.kind,a.plan_start,a.state,a.phase,a.title,a.detail,a.error,review,task?.title,a.events,a.diagnosis,a.execution]);
   const updateCounters=()=>{const timer=$('agent-elapsed');if(!timer)return;
     timer.textContent=(elapsed<60?elapsed+'s':Math.floor(elapsed/60)+'m '+elapsed%60+'s')+' elapsed · '+(a.phase?.startsWith('image_')?'Muse Image':'Muse Spark 1.3');
     $('agent-received').hidden=!a.response_chars;$('agent-received').textContent=(a.response_chars||0).toLocaleString()+' response characters received';
@@ -1196,6 +1205,8 @@ function renderAgentActivity(s){
   const titles={context:'Reading notes and game files',validating:'Checking the proposed code',proposal:'Preparing the fix for review',awaiting_review:'Fix ready for review'};
   const status=EmberUI.status(area,{phase:fix?'fix_'+a.phase:a.phase,state:a.state,title:fix?(titles[a.phase]||a.title):a.title,context:fix?'Playtest bug fix':task?'Current task · '+task.title:null});
   status.setAttribute('role','status');
+  if(planBuild){const notice=el('p',a.state==='active'?'Plan approved · Building mode':review?'Build ready for review':'Build stopped',area);notice.id='plan-build-notice';notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
+    el('p','Task: '+(a.plan_start?.title||task?.title||'First playable build'),area);}
   if(a.detail){const explanation=el('p',a.detail,area);explanation.className='agent-step-detail'}
   if(a.events?.length){
     const recent=el('section',undefined,area);recent.className='agent-recent';recent.setAttribute('aria-label','Recent request activity');
@@ -1287,9 +1298,9 @@ function renderChatWelcome(s){
   if(!s.session){const start=el('button','New session',empty);start.className='button primary welcome-start';start.type='button';start.onclick=()=>projectDialog();return;}
   const starters=el('div',undefined,empty);starters.className='starter-grid';
   for(const [name,description,icon,prompt] of [
-    ['Arcade rush','Chase the high score','gamepad','Help me plan an original fast-paced arcade game with satisfying controls and a score-chasing loop. Ask me the next important question.'],
-    ['A new adventure','Create a world to explore','compass','Help me plan an original adventure game with an atmospheric world to explore. Ask me the next important question.'],
-    ['My own idea','Start with a blank canvas','sparkles','I have a game idea. Help me shape the core loop, controls and visual direction, one question at a time.']
+    ['Arcade rush','Chase the high score','gamepad','Draft an initial plan for an original fast-paced arcade game with satisfying controls and a score-chasing loop. Suggest sensible defaults and show the plan in chat so I can refine it.'],
+    ['A new adventure','Create a world to explore','compass','Draft an initial plan for an original adventure game with an atmospheric world to explore. Suggest sensible defaults and show the plan in chat so I can refine it.'],
+    ['My own idea','Start with a blank canvas','sparkles','Help me turn my game idea into an initial plan with a core loop, controls and visual direction. Suggest sensible defaults and show the plan in chat so I can refine it.\n\nMy idea: ']
   ]){
     const card=el('button',undefined,starters);card.type='button';card.className='starter-card';card.append(EmberUI.icon(icon));
     const copy=el('span',undefined,card);el('strong',name,copy);el('small',description,copy);card.append(EmberUI.icon('arrow','small'));
@@ -1300,7 +1311,7 @@ function renderChatWelcome(s){
 function renderChat(s){
   renderAgentActivity(s);
   const inFlight=sending||s.chat_activity?.state==='active';
-  if(inFlight)$('status').textContent='Working';
+  if(inFlight)$('status').textContent=(localRequest?.sid===s.session?.id&&localRequest?.kind==='plan_build'||s.chat_activity?.state==='active'&&s.chat_activity?.kind==='plan_build')?'Building':'Working';
   const messages=[...s.messages];
   if(localRequest&&localRequest.sid===s.session?.id&&!messages.some(m=>m.id===localRequest.turn_id))messages.push({id:localRequest.turn_id,role:'user',text:localRequest.text,status:'pending',created_at:localRequest.started_at});
   const key=JSON.stringify([s.session?.id,messages.map(({progress,activity,...message})=>message),s.requests.map(r=>r.decision),s.chat_activity?.state,s.project_brief,s.image_generation]);
@@ -1326,7 +1337,7 @@ function renderChat(s){
       if(m.status==='pending'||m.status==='failed'){
         const active=inFlight&&(s.chat_activity?.turn_id===m.id||localRequest?.turn_id===m.id);
         el('small',m.status==='failed'?'Reply failed: '+m.error:active?'Request in progress':'Reply interrupted; retry when ready.',bubble).className='message-status';
-        if(!active){const fresh=m.status==='failed'&&m.error?.includes('Send a new message to try again');
+        if(!active){const fresh=m.status==='failed'&&(m.error?.includes('Send a new message to try again')||/Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
           const retry=el('button',fresh?'Try a new reply':'Retry reply',bubble);retry.className='button';retry.disabled=inFlight;
           retry.onclick=()=>sendMessage(m.text,fresh?crypto.randomUUID():m.id)}
       }
@@ -1572,7 +1583,18 @@ async function requestPlaytestFix(body){
   catch(error){if(activeSession?.id===sid)$('error').textContent=error.message}
   finally{sending=false;localRequest=null;chatKey='';await refresh()}
 }
-async function sendMessage(text,id){if(sending||!activeSession||lastState?.chat_activity?.state==='active')return;sending=true;beginChatRequest(text,id);$('chat-send').disabled=true;$('chat-provider').disabled=true;try{await api('chat',{text,id});if($('chat-input').value.trim()===text)$('chat-input').value='';$('error').textContent=''}catch(e){$('error').textContent=e.message}finally{sending=false;localRequest=null;chatKey='';await refresh()}}
+async function sendMessage(text,id,planStart=null){
+  if(sending||!activeSession||lastState?.chat_activity?.state==='active')return;
+  if(planStart&&activeSession.id!==planStart.sid)return;
+  sending=true;beginChatRequest(text,id);
+  if(planStart){localRequest.kind='plan_build';localRequest.plan_start={title:planStart.title};renderChat(lastState);$('agent-progress').scrollIntoView({block:'nearest'});}
+  $('chat-send').disabled=true;$('chat-provider').disabled=true;
+  try{
+    await api(planStart?'plan-build':'chat',planStart?{session_id:planStart.sid,plan_ref:planStart.planRef}:{text,id});
+    if($('chat-input').value.trim()===text)$('chat-input').value='';$('error').textContent='';
+  }catch(e){$('error').textContent=e.message}
+  finally{sending=false;localRequest=null;chatKey='';await refresh()}
+}
 async function polishAction(sessionId,action,body){
   if(busy||sending)return;
   busy=true;

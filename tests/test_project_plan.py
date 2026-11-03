@@ -218,6 +218,67 @@ class ProjectPlanTests(unittest.TestCase):
         self.assertEqual(session_chat.transcript(self.folder)[0]['project_plan_snapshot']['binding']['ref'], plan_ref)
         self.assertFalse(chat_build.project(self.root,self.folder).exists())
 
+    def test_plan_start_generates_once_with_saved_building_status_and_exact_review(self):
+        ref = self.approve()
+        def model(root, folder, prompt, turn, **kw):
+            data = json.loads(prompt.split('\n', 1)[1])
+            self.assertEqual(data['project_plan']['binding']['ref'], ref)
+            self.assertEqual(data['project_plan']['selected_task'], 'task-1')
+            activity = session_chat.activity(folder)
+            self.assertEqual(activity['kind'], 'plan_build')
+            self.assertEqual(activity['state'], 'active')
+            self.assertEqual(activity['plan_start']['title'], self.document['scope']['features'][0])
+            return dict(response=json.dumps(dict(message='SYNTHETIC first task ready for review',
+                build=dict(title='First task', summary='Courier loop', files=[dict(path='index.html', content=HTML)]))))
+        with patch('ember_harness.session_chat.run_muse', side_effect=model) as muse, redirect_stdout(io.StringIO()):
+            first = self.app.start_plan_build(self.sid, ref)
+            second = self.app.start_plan_build(self.sid, ref)
+        self.assertEqual(muse.call_count, 1)
+        self.assertEqual(first, second)
+        self.assertEqual(len(chat_build.list_requests(self.folder)), 1)
+        self.assertIsNone(chat_build.list_requests(self.folder)[0]['decision'])
+        self.assertFalse(chat_build.project(self.root, self.folder).exists())
+        self.assertEqual(App(self.root).resume(self.sid)['chat_activity']['kind'], 'plan_build')
+        self.assertEqual(session_chat.activity(self.folder)['phase'], 'awaiting_review')
+
+    def test_plan_start_rejects_unapproved_stale_and_wrong_session_before_model_call(self):
+        ref = self.prepare()
+        with patch('ember_harness.session_chat.run_muse') as muse:
+            with self.assertRaisesRegex(ValueError, 'active approved'):
+                self.app.start_plan_build(self.sid, ref)
+            self.app.respond(ref, 'approve', 'SYNTHETIC scope approval')
+            with self.assertRaisesRegex(ValueError, 'active approved'):
+                self.app.start_plan_build(self.sid, 'f' * 64)
+            with self.assertRaisesRegex(ValueError, 'intended session'):
+                self.app.start_plan_build('f' * 24, ref)
+            muse.assert_not_called()
+        self.assertEqual(session_chat.transcript(self.folder), [])
+
+    def test_failed_plan_start_can_retry_without_duplicate_turns_or_losing_approval(self):
+        ref = self.approve()
+        with patch('ember_harness.session_chat.run_muse', side_effect=ValueError('SYNTHETIC model unavailable')):
+            with self.assertRaisesRegex(ValueError, 'model unavailable'):
+                self.app.start_plan_build(self.sid, ref)
+        self.assertEqual(session_chat.activity(self.folder)['state'], 'failed')
+        self.assertTrue(project_plan.status(self.root, self.folder)['active'])
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response='SYNTHETIC recovered')):
+            self.app.start_plan_build(self.sid, ref)
+        self.assertEqual(len(session_chat.transcript(self.folder)), 2)
+        self.assertEqual(session_chat.activity(self.folder)['kind'], 'plan_build')
+
+    def test_plan_revoked_between_start_and_context_stops_before_model_call(self):
+        ref = self.approve()
+        send = session_chat.send
+        def revoked(*args, **kwargs):
+            saved = project_plan.status(self.root, self.folder)
+            chat_build.harness(self.folder).revoke(saved['approved']['contract_id'],
+                approver='johnathan', reason='SYNTHETIC concurrent scope revocation')
+            return send(*args, **kwargs)
+        with patch('ember_harness.local_ui.send', side_effect=revoked), patch('ember_harness.session_chat.run_muse') as muse:
+            with self.assertRaisesRegex(ValueError, 'approved plan or starting task changed'):
+                self.app.start_plan_build(self.sid, ref)
+            muse.assert_not_called()
+
     def test_chat_prepares_plan_and_amendment_without_approving_or_writing_game(self):
         result = dict(message='Review this project plan.', build=None, plan=self.document,
                       brief_updates=dict(goal=self.document['scope']['game_concept']))
