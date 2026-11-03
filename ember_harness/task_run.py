@@ -791,7 +791,8 @@ def image(folder, run_id, index, name, stage='candidate'):
     if stage not in ('baseline', 'candidate'):
         raise ValueError('Choose starting or candidate evidence')
     name = name.removesuffix('.png') if isinstance(name, str) else None
-    if name not in tuple(view + suffix for view in ('desktop', 'mobile') for suffix in ('', '-action', '-panel', '-before', '-review')):
+    if name not in (tuple(view + suffix for view in ('desktop', 'mobile') for suffix in ('', '-action', '-panel', '-before', '-review')) +
+                    tuple('aspect-' + p['name'] for p in polish_runtime.ASPECT_RATIOS)):
         raise ValueError('Choose a saved task screenshot')
     report = completed_report(folder, run_id, index)
     if report is None:
@@ -800,8 +801,9 @@ def image(folder, run_id, index, name, stage='candidate'):
     if original is None:
         raise ValueError('No playable comparison baseline')
     filename = name + '.png'
-    if not any(row.get(key + 'screenshot') == filename for row in original['viewports']
-               for key in ('', 'before_', 'action_', 'panel_', 'review_')):
+    if not (any(row.get(key + 'screenshot') == filename for row in original['viewports']
+               for key in ('', 'before_', 'action_', 'panel_', 'review_')) or
+            any(row['screenshot'] == filename for row in original.get('aspect_ratios', []))):
         raise ValueError('This task screenshot was not observed')
     target = run_folder(folder, run_id) / 'captures' / str(0 if stage == 'baseline' else index) / 'output' / filename
     if target.is_symlink() or target.resolve() != target.absolute():

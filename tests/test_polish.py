@@ -79,9 +79,8 @@ class PolishTests(unittest.TestCase):
                 before_screenshot=name+'-before.png', before_sha256=polish_runtime.file_digest(output/(name+'-before.png'))))
         result = dict(complete=True, input_sha256=polish_runtime.file_digest(source), viewports=rows, basis='SYNTHETIC fixture, not real browser evidence')
         input_data=read_json(source)
-        if input_data.get('review_sheets'):
-            from quality_fixture import review_sheets
-            review_sheets(output, rows)
+        from quality_fixture import aspect_captures
+        aspect_captures(input_data, output, result)
         if input_data.get('gameplay_plan'):
             result['gameplay']=gameplay_fixture.result(input_data['gameplay_plan'])
         atomic_json(output/'report.json', result)

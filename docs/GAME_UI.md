@@ -27,10 +27,17 @@ stage-bounded dimensions and internal scrolling with a reachable close control.
 Use the states needed by the mechanic, preserving saved selectors and controls.
 Explicit approved layouts take precedence. Unrelated existing UI is preserved.
 
+The **game itself** fills its iframe viewport, including the embedded preview,
+fullscreen and standalone play. Avoid small fixed-width wrappers and width-only
+canvases. Observe stage size, update the renderer resolution and camera, and map
+pointer input to game coordinates without resetting play. Scale artwork uniformly;
+when a fixed playfield ratio is required, use the largest centered proportional
+fit with deliberate letterboxing. Mark the stage with `data-ember-game-stage`.
+
 ## Review the actual game view
 
 Chat proposal and ordinary task verification now have separate required
-`game-ui-integration` and `game-ui-style` visual criteria. Each requires evidence
+`game-viewport-fit`, `game-ui-integration` and `game-ui-style` visual criteria. Each requires evidence
 from both actual desktop and mobile captures. A positive global verdict or passing
 gameplay assertions cannot override an unmet UI criterion. Task failures feed the
 specific issue and retained screenshots into the next permitted repair; chat uses
@@ -46,10 +53,31 @@ redesign. Existing reviewed packets retain their frozen criteria.
 Being inside the stage does not excuse overlapping counters or clipped panels:
 those fail integration. Source evidence must be one verbatim contiguous candidate
 excerpt; abbreviations and explanations belong in the judgment's reason field.
+New browser inspections resize the same game document through these saved sizes:
+
+| Layout | Size |
+| --- | --- |
+| 16:9 | 1280 × 720 |
+| 16:10 | 1280 × 800 |
+| 4:3 | 1024 × 768 |
+| 21:9 | 1680 × 720 |
+| 9:16 | 360 × 640 |
+| Tall phone | 390 × 844 |
+| Phone landscape | 844 × 390 |
+
+Each size retains its screenshot, stage/renderer bounds, overflow, off-screen
+controls and whether the document survived resizing. Missing or changed evidence
+is rejected. `game-viewport-fit` requires every supplied ratio; a positive AI
+verdict cannot override observed overflow, clipped controls or a replaced game
+document. Stage fit, distorted artwork, pointer mapping and preservation of the
+actual gameplay state still require source, visual review and gameplay assertions.
+The document witness alone does not prove game-state preservation.
+
 The fixed browser driver also opens a discoverable Help/Settings/Pause button
 whose `aria-controls` points to a panel and captures that state. When available,
-the two panel images accompany the desktop/mobile game views in the bounded
-four-image review; movement captures are still retained. Panel bytes are checked
+the panel, movement and aspect-ratio images are included in labeled desktop/mobile
+contact sheets, retaining the four-image allowance for before/after review. Original
+captures remain individually accessible. Panel bytes are checked
 against the recorded hashes before evidence or repair feedback can be reused.
 
 The same implementation and review guidance reaches polish calls. Polish retains
@@ -61,3 +89,8 @@ Automated review is still a model's judgment. Offline tests verify routing,
 evidence requirements and repair behavior using synthetic judgments; they do not
 establish that a live generated UI looks good. Human preview and playtesting
 remain necessary to judge the result.
+
+For a local browser project, run `python tools/viewport_check.py --project PATH`
+with the normal optional browser tooling installed. It saves read-only Chromium
+evidence under `.harness/viewport-checks/`, makes no model calls and does not alter
+or approve the project. Retained older runs keep their original capture protocol.

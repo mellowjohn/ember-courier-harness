@@ -204,7 +204,13 @@ def image(root, folder, ref, name):
     report = status(root,folder)
     if not report or report['request_ref'] != ref or report['status']=='stale':
         raise ValueError('Choose a current verified proposal')
-    allowed = {p.name:p for p in images(folder,ref)}
+    original = load(folder, ref)['observations'].get('candidate', {})
+    filenames = {row[key] for row in original.get('viewports', [])
+                 for key, suffix in (('screenshot', ''), ('before_screenshot', '-before'),
+                     ('action_screenshot', '-action'), ('panel_screenshot', '-panel'), ('review_screenshot', '-review'))
+                 if row.get(key) == row['name'] + suffix + '.png'}
+    filenames.update(row['screenshot'] for row in original.get('aspect_ratios', []))
+    allowed = {name:workdir(folder,ref)/'candidate/output'/name for name in filenames}
     if name not in allowed:
         raise ValueError('Choose a recorded verification screenshot')
     return allowed[name].read_bytes()

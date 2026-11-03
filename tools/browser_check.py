@@ -21,7 +21,9 @@ from tools.release_check import source_manifest
 
 FILES = {
     'index.html': '<!doctype html><html><head><title>Browser QA fixture</title><link rel="stylesheet" href="style.css"></head>'
-                  '<body><h1>Original counter fixture</h1><button>Start</button><p id="score">0</p><script src="app.js"></script></body></html>',
+                  '<body><h1>Original counter fixture</h1><button title="\u2744 Throw \u2014 Frosty">Start</button>'
+                  '<p id="unicode-ui">YOU \u2764 3 \u2744\u00d71</p>'
+                  '<p id="score">0</p><script src="app.js"></script></body></html>',
     'style.css': 'body {background:#e8f0e4;color:#18251b;font:20px sans-serif;padding:20px}',
     'app.js': 'let score=0;const button=document.querySelector("button");'
               'button.onclick=()=>{button.textContent="Started";document.querySelector("#score").textContent=++score};'
@@ -125,6 +127,9 @@ def main(argv=None):
                         evidence=[dict(kind='gameplay',ref=str(c['scenario']),detail='SYNTHETIC passing scenario')]
                     elif method=='visual':
                         evidence=[dict(kind='capture',ref=v['screenshot'],detail='SYNTHETIC visual judgment') for v in data['observations']['viewports']]
+                        if c['id']=='game-viewport-fit':
+                            evidence += [dict(kind='capture',ref=v['screenshot'],detail='SYNTHETIC resize judgment')
+                                         for v in data['observations'].get('aspect_ratios', [])]
                     elif method!='human':
                         name,content=next(iter(data['files'].items()))
                         evidence=[dict(kind='source',ref=name,detail=content[:200])]

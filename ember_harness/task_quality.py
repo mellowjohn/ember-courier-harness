@@ -32,7 +32,7 @@ ASSESSMENT = dict(type='object', additionalProperties=False,
         id=dict(type='string', minLength=1, maxLength=80),
         status=dict(enum=['met', 'not_met', 'not_observed']),
         reason=dict(type='string', minLength=1, maxLength=1000),
-        evidence=dict(type='array', maxItems=8, items=dict(type='object', additionalProperties=False,
+        evidence=dict(type='array', maxItems=16, items=dict(type='object', additionalProperties=False,
             required=['kind', 'ref', 'detail'], properties=dict(
                 kind=dict(enum=['source', 'capture', 'gameplay']),
                 ref=dict(type='string', minLength=1, maxLength=200),
@@ -139,6 +139,14 @@ def prepare(plan):
         rows.append(dict(id='gameplay-' + str(index + 1), method='gameplay',
                          expectation=scenario['name'], scenario=index))
     rows.extend([
+        dict(id='game-viewport-fit', method='visual', expectation=
+            'For new games or viewport/UI changes, inspect every supplied aspect-ratio capture and resize '
+            'observation: the actual stage fills its viewport instead of remaining in a small fixed-size '
+            'wrapper. A deliberately fixed-ratio playfield uses the largest proportional centered fit. '
+            'Check 16:9, 16:10, 4:3, 21:9, portrait phones and short phone landscape for clipped controls, '
+            'unnecessary unused space, distorted artwork and lost game state. Cite every aspect-ratio '
+            'capture when supplied; inspect responsive camera, backing-resolution and pointer mapping in source. '
+            'For unrelated changes assess preservation and report existing layout limitations.'),
         dict(id='game-ui-integration', method='visual', expectation=
             'For UI introduced or changed by this task, inspect desktop and mobile game views: HUD, menus, '
             'instructions and controls are integrated into the game stage, leave the action area clear and '
@@ -205,6 +213,8 @@ def review(checklist, verdict, files, observations):
                     (ref == v.get('before_screenshot') and v.get('before_sha256')) or
                     (ref == v.get('action_screenshot') and v.get('action_sha256')) or
                     (ref == v.get('panel_screenshot') and v.get('panel_sha256')) for v in observations['viewports'])
+                supported = supported or any(ref == v.get('screenshot') and v.get('sha256')
+                    for v in observations.get('aspect_ratios', []))
             elif kind == 'gameplay':
                 scenarios = (observations.get('gameplay') or {}).get('scenarios', [])
                 supported = any(ref == str(i) and s['outcome'] == 'passed' for i, s in enumerate(scenarios))
@@ -220,6 +230,11 @@ def review(checklist, verdict, files, observations):
             blockers.append(row['id'] + ': visual review needs an attached capture reference.')
         if criterion['method'] == 'visual' and any(('capture', v['screenshot']) not in valid for v in observations['viewports']):
             blockers.append(row['id'] + ': review both desktop and mobile captures.')
+        if row['id'] == 'game-viewport-fit' and any(('capture', v['screenshot']) not in valid for v in observations.get('aspect_ratios', [])):
+            blockers.append(row['id'] + ': review every supplied aspect ratio.')
+        if row['id'] == 'game-viewport-fit':
+            from .polish_runtime import aspect_failures
+            blockers.extend(row['id'] + ': ' + issue for issue in aspect_failures(observations))
         if criterion['method'] == 'ai' and not any(k == 'source' for k, _ in valid):
             blockers.append(row['id'] + ': task and preservation judgments need a source reference.')
         if criterion['method'] == 'gameplay' and ('gameplay', str(criterion['scenario'])) not in valid:

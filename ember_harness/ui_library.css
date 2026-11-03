@@ -213,6 +213,38 @@ kbd { border-color: #504047; background: #252126; color: #dac6bb; border-radius:
 .voice-input small { font-size: 10px; color: #a99d97; }
 .preview-column { padding: 18px 20px; }
 .preview-column iframe { border-color: #5e4235!important; border-radius: 8px!important; background: #101012; }
+/* Let the live game take the panel's remaining space, including on tall displays. */
+.preview-column #build-result .build-version { margin: 0 0 4px; }
+.preview-column #build-result h3 { margin: 0; }
+.preview-column #build-result .game-toolbar { margin: 8px 0 0; }
+#build-result .playtest-area > .playtest-notes,
+#build-result > .panel > .browser-diagnostics { margin: 8px 0 0; }
+.playtest-notes > summary { font-size: 12px; }
+@media (min-width: 1000px) {
+  .preview-column { display: flex; flex-direction: column; }
+  .preview-column > * { flex: none; }
+  #proposal-preview-host:empty { display: none; }
+  #build-result { display: flex; flex-direction: column; flex: 1 0 auto; min-height: 0; }
+  .preview-column > #build-result > .panel {
+    display: flex; flex-direction: column; flex: 1; min-height: 0;
+  }
+  #build-result > .panel > * { flex: none; }
+  #build-result > .panel > .playtest-area {
+    display: flex; flex-direction: column; flex: 1; min-height: 0;
+  }
+  #build-result .playtest-area > iframe {
+    flex: 1; height: auto!important; min-height: 240px; width: 100%;
+  }
+  #build-result .playtest-area > details { flex: none; }
+  #build-result > .preview-empty { flex: 1; min-height: 320px; }
+}
+@media (max-width: 999px) {
+  #build-result .playtest-area > iframe { height: clamp(360px, 70dvh, 900px)!important; }
+}
+#build-result .playtest-area > iframe:fullscreen {
+  flex: none; width: 100vw!important; height: 100dvh!important;
+  min-height: 0; margin: 0!important; border: 0!important; border-radius: 0!important;
+}
 .preview-empty {
   min-height: clamp(320px, 51vh, 680px); position: relative; overflow: hidden; isolation: isolate;
   margin: 22px 0 18px; padding: 28px 22px; border: 1px solid #5e382b77; border-radius: 9px;

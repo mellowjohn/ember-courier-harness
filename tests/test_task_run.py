@@ -249,7 +249,7 @@ class TaskRunTests(unittest.TestCase):
                     filename = row['name'] + '-' + kind + '.png'
                     Image.new('RGB', (40, 30), color).save(output/filename)
                     row.update({kind + '_screenshot': filename, kind + '_sha256': file_digest(output/filename)})
-            review_sheets(output, result['viewports'])
+            review_sheets(output, result['viewports'], result.get('aspect_ratios', []))
             atomic_json(output/'report.json', result)
             return result
         def reviewing(root, folder, prompt, phase, **kwargs):
@@ -259,7 +259,9 @@ class TaskRunTests(unittest.TestCase):
                 self.assertEqual([row['stage'] for row in data['image_order']], ['baseline', 'baseline', 'candidate', 'candidate'])
                 for path, record in zip(kwargs['images'], data['image_order']):
                     self.assertTrue(record['ref'].endswith('-review.png'))
-                    self.assertEqual(len(record['contains']), 4)
+                    from ember_harness.polish_runtime import ASPECT_RATIOS
+                    group = 'desktop' if path.name.startswith('desktop') else 'mobile'
+                    self.assertEqual(len(record['contains']), 4 + sum(p['group'] == group for p in ASPECT_RATIOS))
                     self.assertTrue(any(name.endswith('-action.png') for name in record['contains']))
                     self.assertTrue(any(name.endswith('-panel.png') for name in record['contains']))
                     with Image.open(path) as sheet:

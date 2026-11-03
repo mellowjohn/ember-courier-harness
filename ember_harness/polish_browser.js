@@ -91,7 +91,7 @@ async function reviewSheet(browser,name,files){
   // Fixed, bounded image packing inside the same gated browser invocation.
   // Labels identify the original evidence refs; all originals remain retained.
   const tileWidth=name==='desktop'?800:390,tileHeight=Math.ceil(tileWidth*(name==='desktop'?740/1100:844/390));
-  const context=await browser.newContext({viewport:{width:tileWidth*2,height:(tileHeight+28)*2},deviceScaleFactor:1,
+  const context=await browser.newContext({viewport:{width:tileWidth*2,height:(tileHeight+28)*Math.ceil(files.length/2)},deviceScaleFactor:1,
     serviceWorkers:'block',acceptDownloads:false});
   try{
     await context.route('**/*',route=>route.abort());
@@ -106,10 +106,38 @@ async function reviewSheet(browser,name,files){
     return {review_screenshot:filename,review_sha256:hash(bytes),review_sources:files};
   }finally{await context.close()}
 }
+async function aspectCaptures(page,body,name){
+  const results=[],original=page.viewportSize();
+  // Resize the same live game document, rather than loading a fresh game for each ratio.
+  const witness=await body.evaluate(()=>globalThis.__emberResizeWitness=Math.random().toString(36));
+  for(const profile of (input.aspect_ratios||[]).filter(p=>p.group===name)){
+    await page.setViewportSize({width:profile.width,height:profile.height});
+    await page.waitForTimeout(120);
+    const layout=await body.evaluate((el,witness)=>{
+      const rect=n=>{const r=n.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}};
+      const visible=n=>{const r=n.getBoundingClientRect(),s=getComputedStyle(n);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};
+      const renderers=[...el.querySelectorAll('canvas,svg')].filter(visible).sort((a,b)=>b.clientWidth*b.clientHeight-a.clientWidth*a.clientHeight);
+      const renderer=renderers[0];
+      const stage=el.querySelector('[data-ember-game-stage]')||renderer?.closest('#stage,.stage,main,[role="application"]')||el.querySelector('main,[role="application"],#game-stage');
+      const clipped=[...el.querySelectorAll('button,input,select,textarea,[role="button"]')].filter(visible).filter(n=>{
+        const r=n.getBoundingClientRect();return r.left < -2||r.top < -2||r.right > innerWidth+2||r.bottom > innerHeight+2;
+      }).slice(0,12).map(n=>(n.getAttribute('aria-label')||n.textContent||n.id).trim().slice(0,100));
+      return {viewport:{width:innerWidth,height:innerHeight},stage:stage?rect(stage):null,
+        renderer:renderer?rect(renderer):null,document_preserved:globalThis.__emberResizeWitness===witness,
+        horizontal_overflow:el.ownerDocument.documentElement.scrollWidth>innerWidth+2,
+        clipped_controls:clipped};
+    },witness);
+    const filename='aspect-'+profile.name+'.png';
+    await page.screenshot({path:path.join(output,filename),animations:'disabled'});
+    results.push({...profile,layout,screenshot:filename,sha256:hash(fs.readFileSync(path.join(output,filename)))});
+  }
+  if(results.length){await page.setViewportSize(original);await page.waitForTimeout(120)}
+  return results;
+}
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
   const browser=await chromium.launch({headless:true,executablePath:process.env.EMBER_BROWSER_EXECUTABLE});
-  const results=[];
+  const results=[],ratios=[];
   try{
     for(const name of ['desktop','mobile']){
       const {context,page,frame,errors:observations}=await openGame(browser,name);
@@ -140,6 +168,7 @@ async function reviewSheet(browser,name,files){
       if(sprites?.missingEntities.length)observations.push('Sprite entities were not observed drawing their bound artwork: '+sprites.missingEntities.join(', '));
       const screenshot=path.join(output,name+'.png');
       await page.screenshot({path:screenshot,animations:'disabled'});
+      const aspectViews=await aspectCaptures(page,body,name);ratios.push(...aspectViews);
       let panelCapture={};
       const panelButtons=frame.locator('button[aria-controls]:visible:enabled');
       for(let i=0;i<Math.min(await panelButtons.count(),8);i++){
@@ -159,7 +188,7 @@ async function reviewSheet(browser,name,files){
           }
         }catch{/* Missing panel evidence stays unobserved; gameplay captures remain available. */}
       }
-      const reviewCapture=input.review_sheets?await reviewSheet(browser,name,[name+'.png',name+'-before.png',name+'-action.png',...(panelCapture.panel_screenshot?[panelCapture.panel_screenshot]:[])]):{};
+      const reviewCapture=input.review_sheets?await reviewSheet(browser,name,[name+'.png',name+'-before.png',name+'-action.png',...(panelCapture.panel_screenshot?[panelCapture.panel_screenshot]:[]),...aspectViews.map(v=>v.screenshot)]):{};
       results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,...(sprites?{sprites}:{}),...reviewCapture,
                     ...panelCapture,
                     screenshot:path.basename(screenshot),sha256:hash(fs.readFileSync(screenshot)),
@@ -170,6 +199,7 @@ async function reviewSheet(browser,name,files){
     const checks=await gameplay(browser);
     const mechanics=await mechanicObservations(browser);
     const report={complete:true,input_sha256:hash(fs.readFileSync(process.argv[2])),viewports:results,
+      ...(input.aspect_ratios?{aspect_ratios:ratios}:{}),
       ...(checks?{gameplay:checks}:{}),
       ...(mechanics?{mechanics}:{}),
       basis:'Real Chromium input and screenshots; DOM and error text are untrusted observations, not gameplay proof.'};

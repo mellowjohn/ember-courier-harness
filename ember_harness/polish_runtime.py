@@ -9,6 +9,28 @@ import time
 from .recovery import read_json
 
 DRIVER = Path(__file__).with_name('polish_browser.js')
+ASPECT_RATIOS = [
+    dict(name='wide-16-9', group='desktop', width=1280, height=720),
+    dict(name='wide-16-10', group='desktop', width=1280, height=800),
+    dict(name='standard-4-3', group='desktop', width=1024, height=768),
+    dict(name='ultrawide-21-9', group='desktop', width=1680, height=720),
+    dict(name='portrait-9-16', group='mobile', width=360, height=640),
+    dict(name='phone-portrait', group='mobile', width=390, height=844),
+    dict(name='phone-landscape', group='mobile', width=844, height=390),
+]
+
+
+def aspect_failures(observed):
+    issues = []
+    for row in observed.get('aspect_ratios', []):
+        layout = row['layout']
+        if not layout['document_preserved']:
+            issues.append(row['name'] + ': resizing replaced the running game document')
+        if layout['horizontal_overflow']:
+            issues.append(row['name'] + ': game overflows the viewport horizontally')
+        if layout['clipped_controls']:
+            issues.append(row['name'] + ': controls outside viewport: ' + ', '.join(layout['clipped_controls']))
+    return issues
 
 
 def file_digest(path):
@@ -124,6 +146,27 @@ def verified_report(source, output):
             if row['panel_screenshot'] != name or target.is_symlink() or file_digest(target) != row.get('panel_sha256'):
                 raise ValueError('Browser panel capture changed')
     request = read_json(source)
+    ratios = request.get('aspect_ratios', [])
+    if ratios and ratios != ASPECT_RATIOS:
+        raise ValueError('Unsupported aspect-ratio capture protocol')
+    captures = data.get('aspect_ratios', [])
+    if len(captures) != len(ratios):
+        raise ValueError('Missing or unexpected aspect-ratio evidence')
+    for profile, capture in zip(ratios, captures):
+        filename = 'aspect-' + profile['name'] + '.png'
+        target = output / filename
+        if (any(capture.get(key) != value for key, value in profile.items()) or
+                capture.get('screenshot') != filename or target.is_symlink() or
+                file_digest(target) != capture.get('sha256') or
+                not isinstance(capture.get('layout'), dict)):
+            raise ValueError('Aspect-ratio screenshot evidence changed')
+        layout = capture['layout']
+        if (layout.get('viewport') != {k: profile[k] for k in ('width', 'height')} or
+                any(type(layout.get(key)) is not bool for key in ('document_preserved', 'horizontal_overflow')) or
+                not isinstance(layout.get('clipped_controls'), list) or
+                len(layout['clipped_controls']) > 12 or
+                any(not isinstance(label, str) or len(label) > 100 for label in layout['clipped_controls'])):
+            raise ValueError('Invalid aspect-ratio layout observations')
     if request.get('mechanic_binding'):
         from .mechanic_recipes import validate_report
         validate_report(request['mechanic_binding'], data.get('mechanics'))
@@ -133,6 +176,7 @@ def verified_report(source, output):
         if request.get('review_sheets'):
             names = [row['name'] + '.png', row['name'] + '-before.png']
             names += [row[key + '_screenshot'] for key in ('action', 'panel') if row.get(key + '_screenshot')]
+            names += [capture['screenshot'] for capture in captures if capture['group'] == row['name']]
             target = output / (row['name'] + '-review.png')
             if (row.get('review_screenshot') != target.name or row.get('review_sources') != names or
                     target.is_symlink() or file_digest(target) != row.get('review_sha256')):

@@ -13,6 +13,7 @@ const { chromium } = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright'
       Object.defineProperty(window, 'webkitSpeechRecognition', { value: undefined });
     });
     await unsupported.goto(url);
+    await unsupported.locator('.playtest-notes > summary').click();
     await unsupported.locator('#playtest-notes').waitFor();
     for (const label of ['Dictate chat message', 'Dictate playtest notes'])
       assert(await unsupported.getByRole('button', { name: label, exact: true }).isDisabled());
@@ -42,7 +43,7 @@ const { chromium } = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright'
     });
     await page.goto(url);
     const chat = page.locator('#chat-input'), notes = page.locator('#playtest-notes');
-    await notes.waitFor();
+    await notes.waitFor({ state: 'attached' });
     await page.getByRole('button', { name: 'Tester agent', exact: true }).click();
     assert(await notes.evaluate(n => document.activeElement === n));
     assert(await page.locator('#finding-form').isHidden());
@@ -86,6 +87,7 @@ const { chromium } = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright'
     await emit([['old session speech', true]]); assert.equal(await chat.inputValue(), '');
     assert(await page.evaluate(() => window.speechInstances.at(-1).aborted));
     await page.locator('.session-item').filter({ hasText: 'SYNTHETIC browser QA rehearsal' }).click();
+    await page.locator('.playtest-notes > summary').click();
     await notes.waitFor();
 
     // Starting notes dictation ends chat dictation; submission ends notes dictation.

@@ -282,7 +282,7 @@ function renderQualityCheck(s){
   if(report.issues?.length){const list=el('ul',undefined,area);for(const issue of report.issues)el('li',issue,list);}
   if(report.status!=='stale'&&observed){
     const captures=el('details',undefined,area);el('summary','View game screenshots',captures);
-    for(const view of observed.viewports){for(const name of [view.screenshot,view.action_screenshot].filter(Boolean)){
+    for(const view of [...observed.viewports,...(observed.aspect_ratios||[])]){for(const name of [view.screenshot,view.action_screenshot].filter(Boolean)){
       const figure=el('figure',undefined,captures);figure.className='artwork-preview';
       el('figcaption',view.name+(name===view.action_screenshot?' · during movement':' · after input'),figure);
       const img=el('img',undefined,figure);img.alt=view.name+' game verification · '+name;const note=el('small',undefined,figure);
@@ -291,6 +291,7 @@ function renderQualityCheck(s){
         .then(blob=>{if(img.isConnected){const url=URL.createObjectURL(blob);qualityURLs.push(url);img.src=url}})
         .catch(error=>{if(img.isConnected){img.hidden=true;note.textContent=error.message}});
     }}
+    if(observed.aspect_ratios?.length)detail('Aspect ratio observations',observed.aspect_ratios.map(({name,width,height,layout})=>({name,width,height,layout})),captures);
     detail('Executed gameplay checks',report.checks,captures);
   }
   if(['needs_changes','unavailable'].includes(report.status)){
@@ -954,7 +955,7 @@ function renderTaskResult(sid,run,parent,previous=null){
     const compare=el('button','View task screenshots · attempt '+index,row);compare.className='button';compare.type='button';
     compare.onclick=async()=>{compare.disabled=true;const grid=el('div',undefined,row);grid.className='options';try{
       const stages=run.comparison?.baseline_status==='captured'?[['baseline','Starting game',report.comparison?.baseline_observations||run.baseline_observations],['candidate','Proposed game',report.observations]]:[['candidate','Proposed game',report.observations]];
-      for(const [stage,title,observations] of stages){const column=el('section',undefined,grid);el('h4',title,column);for(const view of observations?.viewports||[]){for(const name of [view.screenshot,view.action_screenshot,view.panel_screenshot].filter(Boolean)){el('p',view.name+' · '+name,column);await taskScreenshot(sid,run.id,index,name,column,stage)}}}
+      for(const [stage,title,observations] of stages){const column=el('section',undefined,grid);el('h4',title,column);for(const view of [...(observations?.viewports||[]),...(observations?.aspect_ratios||[])]){for(const name of [view.screenshot,view.action_screenshot,view.panel_screenshot].filter(Boolean)){el('p',view.name+' · '+name,column);await taskScreenshot(sid,run.id,index,name,column,stage)}}}
     }catch(error){el('p','Evidence unavailable: '+error.message,grid);compare.disabled=false}};
     detail('Saved checks and independent assessment',report,row);
   }
@@ -972,7 +973,7 @@ async function taskAction(sessionId,action,body){
   finally{busy=false;current='';await refresh();if(workspaceNavigation===navigation){showWorkspace('chat');if(action==='prepare-fix')$('task-run-list').scrollIntoView({block:'nearest'});if(action==='promote')$('review').scrollIntoView({block:'nearest'})}}
 }
 const findingScenarios=new Map();
-function openFindings(){showWorkspace('chat');const note=$('playtest-notes');(note||$('build-result')).scrollIntoView({block:'nearest'});note?.focus({preventScroll:true})}
+function openFindings(){showWorkspace('chat');const note=$('playtest-notes');if(note)note.closest('details').open=true;(note||$('build-result')).scrollIntoView({block:'nearest'});note?.focus({preventScroll:true})}
 async function findingAction(sid,action,body){
   if(busy||sending)return;busy=true;
   try{await api('finding',{session_id:sid,action,...body});$('error').textContent=''}
@@ -1425,11 +1426,12 @@ function prototypeFrame(parent,title){
 function detachedPreview(html,title){
   if(detachedPreviewURL)URL.revokeObjectURL(detachedPreviewURL);
   const doc=document.implementation.createHTMLDocument(title);
+  const charset=doc.createElement('meta');charset.setAttribute('charset','utf-8');doc.head.prepend(charset);
   const viewport=doc.createElement('meta');viewport.name='viewport';viewport.content='width=device-width,initial-scale=1';doc.head.append(viewport);
   const style=doc.createElement('style');style.textContent='html,body{margin:0;height:100%;background:#111715;color:#d7e5da;font:13px system-ui}body{display:flex;flex-direction:column}header{padding:12px 20px;display:flex;gap:16px;flex-wrap:wrap}span{color:#9aafa1}iframe{width:100%;border:0;flex:1;min-height:0;background:white}';doc.head.append(style);
   const header=doc.createElement('header');header.textContent=title;const note=doc.createElement('span');note.textContent='Separate play session · Return to Ember to refine your game';header.append(note);doc.body.append(header);
   const frame=doc.createElement('iframe');frame.title='Full-window game preview';frame.setAttribute('sandbox','allow-scripts');frame.referrerPolicy='no-referrer';frame.srcdoc=previewDocument(html);doc.body.append(frame);
-  detachedPreviewURL=URL.createObjectURL(new Blob(['<!doctype html>'+doc.documentElement.outerHTML],{type:'text/html'}));
+  detachedPreviewURL=URL.createObjectURL(new Blob(['<!doctype html>'+doc.documentElement.outerHTML],{type:'text/html;charset=utf-8'}));
   return detachedPreviewURL;
 }
 async function downloadVersion(version,button,handoffSession=null){
@@ -1593,17 +1595,18 @@ function renderBuild(s){
     $('error').textContent='';
     box.querySelector('.playtest-area')?.remove();const panel=el('section');panel.className='playtest-area';toolbar.after(panel);
     const frame=prototypeFrame(panel,'Approved browser prototype');
-    const details=el('details',undefined,panel);el('summary','Browser observations',details);
+    const notes=el('details',undefined,panel);notes.className='playtest-notes';el('summary','Playtest notes & browser observations',notes);
+    const details=el('details',undefined,notes);el('summary','Browser observations',details);
     const observed=el('pre','No browser errors observed yet. Try the controls and gameplay.',details);
     el('small','Generated code can influence these observations. They are diagnostic clues.',details);
-    el('p','Want something changed? Tell Ember in chat, or leave a playtest note below.',panel).className='playtest-guidance';
-    const label=el('label','Playtest notes',panel),note=el('textarea',undefined,label);note.id='playtest-notes';note.maxLength=2000;
+    el('p','Want something changed? Tell Ember in chat, or leave a playtest note below.',notes).className='playtest-guidance';
+    const label=el('label','Playtest notes',notes),note=el('textarea',undefined,label);note.id='playtest-notes';note.maxLength=2000;
     note.placeholder='What did you try? What happened, and what should have happened?';
-    EmberVoice.attach(note,panel,'playtest notes',()=>activeSession?.id);
-    el('small','Describe the problem and choose Find & fix bug. Ember will investigate and prepare changes for your review.',panel);
+    EmberVoice.attach(note,notes,'playtest notes',()=>activeSession?.id);
+    el('small','Describe the problem and choose Find & fix bug. Ember will investigate and prepare changes for your review.',notes);
     const state={sid,frame,channel:result.channel,observed,observations:[]};previewState=state;
     for(const [outcome,title] of [['works','Works as expected'],['problem','Find & fix bug']]){
-      const save=el('button',title,panel);save.className='button'+(outcome==='problem'?' primary':'');
+      const save=el('button',title,notes);save.className='button'+(outcome==='problem'?' primary':'');
       save.onclick=async()=>{try{
         if(activeSession?.id!==sid)throw new Error('Reopen the preview in the selected session.');
         if(busy||sending||lastState?.chat_activity?.state==='active')throw new Error('Let the current request finish before sending more notes.');

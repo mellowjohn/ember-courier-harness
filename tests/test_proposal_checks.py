@@ -35,6 +35,8 @@ class ProposalCheckTests(unittest.TestCase):
         observed=gameplay_fixture.result(request['gameplay_plan'],failed='SYNTHETIC_BROKEN' in request['html'])
         report=dict(complete=True,input_sha256=polish_runtime.file_digest(source),viewports=viewports,gameplay=observed,
                     basis='SYNTHETIC capture fixture, not Chromium evidence')
+        from quality_fixture import aspect_captures
+        aspect_captures(request, output, report)
         atomic_json(output/'report.json',report);return report
 
     def run_check(self,report_id='proposal-check-test-01'):

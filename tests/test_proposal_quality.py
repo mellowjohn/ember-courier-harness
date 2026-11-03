@@ -42,12 +42,14 @@ class ProposalQualityTests(unittest.TestCase):
         observed=gameplay_result(data['gameplay_plan'],self.failed) if data['gameplay_plan']['scenarios'] else None
         report=dict(complete=True,input_sha256=polish_runtime.file_digest(source),viewports=rows,
                     **(dict(gameplay=observed) if observed else {}),basis='SYNTHETIC, not real Chromium')
+        from quality_fixture import aspect_captures
+        aspect_captures(data, output, report)
         atomic_json(output/'report.json',report);return report
 
     def review(self,root,folder,prompt,request_id,**kwargs):
         self.calls.append((prompt,kwargs));data=json.loads(prompt.split('\n',1)[1])
         self.assertIn(chat_build.GAME_UI_REVIEW_INSTRUCTION, prompt)
-        self.assertEqual(len(kwargs['images']),4)
+        self.assertEqual(len(kwargs['images']),2)
         self.assertEqual(data['image_order'],[p.name for p in kwargs['images']])
         for path in kwargs['images']:
             with Image.open(path) as image:self.assertEqual(image.getpixel((0,0)),(0,128,0))
@@ -154,14 +156,17 @@ class ProposalQualityTests(unittest.TestCase):
                 name = row['name'] + '-panel.png'
                 Image.new('RGB', (32, 24), 'green').save(output / name)
                 row.update(panel_screenshot=name, panel_sha256=polish_runtime.file_digest(output/name))
+            from quality_fixture import review_sheets
+            review_sheets(output, report['viewports'], report.get('aspect_ratios', []))
             atomic_json(output/'report.json', report)
             return report
         with patch('ember_harness.polish_runtime.inspect', side_effect=panels):
             ref = self.propose(); report = self.run_quality(ref)
         self.assertEqual(report['status'], 'passed', report['issues'])
         attached = self.calls[0][1]['images']
-        self.assertEqual([p.name for p in attached], ['desktop.png', 'mobile.png', 'desktop-panel.png', 'mobile-panel.png'])
-        attached[-1].write_bytes(b'changed panel')
+        self.assertEqual([p.name for p in attached], ['desktop-review.png', 'mobile-review.png'])
+        output = proposal_quality.workdir(self.folder, ref)/'candidate/output'
+        (output/'mobile-panel.png').write_bytes(b'changed panel')
         with self.assertRaisesRegex(ValueError, 'panel capture changed'):
             proposal_quality.load(self.folder, ref)
 
@@ -176,7 +181,7 @@ class ProposalQualityTests(unittest.TestCase):
         output = proposal_quality.workdir(self.folder, ref)/'candidate/output'
         Image.new('RGB', (32, 24), 'red').save(output/'mobile-panel.png')
         self.assertEqual([p.name for p in proposal_quality.images(self.folder, ref)],
-                         ['desktop.png', 'mobile.png', 'desktop-action.png', 'mobile-action.png'])
+                         ['desktop-review.png', 'mobile-review.png'])
 
     def test_saved_checks_are_retained_when_new_checks_are_added(self):
         gameplay.save(self.folder,PLAN,0);extra=deepcopy(PLAN);extra['scenarios'][0]['name']='New interaction'
@@ -192,7 +197,7 @@ class ProposalQualityTests(unittest.TestCase):
             kwargs['images'][0].write_bytes(b'Changed during review')
             return verdict
         with patch('ember_harness.proposal_quality.run_muse',side_effect=changed):
-            with self.assertRaisesRegex(ValueError,'screenshot evidence changed'):
+            with self.assertRaisesRegex(ValueError,'contact sheet changed'):
                 self.run_quality(ref)
         self.assertIsNone(proposal_quality.load(self.folder,ref))
 
@@ -214,7 +219,7 @@ class ProposalQualityTests(unittest.TestCase):
         revised=dict(message='SYNTHETIC requested visual repair',build=dict(title='Warmer counter',summary='Repair the palette',
             edits=[dict(path='style.css',before=builds.PROJECT['style.css'],after='body { background: #ff914d; color: #241b2f; }')]),gameplay_checks=PLAN)
         def repair(*args,**kwargs):
-            self.assertEqual(len(kwargs['images']),4)
+            self.assertEqual(len(kwargs['images']),2)
             data=json.loads(args[2].split('\n',1)[1])
             self.assertEqual(data['proposal_context']['files'],builds.PROJECT)
             self.assertEqual(data['proposal_context']['verification']['original_ask'],'Build or revise a counter')
