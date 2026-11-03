@@ -126,7 +126,7 @@ a host-level race, as in the base contract implementation.
 
 ```powershell
 py examples/asset_demo.py
-py -m unittest discover -s tests -p test_assets.py -v
+py tools/offline_tests.py --pattern test_assets.py
 py tools/release_check.py
 ```
 

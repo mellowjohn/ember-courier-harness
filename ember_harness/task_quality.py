@@ -16,7 +16,9 @@ INSTRUCTION = ('Assess every frozen quality criterion exactly once with id, stat
     'reason and evidence. Evidence uses kind, ref and detail: source refs are filenames with exact source excerpts '
     'as detail. Each source detail must be one exact contiguous excerpt of at least 12 characters copied '
     'verbatim from the candidate file, with no ellipses, paraphrase, combined fragments or explanatory text. '
-    'Put explanations in reason. Capture refs are attached screenshot filenames with a visual explanation; gameplay refs are '
+    'Put explanations in reason. Capture refs are attached screenshot filenames with a visual explanation. '
+    'When attachments are contact sheets, capture refs use the original labeled filenames in image_order.contains, '
+    'not the sheet filename. Gameplay refs are '
     'zero-based scenario indices as strings with observed behavior as detail. Visual criteria need both desktop '
     'and mobile captures; gameplay criteria need their matching passing scenario. AI criteria, including coverage '
     'when present, need a candidate source excerpt even if they also cite gameplay. Human criteria must remain '
@@ -35,6 +37,91 @@ ASSESSMENT = dict(type='object', additionalProperties=False,
                 kind=dict(enum=['source', 'capture', 'gameplay']),
                 ref=dict(type='string', minLength=1, maxLength=200),
                 detail=dict(type='string', minLength=1, maxLength=1000))))))
+
+COMPARISON_SCHEMA = dict(type='object', additionalProperties=False,
+    required=['improved', 'improvement', 'losses', 'evidence'], properties=dict(
+        improved=dict(type='boolean'), improvement=dict(type='string', minLength=1, maxLength=2000),
+        losses=dict(type='array', maxItems=8, items=dict(type='string', minLength=1, maxLength=1000)),
+        evidence=dict(type='array', maxItems=24, items=dict(type='object', additionalProperties=False,
+            required=['kind', 'ref', 'detail'], properties=dict(
+                kind=dict(enum=['source', 'capture', 'gameplay', 'baseline_source', 'baseline_capture', 'baseline_gameplay']),
+                ref=dict(type='string', minLength=1, maxLength=200),
+                detail=dict(type='string', minLength=1, maxLength=1000))))))
+
+COMPARISON_INSTRUCTION = ('Compare the original starting experience with the candidate, using the same frozen checks '
+    'and desktop/mobile capture protocol. Return comparison with improved, improvement, losses and evidence. '
+    'Identify the specific requested improvement and any lost behavior or presentation. A cosmetic-only change does '
+    'not satisfy an interaction task; changed source or a new verdict does not prove an improved experience. '
+    'Set improved false when the task has not meaningfully improved or cannot be observed; list regressions in losses. '
+    'Evidence uses source/capture/gameplay for the candidate and baseline_source/baseline_capture/baseline_gameplay '
+    'for the original. Source evidence quotes exact excerpts of at least 12 characters; candidate evidence must '
+    'include changed source. Cite both desktop.png and mobile.png captures on each available side and at least '
+    'one relevant gameplay scenario on each side. Attached per-viewport contact sheets label all contained '
+    'original captures in image_order.contains, including initial, movement and open-panel states. Cite those '
+    'original filenames, not the sheet filename. Inspect every relevant contained state. '
+    'Baseline scenario failures are useful before observations and '
+    'must not be hidden. For no_playable_baseline explicitly say there is no playable comparison baseline; judge '
+    'the new implementation against the frozen task without inventing a before experience. This remains an AI '
+    'comparison judgment; human playtesting stays pending.')
+
+
+def comparison_schema(base):
+    result = deepcopy(base)
+    result['required'].append('comparison')
+    result['properties']['comparison'] = COMPARISON_SCHEMA
+    return result
+
+
+def compare(frozen, verdict, files, baseline, observations, baseline_observations):
+    """Validate paired evidence, without treating the model's interpretation as proof."""
+    assessment = verdict.get('comparison')
+    blockers = []
+    if assessment is None:
+        return dict(assessment=None, blockers=['Comparison: review the requested improvement and losses against the starting experience.'])
+    Draft202012Validator(COMPARISON_SCHEMA).validate(assessment)
+    valid = set()
+    for item in assessment['evidence']:
+        kind, ref, detail = item['kind'], item['ref'], item['detail']
+        original = kind.startswith('baseline_')
+        method = kind.removeprefix('baseline_')
+        source, observed = (baseline, baseline_observations) if original else (files, observations)
+        supported = False
+        if original and frozen['baseline_status'] != 'captured':
+            pass
+        elif method == 'source':
+            supported = ref in source and len(detail.strip()) >= 12 and detail in source[ref]
+        elif observed and method == 'capture':
+            supported = any((ref == row.get(key + 'screenshot') and row.get(key + 'sha256'))
+                for row in observed['viewports'] for key in ('', 'before_', 'action_', 'panel_'))
+        elif observed and method == 'gameplay':
+            # A failed baseline check is still an observed before state.
+            supported = any(ref == str(i) and row.get('outcome') in ('passed', 'failed')
+                and (original or row['outcome'] == 'passed')
+                for i, row in enumerate((observed.get('gameplay') or {}).get('scenarios', [])))
+        if supported:
+            valid.add((kind, ref))
+        else:
+            blockers.append('Comparison: unsupported ' + kind + ' evidence reference ' + ref)
+    if not assessment['improved']:
+        blockers.append('Comparison: no observed task improvement — ' + assessment['improvement'])
+    blockers.extend('Comparison: lost behavior or presentation — ' + loss for loss in assessment['losses'])
+    changed = any(item['kind'] == 'source' and ('source', item['ref']) in valid and
+        files.get(item['ref']) != baseline.get(item['ref'])
+        for item in assessment['evidence'])
+    if not changed:
+        blockers.append('Comparison: cite changed candidate source supporting the requested improvement.')
+    for prefix, observed in [('', observations), ('baseline_', baseline_observations)]:
+        if prefix and frozen['baseline_status'] != 'captured':
+            continue
+        for row in (observed or {}).get('viewports', []):
+            if (prefix + 'capture', row['screenshot']) not in valid:
+                blockers.append('Comparison: review both ' + ('starting' if prefix else 'candidate') + ' desktop and mobile captures.')
+        if observed is None or not any(kind == prefix + 'gameplay' for kind, _ in valid):
+            blockers.append('Comparison: cite a relevant ' + ('starting' if prefix else 'candidate') + ' gameplay scenario.')
+        if prefix and not any(kind == 'baseline_source' for kind, _ in valid):
+            blockers.append('Comparison: cite the starting source for the before experience.')
+    return dict(assessment=deepcopy(assessment), blockers=blockers,
+        basis='Host-checked paired evidence references; improvement and losses are AI judgments. Human playtesting remains pending.')
 
 
 def prepare(plan):
@@ -115,6 +202,7 @@ def review(checklist, verdict, files, observations):
                 supported = ref in files and len(detail.strip()) >= 12 and detail in files[ref]
             elif kind == 'capture':
                 supported = any((ref == v.get('screenshot') and v.get('sha256')) or
+                    (ref == v.get('before_screenshot') and v.get('before_sha256')) or
                     (ref == v.get('action_screenshot') and v.get('action_sha256')) or
                     (ref == v.get('panel_screenshot') and v.get('panel_sha256')) for v in observations['viewports'])
             elif kind == 'gameplay':

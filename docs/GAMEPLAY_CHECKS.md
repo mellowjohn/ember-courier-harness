@@ -35,6 +35,31 @@ scenario are skipped; other scenarios still run. Duplicate, missing or hidden
 targets fail actions and text checks. **Hidden or absent** deliberately accepts
 a missing target.
 
+## Review interaction coverage
+
+In the scenario editor, optionally label the purpose of a check: discovering how
+to start, success, failure, restart, or repeated play. These labels are declarations
+by the plan author. They do not establish that the steps test that behavior;
+scenario names and selector names are never treated as coverage evidence.
+For repeated play, include the restart and second interaction in the same
+scenario, because each scenario starts a fresh game.
+
+The task review maps the selected task to these declared scenarios and shows
+paths that have no declared check. Keyboard and touch paths are listed separately
+only when their corresponding input action has a later observable expectation;
+this still does not prove that the input caused the reported state. Review which
+paths apply to the selected task and improve checks using this same editor.
+Suggestions stay within the existing four-scenario, sixteen-step and action-budget
+limits. Saving changed coverage labels changes the plan hash, just like editing
+its steps; previously frozen runs keep their reviewed plan.
+
+Missing coverage is a review prompt, not an added feature requirement or an
+automatic failure. Every configured scenario remains required by task workers,
+including failing restart, second-playthrough and mobile paths. A passing first
+playthrough cannot override any of those failures. DOM observations influenced
+by game code do not independently verify physics, scoring, accessibility or fun;
+unsupported measurements and human experience remain unobserved.
+
 ## Run and understand the report
 
 Choose **Run gameplay checks** with a saved plan and a completed approved game.

@@ -2,6 +2,7 @@
 from copy import deepcopy
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -11,7 +12,17 @@ from .amendments import compile_proposal, record_path
 
 
 def git(repo, *args):
-    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True).stdout
+    # Verification must not inherit repository redirection, config injection,
+    # credential helpers, fsmonitor commands or transport permission from the host.
+    env = {key: value for key, value in os.environ.items() if not key.upper().startswith('GIT_')}
+    env.update(GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull,
+               GIT_ATTR_NOSYSTEM='1', GIT_TERMINAL_PROMPT='0', GIT_ALLOW_PROTOCOL='')
+    options = ('core.hooksPath=' + os.devnull, 'core.fsmonitor=false', 'core.longpaths=true', 'core.attributesFile=' + os.devnull,
+               'core.pager=cat', 'core.autocrlf=false', 'commit.gpgsign=false', 'tag.gpgSign=false',
+               'gc.auto=0', 'maintenance.auto=false', 'diff.external=', 'credential.helper=', 'protocol.allow=never',
+               'log.showSignature=false')
+    command = ['git', '--no-pager', *[value for option in options for value in ('-c', option)], '-C', str(repo), *args]
+    return subprocess.run(command, check=True, capture_output=True, env=env, timeout=30).stdout
 
 
 def trailers(message):
@@ -82,7 +93,7 @@ def asset_check(path, expected):
     return {"basis": "content", "label": "verified", "size": len(raw)}
 
 
-def verify(store, *, repo=None, base=None, staged_message=None):
+def verify(store, *, repo=None, base=None, staged_message=None, _skip_browser_findings=False):
     """Return diagnostics. Schema, hashes, caches and Git data are all untrusted."""
     root = Path(store).resolve()
     errors, checks, assets = [], [], []
@@ -200,7 +211,7 @@ def verify(store, *, repo=None, base=None, staged_message=None):
     heads = {e["entry_hash"] for e in entries}
     try:
         from .findings import validate_history as validate_browser_findings
-        if validate_browser_findings(h, entries):
+        if not _skip_browser_findings and validate_browser_findings(h, entries):
             checks.append("browser finding closures, frozen regression evidence and explicit owner receipts")
     except Exception as error:
         errors.append(f"browser finding history: {error}")

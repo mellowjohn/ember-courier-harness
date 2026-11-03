@@ -29,7 +29,7 @@ is Johnathan's allowance, not a credit grant to other users.
 **Automated gameplay checks are optional:** install [Node.js LTS](https://nodejs.org/en/download),
 then run `& ".\Setup Ember.cmd" --browser` from PowerShell in the Ember folder to
 add Playwright and Chromium. Manual previews need only your browser. Git is needed
-for the contract sample's commit steps and contributor workflows; Blender is needed
+for Git repair verification, the contract sample's commits and contributor workflows; Blender is needed
 only for 3D prop production.
 
 See **[installation, updates and troubleshooting](docs/INSTALL.md)** for the
@@ -97,10 +97,23 @@ bundles the approved game with its scope, tasks, asset, findings and checked
 evidence report. See [project handoff and the integrated sample](docs/PROJECT_HANDOFF.md).
 
 **Existing workspace · scan & setup** inventories a selected project folder,
-shows a setup diff with conflicts and full proposed contents, and creates only
-reviewed new setup files in an isolated sandbox after exact approval. Source
-files stay unchanged; arbitrary imported-project editing remains separate work.
-See [workspace onboarding](docs/WORKSPACE.md).
+shows setup/import contents and conflicts, and copies reviewed setup files or
+supported flat browser sources into an isolated location after exact approval.
+Imported games need the normal scoped build review before replacing the current
+game; original files stay unchanged. See [workspace onboarding](docs/WORKSPACE.md).
+
+**Git browser repairs** can use an approved coding worker and independent source
+review, then separately reviewed clean Git verification, or start from an exact
+edit. Both retain baseline/head commits and the same saved regression before
+normal build approval. Canonical findings retain separate verified closure;
+source repositories stay unchanged. See [reviewed Git repairs](docs/GIT_TASKS.md).
+
+**Gameplay recipes** provide versioned movement/jump settings in Lantern Trail,
+plus camera, hit protection, enemy states and seeded layouts in the expanded
+Lantern Vale reference. The first expanded recipe needs a complete reviewed
+profile upgrade; subsequent tuning changes its configuration. Compare
+keyboard/touch play and separately accept the result. See
+[mechanic recipes](docs/MECHANICS.md).
 
 ## Gameplay checks and overnight polish
 
@@ -176,7 +189,7 @@ The offline gate runs the full test suite and twelve demos. The clean-install ga
 
 ## Contract library and demonstrations
 
-Run the contract tests with `.\.venv\Scripts\python.exe -m unittest discover -s tests -v` after installing with `.\.venv\Scripts\python.exe -m pip install -e .`. See [the implementation guide](docs/contracts/IMPLEMENTATION.md) for setup, approval flow, coverage and current limits.
+Run the tests with `.\.venv\Scripts\python.exe tools/offline_tests.py` after installing with `.\.venv\Scripts\python.exe -m pip install -e .`. This runner disables discovery of your installed Muse so an unstubbed fixture cannot call it. Provider-adapter tests retain their explicit synthetic binaries. See [the implementation guide](docs/contracts/IMPLEMENTATION.md) for setup, approval flow, coverage and current limits.
 
 Run `.\.venv\Scripts\python.exe examples/contract_demo.py` to demonstrate contract approval, allowed and denied actions, and evidence checks that detect a changed file.
 

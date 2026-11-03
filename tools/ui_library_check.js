@@ -112,7 +112,8 @@ module.exports = async function checkLibrary(page, view) {
   assert.equal(await page.locator('#agent-progress .ember-dots').count(), 0);
   assert((await page.locator('#agent-progress').textContent()).includes('Request stopped') || (await page.locator('#agent-progress').textContent()).includes('worker stopped'));
   assert.equal(await page.locator('.agent-timeline [aria-current="step"]').count(),0);
-  resumePolling();await page.unroute('**/api/state');
+  await require('./task_review_ui_check')(page,view);
+  resumePolling();await page.unrouteAll({behavior:'wait'});
   await page.evaluate(() => renderAgentActivity(lastState));
   for (const width of [390, 768, 1500]) {
     await page.setViewportSize({width, height: 1000});

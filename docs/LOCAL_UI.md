@@ -90,10 +90,21 @@ for another location. Conversations, versions and evidence stay under
 session history and selected project folders together to retain the full workspace.
 
 **Existing workspace · scan & setup** adds a reviewed read-only inventory of a
-selected folder, a setup diff and a separately approved create-only sandbox
-rehearsal. Source files stay in their original location; imported-project editing
-and execution remain outside this slice. See [workspace onboarding](WORKSPACE.md)
-for scan limits, exclusions, exact approvals and recovery.
+selected folder, passive Git metadata, asset filename hints, a setup diff and a
+separately approved create-only copy. Supported flat browser sources have their
+own full import review and then the normal scoped exact-build review before
+becoming the current game. Original source files stay unchanged. See
+[workspace onboarding](WORKSPACE.md) for limits, exclusions and recovery, and
+[Git browser repairs](GIT_TASKS.md) for clean named baseline/head verification
+inside fresh private repositories.
+
+**Review automated Git repair** in Plan uses the selected task and saved failing
+checks. Approve its coding worker and independent reviewer first, then review
+the generated exact Git permissions separately. A passing clean head still
+needs the normal exact game approval. **Review Git repair agent** offers the
+same sequence for a canonical finding, followed by separate verified closure.
+Source and Git stages share one existing task/finding attempt. See
+[Git browser repairs](GIT_TASKS.md) for cancellation, recovery and limits.
 
 **Project plan & tasks** lets you adopt a persistent approved game scope and
 ordered task list. Exact builds then reuse that root and inherit its art
@@ -105,6 +116,13 @@ The active card's **Run task with Muse** prepares a separate worker/verifier
 permission review. It requires saved gameplay expectations and browser tooling.
 See [bounded task execution](TASK_RUNS.md) for retries, recovery, independent
 evidence and the final exact review.
+
+**Gameplay recipes** in Plan prepares the original Lantern Trail platformer and
+reviewed movement/jump settings. Camera, impact protection, enemy states and
+seeded layouts use the expanded Lantern Vale profile: include that expansion
+in the approved scope, then review its full source upgrade before tuning.
+Fixed-step observations complement keyboard/touch checks; human comfort, feel
+and task acceptance remain separate. See [mechanic recipes](MECHANICS.md).
 
 **Create chest/gate directions** adds the selected-task [asset-production loop](ASSET_PRODUCTION.md):
 three real rendered studies, explicit human pick, bounded Blender source edits,
@@ -206,7 +224,7 @@ operations execute only after acquiring the lock. Persistent locks remain in
 place and fail closed. The host never deletes another writer's lock, replays an
 action to force it through, or retries unrelated file errors.
 
-Run `py -3.12 -m unittest discover -s tests -p test_local_ui.py -v` for the HTTP
+Run `py -3.12 tools/offline_tests.py --pattern test_local_ui.py` for the HTTP
 boundary and seven-checkpoint integration test. Recovery checks are in
 `tests/test_session_recovery.py`; conversation durability checks are in
 `tests/test_session_chat.py`. All decisions in that test are
@@ -214,9 +232,11 @@ explicit synthetic test responses, not owner approvals.
 
 ## Project brief and preview workspace
 
-Plan in chat: describe the idea, answer Ember's next useful question, and change
-direction whenever needed. Ember is instructed to ask one question at a time,
-use known answers and gather details when they matter. It returns partial brief
+Plan in chat: describe the idea, answer a short batch of planning questions together,
+and change direction whenever needed. Ember is instructed to group important
+unanswered decisions, usually 3–6 questions, use known answers and accept partial
+replies. Follow-ups cover consequential gaps or decisions revealed by your answers.
+It returns partial brief
 updates for explicit user decisions; the host validates and saves them without
 a separate form or Save gesture. A **Remembered** receipt appears on the reply.
 The read-only **Project brief** in Plan shows the game goal, controls, visual
@@ -254,3 +274,27 @@ The current game changes only after a separate exact-diff approval. See
 Local source checkpoint before this polish pass: `235f31b`. Generated projects,
 private sessions, approvals and release logs remain under ignored `.harness/`;
 the Git checkpoint contains application source and documentation.
+
+## Review task quality
+
+Task cards show the requested outcome, the independent AI assessment and the
+completed attempt count. A blocked result separates failed gameplay, visual
+concerns, missing observations and unsupported evidence, then names the first
+change to discuss. Exhausted allowances remain visible; another attempt still
+requires the existing owner decision and credit limits. Passing checks leave
+human playtesting pending and do not accept the task.
+
+Open **Play and inspect retained attempts** to play a verified candidate without
+applying it. **View task screenshots** shows the starting and proposed game with
+matching desktop/mobile evidence when the run has a playable baseline. Changed
+or unavailable evidence produces an error instead of displaying unchecked files.
+Older runs and first builds identify their available comparison boundary.
+
+Before starting, **Interaction coverage** lists missing paths and suggestions
+against the selected task. **Review saved gameplay checks** opens the existing
+editor. Mark a scenario's intended success, failure, restart or repeated-play
+path, then supply its actual input actions and expectations. Labels describe
+intent; they do not prove coverage. Saving changes applies to future reviews;
+an already reviewed task keeps its frozen plan. Game-reported values and DOM
+checks remain bounded observations, separate from independent measurements and
+your judgment of feel.

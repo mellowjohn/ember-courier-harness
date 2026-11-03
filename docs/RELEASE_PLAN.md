@@ -11,6 +11,67 @@ architecture and later product requests, separating usable features from library
 code, scripted demonstrations and missing integration. Passing release gates is
 necessary validation of implemented behavior, not proof that the whole MVP is done.
 
+## Current bounded delivery slice — November 3
+
+The implemented slice adds approved automated browser-Git repair and the
+remaining four mechanic families in Lantern Vale. The Git sequence reuses the
+existing coding worker and independent source verifier, then separately reviews
+the exact generated Git bytes and verifies clean before/head commits before
+normal exact application. Source and Git stages share the original task or
+canonical finding attempt. Canonical browser findings require their clean Git
+witness and Johnathan's explicit C3 closure; no ordinary task manufactures a bug.
+Lifecycle, canonical closure and handoff checks pass in the final product and
+clean installed-release rehearsals.
+
+MR-06–MR-09 now implement camera follow/reduced motion, hit pause/protection,
+sentinel states and seeded layouts for the bounded expanded reference. Sixteen
+runtime/integration cases and seven expanded evidence cases pass. The complete
+expanded product rehearsal and final installed gate also pass: **772 tests and
+twelve demos**, desktop/mobile restart, nine browser/feature reports and exact
+wheel resources. Reports: `.harness/v/fbf5/DELIVERY.md` and
+`.harness/v/fbf5/c/.harness/clean-installs/b2af738e/REPORT.md`. The first
+v2 use reviews a full reference upgrade; later recipe edits change configuration
+only. Human comfort/impact feel, representative live Muse quality, arbitrary
+native/repository automation and general failure-driven Git amendments remain
+open. [The current checklist](MVP_STATUS.md) records those limits.
+
+## Earlier verified delivery checkpoint — November 3
+
+Reviewed [browser-source import](WORKSPACE.md), [local Git browser repairs](GIT_TASKS.md)
+and the [Lantern Trail movement/jumping recipes](MECHANICS.md) are implemented.
+The guarded MR-05 automated product rehearsal has passed in the root and frozen
+checkout. Final installed-release validation passes all **735 tests and twelve
+demos**, installed resources/dependencies/entry points and desktop/mobile restart.
+That earlier frozen checkout passes import, both Git routes, mechanics, full browser,
+polish and guarded quality rehearsals. Reports: `.harness/v/bdf9/DELIVERY.md` and
+`.harness/v/bdf9/REPORT.md`. Johnathan's own playtest and representative approved
+live Muse quality rehearsal remain open.
+The [current MVP checklist](MVP_STATUS.md) preserves the exact supported limits
+and broader remaining work.
+
+## Earlier delivery checkpoint — November 3
+
+WQ-04 through WQ-06 are implemented: ordinary tasks retain matched before/after
+evidence, review cards expose actionable blockers and retained playable attempts,
+and the gameplay editor shows advisory interaction-coverage gaps. Human
+acceptance and the existing exact approval boundaries remain separate.
+
+An earlier clean Git clone of the local delivery snapshot passed fresh wheel
+installation, all **680 Python tests and twelve demos**, dependency/resource/entry-point checks
+and the real Windows desktop/mobile launch and restart rehearsal. The complete
+browser workflow, guarded quality-repair rehearsal and overnight polish also
+passed against that earlier implementation. Source remained unchanged and the
+verification checkout stayed clean. The parent report is
+`.harness/v/e67a/REPORT.md`; [MVP status](MVP_STATUS.md#earlier-validation-checkpoints)
+lists the bound installation and Chromium reports.
+
+The snapshot commit exists only in the ignored verification repository and
+contains the local delivery patch. This is automated implementation evidence,
+with synthetic model replies and owner choices in successful rehearsals. The
+snapshot predates the bounded Git/import/mechanic slice above. The representative
+approved live Muse rehearsal and Johnathan's integrated playtest remain open.
+No overall MVP completion or event eligibility is claimed.
+
 ## Product status — October 31
 
 Ember now builds browser games through a saved Muse conversation. Johnathan
@@ -90,22 +151,36 @@ gate, attempt ledger, evidence/checkpoint executor and independent verification.
 The bounded chest/waygate production-and-refinement task now connects rendered
 directions, source edits, native exports and independent checks. Browser findings
 now connect human reports to intake, scoped fixes, separate verification and
-explicit closure. Existing-workspace onboarding now adds bounded read-only
-inventory, reviewed setup contents/conflicts and exact create-only sandbox
-application; see [workspace onboarding](WORKSPACE.md) for limitations. The integrated
-sample and verified handoff now connect these browser slices; see
-[project handoff](PROJECT_HANDOFF.md). Next: installed desktop launch/restart,
-live Muse quality and human playtesting, followed by clean Git-checkout handoff.
+explicit closure. Existing-workspace onboarding adds bounded read-only inventory,
+reviewed setup/import contents and exact create-only copies. Supported browser
+imports enter the current game through normal scoped exact-build review; see
+[workspace onboarding](WORKSPACE.md). [Git repairs](GIT_TASKS.md) check clean
+named baseline/head builds; [mechanic recipes](MECHANICS.md) retain fixed-step
+observations and source compatibility. The integrated sample and verified
+handoff connect these browser slices; see [project handoff](PROJECT_HANDOFF.md).
+Next: representative approved live Muse quality and Johnathan's integrated
+playtest. The completed slice passes its clean installed-release gate.
 The engine pause and all approval, credit and publication restrictions continue
 to apply.
 
 ## Remaining delivery gates
 
+The current `fbf5` automated Git/Lantern Vale snapshot passes its complete
+product and clean installed-release gates. All 772 tests and twelve demos pass;
+the 230-file source manifest, wheel resources and nine browser/feature reports
+match the delivered implementation. The earlier `bdf9` reports retain evidence
+for the earlier Git/import/movement slice. Johnathan's human acceptance and
+representative approved live Muse quality rehearsal remain pending. General native/repository workers,
+engine work and broader failure-driven Git amendments remain separate. Earlier
+reports below retain evidence for their own source snapshots.
+
+### Earlier validation checkpoints
+
 November 1 desktop checkpoint: the real Windows launcher and installed wheel
 pass Chromium session creation, desktop/mobile navigation, saved-brief recovery,
 restart, fresh-link authorization and zero-credit dispatch denial. The launcher now honors
 project/activated virtual environments, and lower credit ceilings display
-correctly. See [the MVP evidence](MVP_STATUS.md#explicit-boundaries-retained) and
+correctly. See [the MVP evidence](MVP_STATUS.md#earlier-validation-checkpoints) and
 [installation rehearsal instructions](PRODUCT_DEMO.md#clean-installation-check).
 The same fresh wheel passes all 510 Python tests and twelve demos, dependency
 and installed-entry checks, with unchanged source manifests. The retained parent
@@ -113,7 +188,7 @@ report is `.harness/clean-installs/9c3a1e01/REPORT.md`.
 Live Muse quality, human playtesting and actual clean Git-checkout handoff remain
 open; no live model call or human approval is claimed by this checkpoint.
 
-Latest implementation checkpoint — October 31: existing-workspace scan/setup
+Earlier implementation checkpoint — October 31: existing-workspace scan/setup
 passed 491 tests and twelve demos from a clean-installed wheel, plus 18 focused
 checkout regressions. Final-source Chromium exercised real scan/plan/review
 controls, conflicts, mobile layout, retained pending approval, exact sandbox
@@ -253,6 +328,13 @@ entry points with assertions enabled and retains a unique directory under
 All checks must pass and the source manifest must remain unchanged. Timeouts,
 empty discovery and missing executables fail. Collection continues after a
 failure; nested demo repositories and synthetic approvals remain isolated.
+Each check has a 60-minute watchdog, including the expanded full test suite.
+
+The test command uses `tools/offline_tests.py`, which disables discovery of
+the host's Muse installation. Provider-adapter tests use explicit synthetic
+binaries and mocks. Browser and polish rehearsals also deny unstubbed credit
+reservations before dispatch. This prevents new automatic-review paths from
+silently turning an older fixture into a live-model run.
 
 Clean wheel installation is covered by
 `tools/clean_install_check.py --wheelhouse PATH`; see PRODUCT_DEMO.md for setup.

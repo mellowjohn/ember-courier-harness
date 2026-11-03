@@ -10,6 +10,7 @@ from .core import digest
 from .recovery import atomic_json, exclusive, read_json
 
 KEYS = ('ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter', 'Escape', 'a', 'd', 'w', 's', 'r')
+COVERAGE_PATHS = ('discoverability', 'success', 'failure', 'reset', 'repeated_play')
 SELECTOR = r'(?:[a-z][a-z0-9-]*)?(?:#[a-zA-Z_][a-zA-Z0-9_-]*|\[data-testid="[a-zA-Z0-9 _-]+"\])?'
 ACTIONS = {
     'click': {'action', 'selector'}, 'tap': {'action', 'selector'},
@@ -30,11 +31,17 @@ def validate(plan):
         raise ValueError('Use a gameplay plan title and at most four scenarios')
     cost = 0
     for scenario in plan['scenarios']:
-        if (not isinstance(scenario, dict) or set(scenario) != {'name', 'viewport', 'steps'} or
+        if (not isinstance(scenario, dict) or not {'name', 'viewport', 'steps'} <= set(scenario) or
+                set(scenario) - {'name', 'viewport', 'steps', 'coverage'} or
                 not isinstance(scenario['name'], str) or not 1 <= len(scenario['name'].strip()) <= 120 or
                 scenario['viewport'] not in ('desktop', 'mobile') or not isinstance(scenario['steps'], list) or
                 not 1 <= len(scenario['steps']) <= 16):
             raise ValueError('Each scenario needs a name, desktop/mobile, and 1–16 steps')
+        coverage = scenario.get('coverage', [])
+        if (not isinstance(coverage, list) or len(coverage) > len(COVERAGE_PATHS) or
+                any(not isinstance(path, str) or path not in COVERAGE_PATHS for path in coverage) or
+                len(set(coverage)) != len(coverage)):
+            raise ValueError('Choose each supported gameplay coverage path at most once')
         assertions = 0
         for step in scenario['steps']:
             if not isinstance(step, dict) or not isinstance(step.get('action'), str):
@@ -134,7 +141,7 @@ def reports(folder):
     return [e for e in chat_build.harness(folder)._entries() if e['kind'] == 'chat_gameplay_recorded'][-20:]
 
 
-def _capture(files, saved, output, runtime):
+def _capture(files, saved, output, runtime, *, build_ref=None):
     from . import polish_runtime
     output = Path(output)
     if output.resolve() != output.absolute():
@@ -144,6 +151,10 @@ def _capture(files, saved, output, runtime):
     parser = chat_build.ResourcePreview(files)
     parser.feed(files['index.html']); parser.close()
     data = dict(html=''.join(parser.output), gameplay_plan=saved['plan'], gameplay_plan_sha256=saved['sha256'], runtime=runtime)
+    from .mechanic_workflow import capture_binding
+    bound = capture_binding(files, build_ref or 'capture:' + str(output.name), saved)
+    if bound is not None:
+        data['mechanic_binding'] = bound
     if source.is_symlink():
         raise ValueError('Gameplay input path changed')
     if source.exists() and read_json(source) != data:
@@ -153,6 +164,33 @@ def _capture(files, saved, output, runtime):
     result = polish_runtime.inspect(runtime, source, output / 'output', check=lambda: None)
     validate_result(saved['plan'], result.get('gameplay'))
     return result
+
+
+def mechanic_evidence(output, observed):
+    if observed.get('mechanics') is None:
+        return None
+    from .mechanic_recipes import validate_report
+    return validate_report(read_json(Path(output) / 'input.json')['mechanic_binding'], observed['mechanics'])
+
+
+def capture_outcome(observed):
+    return 'passed' if (observed['gameplay']['outcome'] == 'passed' and
+        observed.get('mechanics', {}).get('outcome', 'passed') == 'passed') else 'failed'
+
+
+def verified_current_report(folder, event):
+    from . import polish_runtime
+    area = Path(folder) / 'gameplay-runs' / event['report_id']
+    report = area / 'output/report.json'
+    if report.as_posix() != event['report_path'] or polish_runtime.file_digest(report) != event['report_sha256']:
+        raise ValueError('Retained gameplay report changed')
+    observed = polish_runtime.verified_report(area / 'input.json', report.parent)
+    request = read_json(area / 'input.json')
+    if (observed.get('gameplay') != event['gameplay'] or capture_outcome(observed) != event['outcome'] or
+            request.get('gameplay_plan') != event['plan'] or request.get('gameplay_plan_sha256') != event['plan_sha256'] or
+            event.get('mechanics') != mechanic_evidence(area, observed)):
+        raise ValueError('Retained gameplay observations differ from the recorded build and plan')
+    return event
 
 
 def run_current(root, folder, revision, request_ref, report_id):
@@ -176,10 +214,12 @@ def run_current(root, folder, revision, request_ref, report_id):
             if previous:
                 if previous['request_ref'] != request_ref or previous['plan_sha256'] != saved['sha256'] or previous['plan_revision'] != revision:
                     raise ValueError('Gameplay report ID belongs to another version or plan')
-                return previous
+                if previous['manifest'] != snapshot['manifest']:
+                    raise ValueError('Gameplay report belongs to different game bytes')
+                return verified_current_report(folder, previous)
         runtime = polish_runtime.discover(root)
         output = folder / 'gameplay-runs' / report_id
-        result = _capture(snapshot['files'], saved, output, runtime)
+        result = _capture(snapshot['files'], saved, output, runtime, build_ref=request_ref)
         with exclusive(folder / 'build.lock'):
             verified = chat_build.verify(root, folder)
             if (chat_build.status(root, folder)['completed'][-1]['request_ref'] != request_ref or
@@ -188,7 +228,7 @@ def run_current(root, folder, revision, request_ref, report_id):
             with h._lock():
                 return h._append('chat_gameplay_recorded', report_id=report_id, request_ref=request_ref,
                     plan_revision=revision, plan_sha256=saved['sha256'], plan=saved['plan'], manifest=snapshot['manifest'],
-                    outcome=result['gameplay']['outcome'], gameplay=result['gameplay'],
+                    outcome=capture_outcome(result), gameplay=result['gameplay'], mechanics=mechanic_evidence(output, result),
                     report_path=(output / 'output/report.json').as_posix(),
                     report_sha256=polish_runtime.file_digest(output / 'output/report.json'), basis='host_chromium_assertions', limit=LIMIT)
 
@@ -225,6 +265,8 @@ def _verified_proposal_report(folder, report):
         observed = polish_runtime.verified_report(source, artifact.parent)
         if observed.get('gameplay') != report[label]:
             raise ValueError('Proposal gameplay observations changed')
+        if report.get('mechanics', {}).get(label) != mechanic_evidence(output, observed):
+            raise ValueError('Proposal mechanic observations changed')
         validate_result(report['plan'], report[label])
     if set(report['artifacts']) != ({'before', 'proposed'} if report['before'] is not None else {'proposed'}):
         raise ValueError('Proposal gameplay captures are incomplete')
@@ -245,6 +287,10 @@ def run_proposal(root, folder, revision, request_ref, report_id):
             if type(revision) is not int or saved['revision'] != revision or not saved['plan']['scenarios']:
                 raise ValueError('Save a nonempty current gameplay plan before checking a proposal')
             snapshot = chat_build.proposal_snapshot(root, folder, request_ref)
+            completed = chat_build.status(root, folder)['completed']
+            before_ref = completed[-1]['request_ref'] if completed else None
+            from .mechanic_workflow import binding as mechanic_binding, review as mechanic_review
+            source_review = mechanic_review(mechanic_binding(snapshot['before_files']), snapshot['files'])
             previous = next((r for r in chat_build.harness(folder)._entries()
                              if r['kind'] == 'chat_proposal_gameplay_recorded' and r['report_id'] == report_id), None)
             if previous:
@@ -254,18 +300,25 @@ def run_proposal(root, folder, revision, request_ref, report_id):
                 return _verified_proposal_report(folder, previous)
         runtime = polish_runtime.discover(root)
         work = folder / 'proposal-checks' / report_id
-        captures, artifacts = {}, {}
+        captures, artifacts, mechanics = {}, {}, {}
         for label, files in [('before', snapshot['before_files']), ('proposed', snapshot['files'])]:
             if not files:
                 captures[label] = None
                 continue
-            observed = _capture(files, saved, work / label, runtime)
+            observed = _capture(files, saved, work / label, runtime,
+                build_ref=before_ref if label == 'before' else request_ref)
             captures[label] = observed['gameplay']
+            if observed.get('mechanics') is not None:
+                mechanics[label] = mechanic_evidence(work / label, observed)
             artifacts[label] = dict(input_sha256=polish_runtime.file_digest(work / label / 'input.json'),
                                    report_sha256=polish_runtime.file_digest(work / label / 'output/report.json'))
         comparisons = compare(saved['plan'], captures['before'], captures['proposed'])
         outcome = ('regressions_observed' if any(r['change'] == 'regression' for r in comparisons) else
                    'passed' if captures['proposed']['outcome'] == 'passed' else 'checks_failed')
+        if mechanics.get('proposed') and not mechanics['proposed']['qualified']:
+            outcome = 'checks_failed'
+        if source_review and source_review['blockers']:
+            outcome = 'checks_failed'
         with exclusive(folder / 'build.lock'):
             if chat_build.proposal_snapshot(root, folder, request_ref) != snapshot or load(folder) != saved:
                 raise ValueError('The game, proposal or plan changed during inspection; retained captures are stale')
@@ -275,6 +328,8 @@ def run_proposal(root, folder, revision, request_ref, report_id):
                     plan_revision=revision, plan_sha256=saved['sha256'], plan=saved['plan'],
                     manifest=snapshot['manifest'], before_manifest=snapshot['before_manifest'],
                     before=captures['before'], proposed=captures['proposed'], comparison=comparisons, outcome=outcome,
+                    mechanics=mechanics,
+                    mechanic_review=source_review,
                     artifacts=artifacts, basis='host_chromium_proposal_comparison', limit=LIMIT)
 
 

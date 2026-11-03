@@ -10,7 +10,7 @@ Python 3.12 or later is required. From the repository directory:
 
 ```powershell
 py -m pip install -e .
-py -m unittest discover -s tests -v
+py tools/offline_tests.py
 py -m ember_harness --help
 py -m ember_harness draft ct-scope-0001 scope-planner "Propose Ember Courier scope" --role scope
 ```

@@ -106,7 +106,7 @@ def valid_destination(root, folder, contract):
     from .chat_build import project
     target = project(root, folder).as_posix() + '/**'
     paths = contract['allowed_paths']['write']
-    extras = [(Path(folder) / name).as_posix() + '/**' for name in ('task-runs', 'findings')]
+    extras = [(Path(folder) / name).as_posix() + '/**' for name in ('task-runs', 'findings', 'git-runs')]
     return target in paths and len(paths) == len(set(paths)) and all(p in [target, *extras] for p in paths)
 
 
@@ -196,6 +196,8 @@ def prepare_from_chat(root, folder, document, expected_ref, turn_id=None):
         add_asset_permissions(candidate,folder)
         from .findings import add_scope_permissions as add_finding_permissions
         add_finding_permissions(candidate, folder)
+        from .git_task import add_scope_permissions as add_git_permissions
+        add_git_permissions(candidate, folder)
         candidate['required_evidence'] = {}
         candidate['approval_mode'] = 'approve_all'
         candidate['limits']['time_window']['ttl_hours'] = 24

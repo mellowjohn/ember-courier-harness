@@ -102,7 +102,7 @@ function decision(parent,text,ref,choice,cls=''){
   return button;
 }
 function renderReview(s){
-  const pending=s.requests.filter(r=>!r.decision);
+  const pending=s.requests.filter(r=>!r.decision).sort((a,b)=>Number(!!b.payload.body.git_task)-Number(!!a.payload.body.git_task));
   const key=JSON.stringify([s.session?.id,s.status,pending.map(r=>[r.ref,!!r.widening_acknowledged]),s.requests.length]);
   if(key===current){document.querySelectorAll('.decision').forEach(b=>b.disabled=busy||sending||s.chat_activity?.state==='active'||b.dataset.needsScopeAck==='true'||b.dataset.needsAssetAccept==='true');renderProposalCheck(s);renderQualityCheck(s);return;}current=key;urls.splice(0).forEach(URL.revokeObjectURL);
   $('review').replaceChildren();$('proposal-preview-host').replaceChildren();$('review').hidden=!pending.length;buildReviewRef=null;
@@ -111,13 +111,15 @@ function renderReview(s){
   if(body.workspace||body.workspace_apply){
     const w=body.workspace||body.workspace_apply,exact=!!body.workspace_apply;
     el('small','EXISTING WORKSPACE',p).className='brand';
-    el('h3',exact?'Review exact sandbox setup':({scan:'Review workspace scan',plan:'Review setup planning',apply:'Review sandbox permissions'})[w.stage],p);
+    const importing=w.stage?.startsWith('import_');
+    el('h3',exact?(importing?'Review exact browser import':'Review exact sandbox setup'):({scan:'Review workspace scan',plan:'Review setup planning',apply:'Review sandbox permissions',import_plan:'Review browser source inspection',import_apply:'Review import sandbox permissions'})[w.stage],p);
     el('p','Source: '+w.source,p).className='hash';
-    el('p',w.stage==='scan'?'Inventory file names and metadata. Read only bounded ignore files; exclude secrets, links, dependencies and paused engine paths.':w.stage==='plan'?'Check the saved inventory and prepare a setup diff. Existing files are compared by hash; no project files are written.':'Create only the files marked create, in the empty sandbox shown below. The source project stays unchanged.',p);
-    if(w.stage==='apply'){el('p','Sandbox: '+w.sandbox,p).className='hash';workspaceDiff(w.plan,p)}
+    el('p',w.stage==='scan'?'Inventory file names and metadata. Read bounded ignore files and passive Git HEAD/reference metadata; exclude secrets, links, dependencies and paused engine paths. Git config, hooks and commands are not used.':w.stage==='plan'?'Check the saved inventory and prepare a setup diff. Existing files are compared by hash; no project files are written.':w.stage==='import_plan'?'Read and validate the supported browser source files and show their complete contents. This inspection does not copy source; copying requires the later sandbox contract and exact action review.':'Create only the files marked create, in the empty sandbox shown below. The source project stays unchanged.',p);
+    if(importing)el('p','Read only supported flat browser sources, then copy their exact reviewed bytes into a separate import sandbox. Current game adoption needs a separate scoped build review.',p);
+    if(w.stage==='apply'||w.stage==='import_apply'){el('p','Sandbox: '+(importing?w.import_sandbox:w.sandbox),p).className='hash';workspaceDiff(w.plan,p)}
     detail('Exact permissions and review reference',{ref:r.ref,contracts:body.contracts,action:body.action},p);
     const actions=el('div',undefined,p);actions.className='actions';
-    decision(actions,exact?'Approve exact sandbox setup':({scan:'Approve read-only scan',plan:'Approve setup planning',apply:'Approve sandbox permissions'})[w.stage],r.ref,'approve','primary');
+    decision(actions,exact?(importing?'Approve exact browser import':'Approve exact sandbox setup'):({scan:'Approve read-only scan',plan:'Approve setup planning',apply:'Approve sandbox permissions',import_plan:'Approve browser source inspection',import_apply:'Approve import sandbox permissions'})[w.stage],r.ref,'approve','primary');
     decision(actions,'Discard workspace step',r.ref,'decline');return;
   }
   if(body.project_plan){
@@ -142,6 +144,13 @@ function renderReview(s){
     decision(actions,'Discard project plan',r.ref,'decline');detail('Exact scope contract and review reference',{ref:r.ref,contracts:body.contracts},p);
     return;
   }
+  if(body.git_task){
+    const run=body.git_task;el('small','LOCAL GIT REPAIR · REVIEW BEFORE EXECUTION',p).className='brand';el('h3',run.goal,p);el('p',run.notice,p);
+    el('p','Branch: '+run.branch,p).className='hash';
+    for(const [name,source] of Object.entries(run.candidate_files)){if(source===run.baseline_files[name])continue;const change=el('details',undefined,p);el('summary','Exact change · '+name,change);el('h4','Before',change);el('pre',run.baseline_files[name]||'',change);el('h4','Proposed',change);el('pre',source,change)}
+    detail('Frozen regression checks',run.gameplay_plan,p);detail('Exact worker and independent verifier permissions',body.contracts,p);
+    const actions=el('div',undefined,p);actions.className='actions';decision(actions,'Approve local Git repair',r.ref,'approve','primary');decision(actions,'Discard Git repair',r.ref,'decline');return;
+  }
   if(body.build){
     buildReviewRef=r.ref;
     el('small',body.build.restore_from?'READY TO RESTORE':'READY TO BUILD',p).className='brand';el('h3',body.build.title,p);el('p',body.build.summary,p);
@@ -151,6 +160,7 @@ function renderReview(s){
     el('small',assetCount?'Acceptance covers each listed asset and these exact file changes. Try the proposal before accepting.':'One approval applies all of these exact file changes and opens the preview.',p);
     if(body.build.asset)detail('Asset specification and measured export',body.build.asset,p);
     if(body.build.asset_source)detail('Asset source and recorded export',body.build.asset_source,p);
+    if(body.build.mechanics)renderMechanicBinding(body.build.mechanics,p);
     if(body.build.sprite_plan)renderSpritePlan(body.build.sprite_plan,p,s,[],urls);
     const acceptBoxes=[];
     if(assetCount>1){
@@ -163,6 +173,7 @@ function renderReview(s){
       }
     }
     if(body.build.project_scope)detail('Approved project scope and task',body.build.project_scope,p);
+    if(s.project_plan?.active&&!body.build.restore_from){const git=el('button','Verify this proposal with Git',p);git.className='button';git.disabled=busy||sending||!s.gameplay_plan?.plan.scenarios.length;git.onclick=()=>gitCommand('prepare-proposal',{request_ref:r.ref,expected_manifest:s.build?.completed.at(-1)?.manifest||{}});el('small','Optional clean before/head verification in isolated local Git history. This starts with a separate permission review and makes no model call.',p)}
     const checks=el('section',undefined,p);checks.id='proposal-gameplay-review';checks.setAttribute('aria-label','Proposal gameplay comparison');
     const quality=el('section',undefined,p);quality.id='proposal-quality-review';quality.setAttribute('aria-label','Game verification');
     const code=el('details',undefined,p);el('summary','View code changes',code);el('pre',body.build.diff,code);
@@ -288,8 +299,9 @@ function renderProposalCheck(s){
     for(const title of ['Scenario','Current','Proposed','Change'])el('th',title,header);
     const changes={preserved:'Preserved',regression:'Regressed',fixed:'Fixed',still_failing:'Still failing',new_coverage:'First build'};
     for(const row of report.comparison){const tr=el('tr',undefined,table);for(const value of [row.name+' · '+row.viewport,row.before==='not_run'?'No current game':row.before,row.proposed,changes[row.change]])el('td',value,tr)}
-    detail('Gameplay steps and observations',{plan:report.plan,current:report.before,proposed:report.proposed},area);
-    if(!['stale','not_configured'].includes(check.state)&&report.proposed.outcome!=='passed'){
+    detail('Gameplay steps and observations',{plan:report.plan,current:report.before,proposed:report.proposed,mechanics:report.mechanics,mechanic_review:report.mechanic_review},area);
+    for(const issue of report.mechanic_review?.blockers||[])el('p','Mechanic evidence blocker: '+issue,area);
+    if(!['stale','not_configured'].includes(check.state)&&(report.proposed.outcome!=='passed'||report.mechanic_review?.blockers.length)){
       const fix=el('button','Ask Muse to fix proposed gameplay',area);fix.className='button';fix.disabled=sending||busy||!!local?.running;
       const id=crypto.randomUUID(),note='Fix the failed gameplay checks for this proposal while preserving its intended improvements. Return a revised proposal for my review.';
       fix.onclick=async()=>{if(sending||busy)return;sending=true;beginChatRequest(note,id);fix.disabled=true;
@@ -420,6 +432,8 @@ $('project-browse').onclick=async()=>{
 };
 function renderProjectLocation(s){
   renderWorkspace(s);
+  renderMechanics(s);
+  renderGit(s);
   if(!$('project-location')){const area=workspacePanel('project-location','Project folder','workspace-tools');$('workspace-tools').querySelector('.tool-heading').after(area);
     el('h3',undefined,area).id='project-location-name';el('p',undefined,area).id='project-location-path';$('project-location-path').className='hash';
     el('p','This session’s approved changes save to this folder. The folder is created when the first approved build is applied.',area).className='subtitle';
@@ -441,7 +455,7 @@ function workspaceDiff(plan,parent){
 function renderWorkspace(s){
   if(!$('existing-workspace')){
     const area=workspacePanel('existing-workspace','Existing workspace · scan & setup','plan-support');
-    el('p','Inspect a project folder and review setup files in an isolated sandbox. This inventory does not enable editing or running the imported project.',area).className='subtitle';
+    el('p','Inspect a project folder, review setup, or copy supported browser sources into an isolated sandbox. Adopting the imported game requires a separate exact build review.',area).className='subtitle';
     const form=el('form',undefined,area);form.id='workspace-form';const label=el('label','Existing project folder',form),input=el('input',undefined,label);
     input.id='workspace-source';input.maxLength=2048;input.required=true;input.autocomplete='off';input.spellcheck=false;
     const actions=el('div',undefined,form);actions.className='actions';
@@ -458,13 +472,17 @@ function renderWorkspace(s){
   if(area.dataset.session!==sid){area.dataset.session=sid||'';$('workspace-source').value=latest?.source||''}
   const disabled=busy||sending||!!w?.pending;
   $('workspace-scan').disabled=disabled;$('workspace-browse').disabled=disabled;
-  const state=$('workspace-status'),key=JSON.stringify([sid,w,busy,sending]);if(state.dataset.key===key)return;state.dataset.key=key;state.replaceChildren();
+  const state=$('workspace-status'),key=JSON.stringify([sid,w,busy,sending,s.project_plan?.active,s.project_plan?.approved?.ref,s.project_plan?.selected_task,s.build?.completed.at(-1)?.manifest]);if(state.dataset.key===key)return;state.dataset.key=key;state.replaceChildren();
   if(!latest)return;
   el('p','Source: '+latest.source,state).className='hash';
   if(w.pending)el('p','Workspace step awaiting your review in chat.',state).setAttribute('role','status');
   if(latest.scan){const scan=latest.scan;el('p',`${scan.files} files · ${scan.directories} folders · ${scan.languages.join(', ')||'No language detected'} · ${scan.git_repository?'Git metadata present':'No Git metadata observed'}`,state);
     el('p',scan.note,state).className='subtitle';detail('Inventory and exclusions',scan.entries,state)}
+  if(latest.scan?.git)detail('Observed Git metadata',latest.scan.git,state);
+  if(latest.scan?.project)detail('Project and asset inventory',latest.scan.project,state);
   if(latest.plan)workspaceDiff(latest.plan,state);
+  if(latest.import_plan){el('h4','Browser source import',state);workspaceDiff(latest.import_plan,state);detail('Omitted files and import limits',{omitted:latest.import_plan.omitted,limits:latest.import_plan.limits},state)}
+  if(latest.import_apply){el('p','Browser import complete · '+latest.import_apply.files.length+' exact files copied',state).setAttribute('role','status');el('p',latest.import_apply.sandbox,state).className='hash';detail('Verified imported bytes',latest.import_apply,state)}
   if(latest.apply){el('p','Sandbox setup complete · '+latest.apply.files.length+' files verified',state).setAttribute('role','status');el('p',latest.apply.sandbox,state).className='hash';detail('Created file evidence',latest.apply,state)}
   const actions=el('div',undefined,state);actions.className='actions';
   const command=(title,action,args)=>{const b=el('button',title,actions);b.className='button';b.disabled=disabled;b.onclick=()=>workspaceCommand(action,args)};
@@ -473,12 +491,117 @@ function renderWorkspace(s){
   else if(latest.scan&&!latest.plan)command('Prepare setup plan','plan',{run_id:latest.run_id});
   else if(latest.plan&&!latest.apply&&latest.plan.entries.some(entry=>entry.action==='create'))command('Review sandbox setup','apply',{run_id:latest.run_id});
   else if(latest.plan&&!latest.apply)el('p','No new setup files to apply.',state);
+  if(latest.scan&&!latest.declined&&!latest.resumable){
+    if(!latest.import_plan)command('Review browser source import','import_plan',{run_id:latest.run_id});
+    else if(!latest.import_apply&&!latest.import_plan.destination_conflicts.length)command('Review import sandbox copy','import_apply',{run_id:latest.run_id});
+    else if(latest.import_apply){const adopt=el('button','Review imported game changes',actions);adopt.className='button';adopt.disabled=disabled||!s.project_plan?.active;adopt.onclick=()=>workspaceCommand('promote_import',{run_id:latest.run_id,operation_id:crypto.randomUUID(),expected_manifest:s.build?.completed.at(-1)?.manifest||{}});if(!s.project_plan?.active)el('p','Approve a project plan before adopting imported game changes.',state)}
+  }
 }
 async function workspaceCommand(action,args){
   if(busy||sending)return;busy=true;
   try{await api('workspace',{session_id:activeSession.id,action,...args});$('error').textContent='';current=''}
   catch(error){$('error').textContent=error.message}
   finally{busy=false;await refresh();if(!$('review').hidden){showWorkspace('chat');$('review').scrollIntoView({block:'nearest'})}}
+}
+const mechanicDrafts=new Map();
+function renderMechanicBinding(binding,parent){
+  const box=el('section',undefined,parent);box.className='panel';el('h4',(binding.profile==='ember-platformer-v2'?'Expanded gameplay reference · ':'Reference movement and jumping · ')+binding.profile,box);
+  if(!binding.recipes.length)el('p',binding.profile==='ember-platformer-v2'?'Expanded starting rules: instant movement, no jump assistance or damage protection, a patrolling sentinel and the fixed seed-zero trail.':'Starting rules: instant movement and no jump assistance.',box);
+  for(const recipe of binding.recipes){el('strong',recipe.definition.title+' · version '+recipe.version,box);for(const [name,value] of Object.entries(recipe.settings)){const field=recipe.definition.settings[name];el('p',field.label+': '+value+' '+field.unit,box)}}
+  el('small','Exact recipe identity and values travel with this build. Fixed-step observations and browser inputs remain separate from your judgment of feel.',box);
+}
+function renderMechanics(s){
+  if(!$('mechanic-recipes')){const area=workspacePanel('mechanic-recipes','Gameplay recipes','plan-main');el('div',undefined,area).id='mechanic-content'}
+  const area=$('mechanic-recipes'),state=s.mechanics,sid=s.session?.id;area.hidden=!sid||!state;
+  if(!sid||!state)return;
+  let draft=mechanicDrafts.get(sid);if(!draft){draft={id:state.catalog[0]?.id,values:{}};mechanicDrafts.set(sid,draft)}
+  const key=JSON.stringify([sid,state,s.project_plan?.active,s.build?.completed.at(-1)?.request_ref,s.gameplay_plan?.sha256,s.build?.gameplay_checks?.at(-1)?.report_id,busy,sending,draft.id]);
+  if(area.dataset.key===key)return;area.dataset.key=key;const box=$('mechanic-content');box.replaceChildren();
+  el('p',state.reason,box);el('small','Choose values locally, then review exact changes. These controls do not call Muse. Recipes currently support this original reference platformer only.',box);
+  const blocked=busy||sending||!s.project_plan?.active;
+  if(!s.project_plan?.active)el('p','Approve a project plan with the intended movement/jumping task before preparing work.',box);
+  if(state.can_prepare_sample){const button=el('button','Review reference platformer',box);button.className='button';button.disabled=blocked;button.onclick=()=>mechanicCommand('sample',{operation_id:crypto.randomUUID(),expected_manifest:s.build?.completed.at(-1)?.manifest||{}});return}
+  if(!state.supported)return;
+  renderMechanicBinding(state.current,box);
+  const latest=(s.build?.gameplay_checks||[]).filter(r=>r.request_ref===s.build?.completed.at(-1)?.request_ref&&r.plan_sha256===s.gameplay_plan?.sha256).at(-1);
+  if(latest?.mechanics){el('p',latest.mechanics.qualified?'Configured mechanic observations passed · human playtest pending':'Configured mechanic observations failed',box);detail('Bound simulation steps, settings and numeric observations',latest.mechanics,box)}
+  const label=el('label','Improvement to prepare',box),select=el('select',undefined,label);select.id='mechanic-choice';for(const recipe of state.catalog)el('option',recipe.title,select).value=recipe.id;select.value=draft.id;
+  select.onchange=()=>{draft.id=select.value;delete area.dataset.key;renderMechanics(lastState)};
+  const recipe=state.catalog.find(r=>r.id===draft.id);if(!recipe)return;
+  if(state.current.profile==='ember-platformer-v1'&&recipe.target==='ember-platformer-v2')el('p','This recipe upgrades Lantern Trail to the expanded Lantern Vale reference with a new layout, camera, hazard and sentinel scaffold. Include these features in your approved project plan first. Review the full source change before applying; saved earlier versions remain available.',box);
+  el('p',recipe.purpose,box);const form=el('form',undefined,box);form.id='mechanic-form';
+  const values=draft.values[recipe.id]||(draft.values[recipe.id]=Object.fromEntries(Object.entries(recipe.settings).map(([name,field])=>[name,field.default])));
+  for(const [name,field] of Object.entries(recipe.settings)){const row=el('label',field.label+' ('+field.unit+')',form),input=el('input',undefined,row);input.type='number';input.required=true;input.min=field.min;input.max=field.max;input.step=field.integer?'1':'any';input.value=values[name];input.name=name;input.oninput=()=>{values[name]=input.value===''?null:Number(input.value)};el('small','Allowed: '+field.min+'–'+field.max+' '+field.unit,row)}
+  const prepare=el('button','Review recipe changes',form);prepare.type='submit';prepare.className='button primary';prepare.disabled=blocked;
+  form.onsubmit=event=>{event.preventDefault();mechanicCommand('recipe',{operation_id:crypto.randomUUID(),expected_manifest:s.build?.completed.at(-1)?.manifest||{},recipe_id:recipe.id,version:recipe.version,settings:values})};
+  for(const text of recipe.limitations)el('small',text,box);
+  const checks=el('button','Use reference gameplay checks',box);checks.className='button';checks.disabled=busy||sending;checks.onclick=()=>mechanicCommand('checks',{revision:s.gameplay_plan.revision});
+  el('small','This replaces the editable saved check plan. Reviewed runs keep their frozen checks. Play both versions before separately accepting the task.',box);
+}
+async function mechanicCommand(action,args){
+  if(busy||sending)return;const sid=activeSession.id;busy=true;
+  try{const result=await api('mechanics',{session_id:sid,action,...args});
+    if(action==='checks'){
+      gameplayDrafts.delete(sid);
+      if(activeSession?.id===sid){lastState.gameplay_plan=result;gameplayDraft=null;renderGameplay(lastState)}
+    }
+    $('error').textContent='';current=''}
+  catch(error){$('error').textContent=error.message}
+  finally{try{await refresh()}finally{busy=false;renderMechanics(lastState);renderReview(lastState)}if(activeSession?.id===sid&&!$('review').hidden){showWorkspace('chat');$('review').scrollIntoView({block:'nearest'})}}
+}
+const gitDrafts=new Map();
+function renderGit(s){
+  if(!$('git-work')){const area=workspacePanel('git-work','Local Git repairs','plan-main');el('div',undefined,area).id='git-form-host';el('div',undefined,area).id='git-run-list'}
+  const area=$('git-work'),sid=s.session?.id;area.hidden=!sid||!s.git_runs;if(!sid||!s.git_runs){$('git-run-list').replaceChildren();$('git-form-host').replaceChildren();delete $('git-run-list').dataset.key;delete $('git-form-host').dataset.key;releaseTaskEvidence();return;}
+  const current=s.build?.completed.at(-1),draft=gitDrafts.get(sid)||{goal:'',path:'',before:'',after:''};gitDrafts.set(sid,draft);
+  const activeTask=(s.task_runs||[]).some(run=>['awaiting_approval','running','interrupted','inspection_required','ready_review','awaiting_direction','awaiting_refinement','cancellation_needed'].includes(run.status));
+  const activeGit=(s.git_runs||[]).some(run=>run.blocks_new_work!==false&&['awaiting_approval','ready','running','interrupted','inspection_required','ready_review'].includes(run.status));
+  const pendingBuild=!!s.build?.resumable.length||s.build?.requests.some(request=>!request.decision);
+  const formKey=JSON.stringify([sid,s.project_file_names,s.project_plan?.active,!!current,s.gameplay_plan?.sha256,activeTask,activeGit,pendingBuild,!!s.git_automation]);
+  const host=$('git-form-host');
+  if(host.dataset.key!==formKey){host.dataset.key=formKey;host.replaceChildren();
+    if(s.git_automation){const automatic=el('section',undefined,host);automatic.className='panel';el('h3','Let Ember prepare the repair',automatic);el('p','Use the selected project task and saved failing checks. Review the coding worker and independent verifier first. A generated repair then needs separate Git permissions, clean before/after checks and your exact application approval.',automatic);
+      const start=el('button','Review automated Git repair',automatic);start.className='button primary';start.disabled=!s.project_plan?.active||!current||!s.gameplay_plan?.plan.scenarios.length||activeTask||activeGit||pendingBuild;start.onclick=()=>gitCommand('prepare-automated',{},sid);
+      if(activeTask||activeGit||pendingBuild)el('p','Finish, discard or stop the current review/run before preparing another automated repair.',automatic);
+      el('small','The coding stage can use the existing shared Muse promotional-credit allowance after approval. Source repositories, native commands and publication remain outside this browser repair flow.',automatic);}
+    el('p','Or review one exact browser-source edit in isolated local Git history. The same frozen checks must fail before the edit and pass on a clean candidate. Source repository hooks, native tests, remotes and model calls are not run for this exact-edit adapter.',host);
+    const form=el('form',undefined,host);form.id='git-repair-form';const field=(label,name,kind='textarea')=>{const row=el('label',label,form),input=el(kind,undefined,row);input.name=name;input.required=true;if(kind==='textarea'){input.rows=name==='goal'?2:4;input.maxLength=name==='goal'?2000:65536;input.value=draft[name];input.oninput=()=>draft[name]=input.value}return input};
+    field('What should this repair fix?','goal');const select=field('File to change','path','select');for(const name of s.project_file_names||[])el('option',name,select).value=name;select.value=(s.project_file_names||[]).includes(draft.path)?draft.path:(s.project_file_names||[])[0]||'';draft.path=select.value;select.onchange=()=>draft.path=select.value;
+    field('Find this exact source text','before');const after=field('Replace it with','after');after.required=false;
+    const submit=el('button','Review local Git repair',form);submit.type='submit';submit.className='button primary';submit.disabled=!s.project_plan?.active||!current||!s.gameplay_plan?.plan.scenarios.length;
+    if(submit.disabled)el('p','Approve a project plan, apply a starting browser game and save checks that reproduce the problem first.',host);
+    form.onsubmit=event=>{event.preventDefault();gitCommand('prepare',{...draft,expected_manifest:lastState.build?.completed.at(-1)?.manifest||{}},sid)};
+  }
+  const list=$('git-run-list'),key=JSON.stringify([sid,s.git_runs]);if(list.dataset.key===key)return;list.dataset.key=key;list.replaceChildren();
+  const decisionStates=new Set();
+  for(const run of [...s.git_runs].reverse()){const card=el('article',undefined,list);card.className='panel';card.dataset.gitRun=run.id;el('h4',run.goal+' · '+run.status.replaceAll('_',' '),card);el('p',run.phase||run.notice,card);if(run.error)el('p',run.error,card);
+    const report=run.report;if(report){el('p',report.reason||'Review the retained Git verification evidence.',card);el('small','Author: '+report.author+' · Independent verifier: '+report.reviewer,card);el('p','Baseline: '+report.base+' · Candidate: '+(report.head||'not created'),card).className='hash';detail('Clean before/head checks and file manifests',report,card)}
+    if(run.diff){const diff=el('details',undefined,card);el('summary','Reviewed source diff',diff);el('pre',run.diff,diff)}
+    const actions=el('div',undefined,card);actions.className='actions';const control=(label,action,args={})=>{const b=el('button',label,actions);b.className='button';b.onclick=()=>gitCommand(action,{run_id:run.id,...args});return b};
+    if(['ready','interrupted'].includes(run.status))control(run.status==='ready'?'Run approved Git repair':'Resume same Git attempt','resume');
+    if(['ready','running','interrupted','inspection_required','ready_review'].includes(run.status))control('Stop Git repair','stop');
+    if(run.status==='ready_review')control('Review Git-verified game changes','promote').classList.add('primary');
+    if(run.attempts?.blocked&&!run.attempts.attempts.some(attempt=>attempt.outcome==='running')&&!decisionStates.has(run.attempts.state_hash)){
+      decisionStates.add(run.attempts.state_hash);el('p','This task has used its attempt allowance. Review the retained results before choosing one extra attempt or stopping. A new attempt still needs its own permission review.',card);
+      control('Authorize one extra Git attempt','escalate',{choice:'retry',state_hash:run.attempts.state_hash});
+      control('Stop this task','escalate',{choice:'stop',state_hash:run.attempts.state_hash});
+    }
+    if(run.attempts)detail('Shared task attempt allowance',run.attempts,card);
+    if(report?.head){const play=el('button','Play Git candidate',actions);play.className='button';play.onclick=async()=>{try{play.disabled=true;const saved=await api('git-preview?'+new URLSearchParams({session_id:sid,run_id:run.id}));if(activeSession?.id!==sid||!card.isConnected)return;card.querySelector('iframe')?.remove();prototypeFrame(card,'Git candidate · not applied').srcdoc=previewDocument(saved.html)}catch(error){$('error').textContent=error.message}finally{play.disabled=false}};
+      const images=el('button','View Git before / after screenshots',actions);images.className='button';images.onclick=async()=>{images.disabled=true;const grid=el('div',undefined,card);grid.className='options';try{for(const [stage,label] of [['baseline','Starting game'],['candidate','Git candidate']]){const col=el('section',undefined,grid);el('h4',label,col);for(const name of ['desktop','mobile']){const response=await fetch('/api/git-image?'+new URLSearchParams({session_id:sid,run_id:run.id,stage,name}),{headers:{'X-Ember-Token':token}});if(!response.ok)throw Error((await response.json()).error);const blob=await response.blob();if(activeSession?.id!==sid||!col.isConnected)return;const url=URL.createObjectURL(blob),img=el('img',undefined,col);taskEvidenceURLs.push({url,owner:img});img.src=url;img.alt=label+' '+name;img.style.cssText='width:100%;height:auto'}}}catch(error){el('p','Evidence unavailable: '+error.message,grid);images.disabled=false}};
+    }
+    el('small','A verified Git head is available for exact review; it does not apply game files, close a finding or accept a task.',card);
+  }
+  releaseTaskEvidence();
+}
+async function gitCommand(action,args,sid=activeSession?.id){
+  if(busy||sending)return;const navigation=workspaceNavigation;busy=true;
+  try{await api('git-task',{session_id:sid,action,...args});$('error').textContent='';current=''}
+  catch(error){$('error').textContent=error.message}
+  finally{busy=false;await refresh();if(activeSession?.id===sid&&workspaceNavigation===navigation){
+    if(action==='prepare-automated'){showWorkspace('chat');$('task-run-list').scrollIntoView({block:'nearest'})}
+    else if(!$('review').hidden){showWorkspace('chat');$('review').scrollIntoView({block:'nearest'})}
+  }}
 }
 
 $('new-dialog').addEventListener('cancel',event=>{if(folderPicking||busy)event.preventDefault()});
@@ -589,7 +712,7 @@ function renderProjectPlan(s){
     el('div',undefined,area).id='project-task-list';
   }
   const area=$('project-plan'),sid=s.session?.id,plan=s.project_plan;renderTaskFocus(s);area.hidden=!sid;
-  if(!plan){$('project-plan-edit').disabled=true;$('project-plan-status').textContent='Restart Ember to load project planning.';return;}
+  if(!plan||!sid){delete area.dataset.key;$('project-plan-edit').disabled=true;$('project-plan-status').textContent=plan?'Open a session to plan work.':'Restart Ember to load project planning.';$('project-task-list').replaceChildren();$('task-run-list').replaceChildren();releaseTaskEvidence();return;}
   const key=JSON.stringify([sid,plan,s.task_runs,busy,sending,s.chat_activity?.state,s.build?.completed.at(-1)?.request_ref,s.build?.requests.map(r=>[r.ref,!!r.decision])]);
   if(area.dataset.key===key)return;area.dataset.key=key;
   const status=$('project-plan-status');status.replaceChildren();
@@ -628,21 +751,23 @@ function renderProjectPlan(s){
     }
   }
   if(plan.tasks.length)el('p','Task outcomes are accepted against exact saved builds. Applying files, a model claim or a passing browser check does not automatically complete the project.',list).className='subtitle';
-  const runList=$('task-run-list');runList.replaceChildren();
-  for(const run of s.task_runs||[]){const card=el('article',undefined,runList);card.className='panel';card.dataset.taskRun=run.id;
+  const runList=$('task-run-list');if(runList.dataset.session!==sid){runList.replaceChildren();runList.dataset.session=sid;}
+  const retainedCards=new Map([...runList.children].map(card=>[card.dataset.taskRun,card])),runIds=new Set();
+  for(const run of s.task_runs||[]){
+    runIds.add(run.id);const card=retainedCards.get(run.id)||el('article',undefined,runList),previous=card.querySelector('.task-result');
+    const retain=previous?._taskResultKey===taskResultSignature(sid,run);
+    // Keep the iframe in its existing DOM position; removing or moving it resets play.
+    for(const child of [...card.children])if(!retain||child!==previous)child.remove();
+    card.className='panel';card.dataset.taskRun=run.id;const heading=document.createDocumentFragment();
     const isFix=run.kind==='finding';
-    el('h4',(isFix?'Tester agent · ':'')+run.goal+' · '+run.status.replaceAll('_',' '),card);el('p',run.phase,card);el('small',run.notice,card);
+    el('h4',(isFix?'Tester agent · ':'')+run.goal+' · '+run.status.replaceAll('_',' '),heading);el('p',run.phase,heading);el('small',run.notice,heading);card.insertBefore(heading,card.firstChild);
     const modelProgress=run.model_progress;
     if(run.status==='running'&&modelProgress?.execution){
       const work=modelProgress.execution,seconds=modelProgress.elapsed_seconds||0;
       el('p',work.label+' · '+Math.floor(seconds/60)+'m '+seconds%60+'s elapsed · up to '+work.timeout_seconds/60+'m for this request',card);
       el('small',work.reason+'. Time spent does not establish completion.',card);
     }
-    const latestAttempt=run.reports.at(-1);
-    if(latestAttempt&&!latestAttempt.qualified&&run.status!=='ready_review'){
-      el('p','Previous attempt did not pass verification. '+(run.status==='running'?'The next attempt uses that feedback.':'Work remains incomplete.'),card);
-      for(const issue of latestAttempt.verdict?.issues||[])el('p',issue,card);
-    }
+    renderTaskResult(sid,run,card,retain?previous:null);
     if(run.delegation){
       el('p',run.delegation.stages.map(stage=>stage.label).join(' → '),card);
       if(run.status==='running'&&run.agent){const stage=run.delegation.stages.find(stage=>stage.id===run.stage_id);el('p','Assigned to '+(stage?.label||run.agent),card)}
@@ -655,8 +780,9 @@ function renderProjectPlan(s){
       el('summary','Quality criteria · review before starting',quality);
       for(const criterion of run.quality.criteria){el('p',criterion.id+' · '+criterion.expectation+(criterion.method==='human'?' · Human playtest pending':''),quality);if(criterion.context)detail('Design guidance',criterion.context,quality)}
       const latest=run.reports.at(-1);
-      if(latest?.quality){for(const blocker of latest.quality.blockers)el('p',blocker,quality);detail('Criterion assessments and evidence',latest.verdict.criteria,quality);el('small',latest.quality.basis,quality)}
+      if(latest?.quality){detail('Criterion assessments and evidence',latest.verdict.criteria,quality);el('small',latest.quality.basis,quality)}
     }
+    if(run.coverage_review)renderCoverageReview(run.coverage_review,card);
     const actions=el('div',undefined,card);actions.className='actions';
     const control=(title,action,body={})=>{const b=el('button',title,actions);b.className='button';b.disabled=disabled;b.onclick=()=>taskAction(sid,action,{run_id:run.id,...body});return b};
     if(run.status==='awaiting_approval'){
@@ -664,9 +790,23 @@ function renderProjectPlan(s){
       if(isFix)el('p','The agent will reproduce your bug, propose a fix and have a separate verifier check it. One attempt may use up to $10 of the shared promotional credits. Review and apply the fix when it is ready.',card);
       control(isFix?'Start tester agent':'Approve task run','decide',{choice:'approve'}).classList.add('primary');control(isFix?'Cancel tester agent':'Discard task run','decide',{choice:'decline'});
     }
+    if(run.status==='scope_inactive'){
+      el('p','This review belongs to an older project scope. Discard its pending permissions or end the inactive run before preparing work under the current plan.',card);
+      control('Discard inactive task review','decide',{choice:'decline'});
+      control('End inactive task run','stop');
+    }
     if(run.status==='interrupted')control('Resume same task attempt','resume');
-    if(['awaiting_direction','awaiting_refinement','running','interrupted','inspection_required','ready_review'].includes(run.status))control('Stop task run','stop');
-    if(run.status==='ready_review')control(isFix?'Review proposed fix':run.kind==='asset'?'Review exact asset changes':'Review exact task changes','promote').classList.add('primary');
+    if(['awaiting_direction','awaiting_refinement','running','interrupted','inspection_required','ready_review','cancellation_needed'].includes(run.status))control(run.git_repair&&run.git_stage==='application_declined'?'End discarded repair':'Stop task run','stop');
+    if(run.git_repair){
+      const linked=(s.git_automation||[]).find(row=>row.task_run_id===run.id);
+      el('p','Automated Git repair · '+(linked?.status||'coding and independent review'),card);
+      if(linked?.error)el('p',linked.error,card);
+      if(linked?.status==='cancellation_needed'){const cancel=el('button','Complete cancellation',actions);cancel.className='button';cancel.disabled=disabled;cancel.onclick=()=>gitCommand('advance-automated',{task_run_id:run.id},sid);}
+      if(linked?.status==='application_declined')el('p','The exact game changes were discarded. End this repair to release its running finding attempt while retaining the rejected source and verification evidence.',card);
+      if(linked?.git_run_id){const jump=el('button','View Git verification',actions);jump.className='button';jump.onclick=()=>{showWorkspace('plan');document.querySelector('[data-git-run="'+linked.git_run_id+'"]')?.scrollIntoView({block:'nearest'})};}
+      else if(run.status==='ready_review'){const next=el('button','Review generated Git verification',actions);next.className='button primary';next.disabled=disabled;next.onclick=()=>gitCommand('advance-automated',{task_run_id:run.id},sid);}
+      el('small','A source-stage pass is not the final Git result. Git permissions, failing-before/passing-after checks, exact application and human acceptance are separate.',card);
+    }else if(run.status==='ready_review')control(isFix?'Review proposed fix':run.kind==='asset'?'Review exact asset changes':'Review exact task changes','promote').classList.add('primary');
     if(run.kind==='asset'&&run.directions.length){
       const gallery=el('details',undefined,card);el('summary','Rendered concept directions',gallery);gallery.open=run.status==='awaiting_direction';
       const choices=el('div',undefined,gallery);choices.className='options';
@@ -688,6 +828,101 @@ function renderProjectPlan(s){
       control('Stop this task','escalate',{choice:'stop',state_hash:run.attempts.state_hash});
     }
     detail('Task attempts and independent evidence',{attempts:run.attempts,reports:run.reports},card);
+  }
+  for(const [id,card] of retainedCards)if(!runIds.has(id))card.remove();releaseTaskEvidence();
+}
+function renderCoverageReview(review,parent){
+  const box=el('details',undefined,parent);box.className='coverage-review';box.open=!!review.missing?.length;
+  el('summary','Interaction coverage · review before starting',box);
+  el('p','Requested outcome: '+review.task_expectation,box);
+  if(review.controls_guidance)el('p','Planned controls: '+review.controls_guidance,box);
+  for(const path of review.paths||[]){
+    const row=el('div',undefined,box);row.className='panel';row.dataset.coveragePath=path.id;
+    const label={configured:'Scenario configured',missing:'Missing check · review relevance',review_relevance:'Review relevance'}[path.status]||'Not observed';
+    el('strong',path.label+' · '+label,row);
+    el('p',path.status==='missing'?'No scenario is configured for this path. Decide whether it applies to the selected task.':path.basis==='declared_intent'?'The scenario author marked this path for review; the actual steps still need inspection.':path.basis==='observed_input'?'An input action is followed by a visible-state expectation.':path.basis,row);
+    if(path.scenario_refs?.length)el('small',path.scenario_refs.map(s=>s.name+' ('+s.viewport+')').join(' · '),row);
+    if(path.status!=='configured'&&path.suggestion)el('p','Suggested check: '+path.suggestion,row);
+  }
+  if(review.unsupported?.length)el('p','Not measured: '+review.unsupported.join(' · '),box);
+  if(review.expectation_mapping?.note)el('p',review.expectation_mapping.note,box);
+  if(review.editor_limits)el('p','Available check budget: '+review.editor_limits.scenario_slots+' scenario slots · '+review.editor_limits.action_budget_remaining_ms/1000+' seconds of actions · '+review.editor_limits.steps_per_scenario+' steps per scenario.',box);
+  if(review.guidance)el('p',review.guidance,box);
+  el('small',review.observation_limit,box);
+  const edit=el('button','Review saved gameplay checks',box);edit.type='button';edit.className='button';
+  edit.onclick=()=>{showWorkspace('playtest');$('gameplay-form').hidden=false;$('gameplay-edit').textContent='Close checks editor';$('gameplay-plan').scrollIntoView({block:'start'});};
+  el('small','Save any changes, then prepare a new task review. An existing run keeps its reviewed checks.',box);
+}
+const taskEvidenceURLs=[];
+function releaseTaskEvidence(){
+  for(let index=taskEvidenceURLs.length-1;index>=0;index--){const entry=taskEvidenceURLs[index];if(!entry.owner.isConnected){URL.revokeObjectURL(entry.url);taskEvidenceURLs.splice(index,1)}}
+}
+async function taskScreenshot(sid,run,index,name,parent,stage='candidate'){
+  const response=await fetch('/api/task-image?'+new URLSearchParams({session_id:sid,run_id:run,index,name,stage}),{headers:{'X-Ember-Token':token}});
+  if(!response.ok)throw Error((await response.json()).error);
+  const blob=await response.blob();if(activeSession?.id!==sid||!parent.isConnected)return;
+  const url=URL.createObjectURL(blob),img=el('img',undefined,parent);taskEvidenceURLs.push({url,owner:img});img.src=url;
+  img.alt=(stage==='baseline'?'Starting game':'Task attempt '+index)+' · '+name;img.style.cssText='height:auto;width:100%;object-fit:contain';
+}
+function taskResultSignature(sid,run){return JSON.stringify([sid,run.id,run.goal,run.kind,run.reports,run.quality,run.comparison,run.baseline_observations,run.attempts,run.error]);}
+function renderTaskResult(sid,run,parent,previous=null){
+  const signature=taskResultSignature(sid,run);
+  if(previous?._taskResultKey===signature){if(previous.parentElement!==parent)parent.append(previous);return;}
+  const reports=run.reports||[],latest=reports.at(-1),box=el('section',undefined,parent);box._taskResultKey=signature;box.className='task-result';box.setAttribute('aria-label','Task outcome review');
+  el('p','Requested outcome: '+run.goal,box);
+  if(!latest){el('p',run.error?'Observed result: verification is incomplete.':'Observed result: no completed attempt yet.',box);return;}
+  const qualified=latest.qualified===true;
+  el('strong',qualified?'Checks support review · your playtest is still pending':'Changes are blocked from recommendation',box);
+  el('p','Observed result · AI assessment: '+(latest.verdict?.summary||'No independent assessment is available.'),box);
+  el('p',reports.length+' completed '+(reports.length===1?'attempt':'attempts')+(run.attempts?.attempts?.length?' · '+run.attempts.attempts.length+' allocated in the attempt history':''),box);
+  const concerns=[];
+  for(const scenario of latest.observations?.gameplay?.scenarios||[]){
+    if(scenario.outcome!=='passed'){
+      const failed=(scenario.steps||[]).filter(s=>s.status==='failed').map(s=>s.observed).join(' · ');
+      concerns.push(['Broken behavior',scenario.name+' ('+scenario.viewport+'): '+(failed||'Scenario did not pass.')]);
+    }
+  }
+  for(const view of latest.observations?.viewports||[]){
+    for(const issue of [...(view.observations||[]),...(view.errors||[]),...(view.network||[])])concerns.push(['Browser problem',view.name+': '+(typeof issue==='string'?issue:JSON.stringify(issue))]);
+    if(view.after?.overflow)concerns.push(['Broken layout',view.name+': the game extends beyond its viewport.']);
+  }
+  if(latest.verdict?.meets_task===false)concerns.push(['Unmet task · AI judgment',latest.verdict.summary]);
+  if(latest.verdict?.preserves_scope===false)concerns.push(['Preservation concern · AI judgment',latest.verdict.summary]);
+  const criteria=new Map((run.quality?.criteria||[]).map(c=>[c.id,c]));
+  for(const assessment of latest.verdict?.criteria||[]){
+    const criterion=criteria.get(assessment.id);
+    if(criterion?.method==='human'||assessment.status==='met')continue;
+    const category=assessment.status==='not_observed'?'Unavailable evidence':criterion?.method==='visual'?'Visual judgment':'Unmet task criterion';
+    concerns.push([category,(criterion?.expectation||assessment.id)+' · '+assessment.reason]);
+  }
+  for(const issue of latest.verdict?.issues||[])concerns.push(['AI review issue',issue]);
+  for(const issue of [...(latest.quality?.blockers||[]),...(latest.comparison?.blockers||[]),...(latest.mechanics?.blockers||[])])concerns.push(['Evidence blocker',issue]);
+  for(const row of latest.observations?.mechanics?.checks||[]){if(row.status!=='passed')concerns.push(['Mechanic check failed',row.id+' · '+JSON.stringify(row.observed)])}
+  if(concerns.length){
+    const list=el('ul',undefined,box);list.className='task-blockers';
+    for(const [category,text] of concerns){const item=el('li',undefined,list);el('strong',category+': ',item);item.append(document.createTextNode(text));}
+    el('p','Next change to discuss: '+concerns[0][1],box).className='task-next-change';
+  }else if(!qualified)el('p','Next step: inspect the retained attempt evidence and resolve the missing verification before preparing more work.',box);
+  if(run.attempts?.blocked)el('p','The attempt allowance is exhausted. Review what remains before authorizing one extra attempt. Extra work keeps the existing credit limits and may still fail.',box);
+  el('p','Human playtest pending: compare the experience yourself. An AI assessment or passing check does not accept the task.',box);
+  const assessment=latest.comparison?.assessment;
+  if(assessment){el('p','Compared with the starting game · AI judgment: '+assessment.improvement,box);for(const loss of assessment.losses||[])el('p','Reported loss: '+loss,box);}
+  if(run.comparison?.baseline_status==='no_playable_baseline')el('p','No playable starting game was available for a before/after comparison.',box);
+  if(!run.comparison&&!run.kind)el('p','This run does not include matched before/after capture evidence.',box);
+  if(run.kind==='asset')return;
+  const evidence=el('details',undefined,box);el('summary','Play and inspect retained attempts ('+reports.length+')',evidence);
+  for(const [offset,report] of reports.entries()){
+    const index=report.index||offset+1,row=el('section',undefined,evidence);row.className='panel';
+    el('h4','Attempt '+index+' · '+(report.qualified?'Checks support review':'Needs changes'),row);
+    el('p',report.verdict?.summary||'No AI assessment available.',row);
+    const play=el('button','Play task attempt '+index,row);play.className='button';play.type='button';
+    play.onclick=async()=>{play.disabled=true;try{const saved=await api('task-preview?'+new URLSearchParams({session_id:sid,run_id:run.id,index}));if(activeSession?.id!==sid||!row.isConnected)return;row.querySelector('iframe')?.remove();prototypeFrame(row,'Task attempt '+index+' · awaiting your review').srcdoc=previewDocument(saved.html)}catch(error){el('p','Candidate unavailable: '+error.message,row)}finally{play.disabled=false}};
+    const compare=el('button','View task screenshots · attempt '+index,row);compare.className='button';compare.type='button';
+    compare.onclick=async()=>{compare.disabled=true;const grid=el('div',undefined,row);grid.className='options';try{
+      const stages=run.comparison?.baseline_status==='captured'?[['baseline','Starting game',report.comparison?.baseline_observations||run.baseline_observations],['candidate','Proposed game',report.observations]]:[['candidate','Proposed game',report.observations]];
+      for(const [stage,title,observations] of stages){const column=el('section',undefined,grid);el('h4',title,column);for(const view of observations?.viewports||[]){for(const name of [view.screenshot,view.action_screenshot,view.panel_screenshot].filter(Boolean)){el('p',view.name+' · '+name,column);await taskScreenshot(sid,run.id,index,name,column,stage)}}}
+    }catch(error){el('p','Evidence unavailable: '+error.message,grid);compare.disabled=false}};
+    detail('Saved checks and independent assessment',report,row);
   }
 }
 async function conceptImage(sid,run,choice,view,parent){
@@ -770,6 +1005,7 @@ function renderFindings(s){
       const activeRun=s.task_runs?.find(r=>['awaiting_approval','awaiting_direction','awaiting_refinement','ready','running','interrupted','inspection_required','ready_review'].includes(r.status));
       const reason=bug.build_id!==s.build?.completed.at(-1)?.request_ref?'This finding refers to an older game. Update reproduction on the current build.':!s.project_plan?.active?'Approve or renew the project plan in Project tools.':activeRun?'Review, finish or cancel the current agent run before starting another.':row.attempts.status!=='ready'?'Review the previous attempt. Extra attempts need owner approval.':!scenario.options.length?'Save a gameplay check below that demonstrates what should happen. It must fail on the current game.':!s.polish_available?.ready?'Browser checks are unavailable. Set up the browser tools and reopen Ember before starting the tester agent.':!canDescribe?'Finish the pending build review first.':'';
       const launch=button('Review tester agent',()=>taskAction(sid,'prepare-fix',{bug_id:bug.id,bug_hash:bug.record_hash,scenario:Number(scenario.value)}));launch.classList.add('primary');launch.disabled ||= !!reason;
+      if(s.git_automation){const git=button('Review Git repair agent',()=>gitCommand('prepare-automated',{finding:{bug_id:bug.id,bug_hash:bug.record_hash,scenario:Number(scenario.value)}},sid));git.disabled ||= !!reason;}
       const help=el('p',reason||'Choose the check that reproduces this bug. Review the agent’s permissions and credit limit before it starts.',card);help.id='finding-next-'+bug.id;launch.setAttribute('aria-describedby',help.id);
       if(!scenario.options.length)button('Set up gameplay check',()=>{if($('gameplay-form').hidden)$('gameplay-edit').click();$('gameplay-plan').scrollIntoView({block:'start'})});
     }
@@ -837,6 +1073,12 @@ function gameplayEditor(){
     viewport.setAttribute('aria-label','Controls to test');
     for(const [value,title] of [['desktop','Desktop · keyboard and mouse'],['mobile','Mobile · touch']]){const option=el('option',title,viewport);option.value=value}
     viewport.value=scenario.viewport;viewport.onchange=()=>{scenario.viewport=viewport.value;changed()};
+    const coverage=el('fieldset',undefined,box);coverage.className='scenario-coverage';el('legend','Which paths should these steps observe?',coverage);
+    el('small','These labels describe your intent. Include the actual actions and expectations below; labels alone do not verify behavior.',coverage);
+    for(const [value,title] of [['discoverability','Finding the controls'],['success','Success'],['failure','Failure'],['reset','Restart / reset'],['repeated_play','A second playthrough']]){
+      const label=el('label',undefined,coverage),check=el('input',undefined,label);check.type='checkbox';check.checked=(scenario.coverage||[]).includes(value);check.style.cssText='width:auto;margin-right:8px';label.append(document.createTextNode(title));
+      check.onchange=()=>{const selected=new Set(scenario.coverage||[]);if(check.checked)selected.add(value);else selected.delete(value);scenario.coverage=[...selected];changed()};
+    }
     for(const [j,step] of scenario.steps.entries()){
       const row=el('div',undefined,box);row.className='panel';el('strong','Step '+(j+1),row);
       const actionLabel=el('label','Action',row),action=el('select',undefined,actionLabel);
@@ -882,20 +1124,20 @@ function renderGameplay(s){
     const reload=el('button','Use saved plan',actions);reload.id='gameplay-reload';reload.type='button';reload.className='button';
     const run=el('button','Run gameplay checks',actions);run.id='gameplay-run';run.type='button';run.className='button';
     area.insertBefore(run,form);
-    el('p',undefined,area).id='gameplay-message';$('gameplay-message').setAttribute('role','status');el('section',undefined,area).id='gameplay-reports';
+    el('p',undefined,area).id='gameplay-message';$('gameplay-message').setAttribute('role','status');el('section',undefined,area).id='gameplay-coverage';el('section',undefined,area).id='gameplay-reports';
     el('small','These checks cover the listed observations. Play the game yourself before accepting changes.',area);
     reload.onclick=()=>{if(gameplayDraft.saving||gameplayDraft.running)return;gameplayDrafts.delete(gameplayDraft.sid);gameplayDraft=null;renderGameplay(lastState)};
     form.onsubmit=async event=>{event.preventDefault();const d=gameplayDraft;if(d.saving||sending)return;d.saving=true;gameplayButtons(lastState);
       try{const saved=await api('gameplay-plan',{session_id:d.sid,revision:d.revision,plan:d.plan});d.revision=saved.revision;d.dirty=false;
         if(activeSession?.id===d.sid){lastState.gameplay_plan=saved;$('gameplay-message').textContent='Plan saved · Frozen into future overnight scopes'}}
       catch(error){if(activeSession?.id===d.sid)$('gameplay-message').textContent=error.message}
-      finally{d.saving=false;await refresh()}
+      finally{try{await refresh()}finally{d.saving=false;if(activeSession?.id===d.sid)renderGameplay(lastState)}}
     };
     run.onclick=async()=>{const d=gameplayDraft;if(d.running||d.dirty)return;d.running=true;gameplayButtons(lastState);$('gameplay-message').textContent='Running fixed actions in fresh desktop/mobile browsers…';
       try{const result=await api('gameplay-run',{session_id:d.sid,revision:d.revision,request_ref:lastState.build.completed.at(-1).request_ref,report_id:crypto.randomUUID()});
         if(activeSession?.id===d.sid)$('gameplay-message').textContent=result.outcome==='passed'?'Listed gameplay checks passed':'Gameplay checks found a problem'}
       catch(error){if(activeSession?.id===d.sid)$('gameplay-message').textContent='Checks stopped: '+error.message}
-      finally{d.running=false;await refresh()}
+      finally{try{await refresh()}finally{d.running=false;if(activeSession?.id===d.sid)renderGameplay(lastState)}}
     };
   }
   const sid=s.session?.id;$('gameplay-plan').hidden=!sid;if(!sid){gameplayDraft=null;return}
@@ -911,8 +1153,10 @@ function renderGameplay(s){
   if(gameplayDraft?.sid!==sid){
     gameplayDraft=gameplayDrafts.get(sid)||{sid,revision:saved.revision,plan:structuredClone(saved.plan),dirty:false};gameplayDrafts.set(sid,gameplayDraft);
     gameplayEditor();$('gameplay-message').textContent=gameplayDraft.dirty?'Unsaved changes':saved.revision?'Saved plan · Revision '+saved.revision:'Add checks for this game';
-  }else if(!gameplayDraft.dirty&&!gameplayDraft.saving&&gameplayDraft.revision!==saved.revision){gameplayDraft.revision=saved.revision;gameplayDraft.plan=structuredClone(saved.plan);gameplayEditor()}
+  }else if(!gameplayDraft.dirty&&!gameplayDraft.saving&&saved.revision>gameplayDraft.revision){gameplayDraft.revision=saved.revision;gameplayDraft.plan=structuredClone(saved.plan);gameplayEditor()}
   gameplayButtons(s);
+  const coverage=$('gameplay-coverage'),coverageKey=JSON.stringify(s.coverage_review);
+  if(coverage.dataset.key!==coverageKey){coverage.dataset.key=coverageKey;coverage.replaceChildren();if(s.coverage_review)renderCoverageReview(s.coverage_review,coverage)}
   const reports=s.build?.gameplay_checks||[],ref=s.build?.completed.at(-1)?.request_ref,key=JSON.stringify([sid,ref,saved.sha256,reports.map(r=>r.report_id)]);
   if(key!==gameplayReportKey){gameplayReportKey=key;const area=$('gameplay-reports');area.replaceChildren();
     const current=reports.filter(r=>r.request_ref===ref&&r.plan_sha256===saved.sha256).at(-1);
@@ -1139,6 +1383,7 @@ function renderVersions(versions,parent,s){
   if(!versions?.length)return;
   const history=el('details',undefined,parent);el('summary','Saved versions ('+versions.length+')',history);
   el('p','Preview, download, or review a restore as a new version. Restores require approval and preserve history.',history);
+  if(s.mechanics?.current?.profile==='ember-platformer-v2')el('p','Earlier Lantern Trail versions remain available to preview and download. Returning to that smaller reference needs a separate session; forward restores here preserve the expanded game’s files and can restore earlier Lantern Vale settings.',history);
   for(const version of [...versions].reverse()){
     const row=el('div',undefined,history);row.className='panel';
     el('strong','Version '+version.number+' · '+version.title+(version.latest?' · Latest completed build':''),row);
@@ -1395,6 +1640,8 @@ function renderPolish(s){
     if(best){
       el('strong',best.index===0?'Original retained: no candidate cleared the improvement bar.':'Strongest candidate: '+best.title,box);
       el('p',best.critique.summary,box);detail('AI assessment and remaining issues',best.critique,box);
+      for(const problem of best.critique.problems||[])el('p','AI review concern: '+problem,box);
+      if(best.critique.next_changes?.length)el('p','Next change to discuss: '+best.critique.next_changes[0],box);
       el('small','AI visual judgment and bounded browser checks. Play the game before accepting it.',box);
       if(best.index>0&&run.status!=='running')control('Review exact changes','promote',{index:best.index}).classList.add('primary');
       const compare=el('button','Compare before / after screenshots',box);compare.className='button';
@@ -1407,7 +1654,11 @@ function renderPolish(s){
       const candidates=el('details',undefined,box);el('summary','Play completed candidates ('+run.candidates.length+')',candidates);
       for(const candidate of run.candidates){
         const row=el('div',undefined,candidates);el('p',(candidate.index===0?'Original':'Candidate '+candidate.index)+' · '+candidate.title+' · '+candidate.failures+' check issues',row);
+        for(const blocker of candidate.mechanics?.blockers||[])el('p','Recipe check: '+blocker,row);
         el('p',candidate.gameplay?'Gameplay: '+(candidate.gameplay.outcome==='passed'?'Listed checks passed':'Required checks failed'):'Gameplay: no plan configured for this run',row);
+        for(const scenario of candidate.gameplay?.scenarios||[]){if(scenario.outcome!=='passed')el('p','Broken behavior: '+scenario.name+' ('+scenario.viewport+') · '+(scenario.steps||[]).filter(step=>step.status==='failed').map(step=>step.observed).join(' · '),row);}
+        for(const problem of candidate.critique.problems||[])el('p','AI review concern: '+problem,row);
+        if(candidate.critique.next_changes?.length)el('p','Suggested revision · AI judgment: '+candidate.critique.next_changes[0],row);
         if(candidate.gameplay)detail('Gameplay assertions',candidate.gameplay,row);
         const play=el('button',candidate.index===0?'Play original':'Play candidate '+candidate.index,row);play.className='button';
         play.onclick=async()=>{try{play.disabled=true;const saved=await api('polish-preview?'+new URLSearchParams({session_id:sid,run_id:run.id,index:candidate.index}));

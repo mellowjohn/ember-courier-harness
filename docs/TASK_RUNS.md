@@ -47,7 +47,12 @@ the same $30 ceiling. See [orchestration](ORCHESTRATION.md).
    candidate and original approved source, runs the fixed Chromium driver and receives real desktop/mobile
    screenshots. It judges task completion and preservation of the approved scope.
    It receives no coder narrative and cannot write candidate or current-project files.
-   Captures also include a movement pose while Right is held. Failed candidates'
+   Captures also include a movement pose while Right is held. New comparison
+   runs attach a labeled contact sheet per viewport, retaining initial, gameplay,
+   movement and any open help/settings panel views within the four-image limit
+   for the original/candidate comparison. Each original image and the sheet are
+   hash-checked; evidence references use the labeled original filenames.
+   Failed candidates'
    desktop/mobile images and open-panel captures (or movement poses when no
    panel is captured) reach the coding specialists on the next permitted repair,
    together with the failed assertions and visual feedback. Movement poses remain
@@ -84,6 +89,35 @@ criteria guide that separate review without requiring unrelated planned work in
 this task. Existing finding and native asset adapters keep their specialized
 verification. Older reviewed runs retain their original packet rather than
 silently gaining a new checklist. See [workflow quality](WORKFLOW_QUALITY_TICKETS.md).
+
+New ordinary task runs also freeze a **Starting experience comparison**. Before
+coding, the verifier captures the exact original game with the same saved
+gameplay scenarios and fixed desktop/mobile input protocol used for each
+candidate. The verifier receives both sets of captures, their observations and
+the original/candidate source. It must identify the requested improvement and
+any losses, citing actual source, both viewport captures and relevant checks on
+each available side. A failed original scenario remains visible as before
+evidence. A blank first project is explicitly labeled **No playable comparison
+baseline**, with no invented before evidence.
+
+Missing or unsupported comparison evidence, no observed improvement and reported
+regressions block qualification even when the model says the task is complete.
+Changed source alone cannot establish an improved interaction: that conclusion
+is still an AI judgment, followed by your separate playtest. Comparison blockers
+reach the next permitted repair. The original source and capture checkpoint are
+retained across retries and verified again before review, preview or promotion;
+changed source, screenshots, reports or saved check plans invalidate the evidence.
+The starting capture adds no Muse call and stays inside the existing reviewed
+verifier action allowance. Finding/native asset runs and older reviewed runs
+retain their original specialized evidence rather than acquiring new permissions.
+
+The same review shows a frozen coverage inventory for the selected task:
+configured discoverability, success, failure, reset, replay and input paths,
+with suggested check additions where observations are missing. These labels are
+the check author's declared intent, not verification that the game implements
+it. All configured scenarios remain required. DOM values are influenced by game
+code and cannot independently establish scoring, physics, accessibility or fun.
+Use the existing gameplay editor to review additions before preparing a new run.
 
 One-worker runs use at most three attempts and two model calls per attempt.
 Two-worker runs use at most two attempts and three model calls per attempt.

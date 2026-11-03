@@ -7,7 +7,7 @@ from unittest.mock import patch
 import test_task_run as tasks
 import test_chat_build as builds
 import test_muse_image as images
-from quality_fixture import assessments
+from quality_fixture import assessments, comparison
 from ember_harness import asset_2d, chat_build, muse_image, project_plan, sprite_project, task_artwork, task_run
 from ember_harness.core import subset
 from ember_harness.muse_chat import CreditLedger, IMAGE_MODEL
@@ -57,6 +57,8 @@ class ArtworkTaskTests(unittest.TestCase):
                 edits=[dict(path='style.css',before=data['files']['style.css'],after='body{background:#243;color:white;padding:20px}')])
         else:
             result = dict(meets_task=True, preserves_scope=True, summary='SYNTHETIC independent check', issues=[], criteria=assessments(data))
+            if data.get('comparison'):
+                result['comparison'] = comparison(data)
         return dict(response=json.dumps(result))
 
     def test_generation_precedes_implementation_and_separate_asset_acceptance(self):

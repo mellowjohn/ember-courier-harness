@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 import test_chat_build as builds
 import test_gameplay as checks
 import test_polish as shared
-from quality_fixture import assessments
+from quality_fixture import assessments, comparison
 from ember_harness import chat_build, gameplay, project_brief, project_plan, task_run
 from ember_harness.attempts import TaskAttempts
 from ember_harness.core import path_subset, subset
@@ -56,6 +56,8 @@ class TaskRunTests(unittest.TestCase):
             data = json.loads(prompt.split('\n', 1)[1])
             if data.get('quality'):
                 result['criteria'] = assessments(data)
+            if data.get('comparison'):
+                result['comparison'] = comparison(data)
         return dict(response=json.dumps(result))
 
     def run_worker(self, run_id, model=None, browser=None):
@@ -107,7 +109,7 @@ class TaskRunTests(unittest.TestCase):
         self.assertEqual(state['status'], 'ready_review', state.get('error'))
         self.assertEqual([c[0] for c in self.calls], ['generate-1', 'verify-1', 'generate-2', 'verify-2'])
         self.assertEqual([p.read_bytes() for p in self.calls[2][2]['images']],
-                         [p.read_bytes() for p in self.calls[1][2]['images']])
+                         [p.read_bytes() for p in self.calls[1][2]['images'][2:]])
         self.assertEqual(len(self.calls[2][2]['images']),2)
         frozen_execution = task_run.load(self.folder, run_id)[3]['model_execution']
         self.assertEqual([c[2]['execution'] for c in self.calls], [frozen_execution[key]
@@ -133,7 +135,7 @@ class TaskRunTests(unittest.TestCase):
         state = self.run_worker(run_id)
         self.assertEqual(state['status'], 'ready_review', state.get('error'))
         self.assertEqual([c[0] for c in self.calls], ['generate-1', 'verify-1'])
-        self.assertEqual([len(c[2]['images']) for c in self.calls],[0,2])
+        self.assertEqual([len(c[2]['images']) for c in self.calls],[0,4])
         self.assertTrue(all(c[2]['budget']==dict(id=read_json(work/'run.json')['request_ref'],limit_micro_usd=30_000_000) for c in self.calls))
         self.assertEqual((chat_build.project(self.root,self.folder)/'style.css').read_text(),builds.PROJECT['style.css'])
         self.assertIsNone(project_plan.status(self.root,self.folder)['tasks'][0]['acceptance'])
@@ -172,6 +174,109 @@ class TaskRunTests(unittest.TestCase):
         self.assertTrue(state['reports'][1]['qualified'])
         self.assertEqual(state['reports'][1]['quality']['human_pending'], ['human-experience'])
         self.assertIsNone(project_plan.status(self.root, self.folder)['tasks'][0]['acceptance'])
+
+    def test_matched_starting_comparison_blocks_cosmetic_change_and_survives_recovery(self):
+        run_id = self.prepare(); self.approve(run_id)
+        work, _, _, frozen = task_run.load(self.folder, run_id)
+        captured = []
+        def browser(runtime, source, output, **kwargs):
+            captured.append((Path(source).parent.name, read_json(source)))
+            return self.fixture.browser(runtime, source, output, **kwargs)
+        def reviewing(root, folder, prompt, phase, **kwargs):
+            data = json.loads(prompt.split('\n', 1)[1])
+            if phase == 'generate-2':
+                self.assertIn('no observed task improvement', ' '.join(data['feedback']['comparison']['blockers']))
+            result = self.model(root, folder, prompt, phase, **kwargs)
+            if phase == 'verify-1':
+                result = json.loads(result['response'])
+                result['comparison'].update(improved=False, improvement='Only the background changed; the requested interaction is unchanged')
+                return dict(response=json.dumps(result))
+            if phase == 'verify-2':
+                self.assertEqual(data['comparison'], frozen['comparison'])
+                self.assertEqual(data['baseline_files'], builds.PROJECT)
+                self.assertEqual([row['stage'] for row in data['image_order']], ['baseline', 'baseline', 'candidate', 'candidate'])
+            return result
+        state = self.run_worker(run_id, model=reviewing, browser=browser)
+        self.assertEqual(state['status'], 'ready_review', state.get('error'))
+        self.assertEqual([row['qualified'] for row in state['reports']], [False, True])
+        self.assertEqual([index for index, _ in captured], ['0', '1', '2'])
+        self.assertTrue(all(data['gameplay_plan'] == frozen['gameplay_plan']['plan'] for _, data in captured))
+        self.assertTrue(all(data['gameplay_plan_sha256'] == frozen['comparison']['gameplay_plan_sha256'] for _, data in captured))
+        self.assertEqual(state['reports'][0]['comparison']['baseline_observations'], state['reports'][1]['comparison']['baseline_observations'])
+        calls = len(self.calls)
+        task_run.Worker(self.root, self.folder, run_id).run()
+        self.assertEqual(len(self.calls), calls)
+        self.assertEqual(chat_build.context(self.root, self.folder)['manifest'], frozen['base_manifest'])
+        for target in (work/'captures/0/output/desktop.png', work/'captures/0/input.json', work/'captures/0/output/report.json'):
+            original = target.read_bytes(); target.write_bytes(b'changed evidence')
+            try:
+                with self.assertRaises((ValueError, KeyError)):
+                    task_run.promote(self.root, self.folder, run_id)
+                self.assertEqual(task_run.history(self.root, self.folder)[-1]['status'], 'inspection_required')
+            finally:
+                target.write_bytes(original)
+
+    def test_empty_project_has_no_invented_playable_baseline(self):
+        self.app.start('SYNTHETIC empty task comparison', chat_only=True)
+        self.folder = self.app.sessions_dir / self.app.session['id']
+        gameplay.save(self.folder, checks.PLAN, 0)
+        ref = project_plan.prepare(self.root, self.folder, project_plan.starter(self.folder), None)['request_ref']
+        self.app.respond(ref, 'approve', 'SYNTHETIC first build scope')
+        with patch('ember_harness.task_artwork.policy', return_value=None):
+            run_id = self.prepare()
+        self.approve(run_id)
+        state = self.run_worker(run_id)
+        self.assertEqual(state['status'], 'ready_review', state.get('error'))
+        self.assertEqual(state['comparison']['baseline_status'], 'no_playable_baseline')
+        self.assertIsNone(state['baseline_observations'])
+        self.assertIsNone(state['reports'][0]['comparison']['baseline_observations'])
+        self.assertFalse((task_run.run_folder(self.folder, run_id)/'captures/0').exists())
+        self.assertEqual([len(call[2]['images']) for call in self.calls], [0, 2])
+        with self.assertRaisesRegex(ValueError, 'No playable'):
+            task_run.image(self.folder, run_id, 1, 'desktop', stage='baseline')
+
+    def test_paired_review_sheets_retain_movement_and_panel_pixels_and_reject_tampering(self):
+        from PIL import Image
+        from quality_fixture import review_sheets
+        from ember_harness.polish_runtime import file_digest
+        run_id = self.prepare(); self.approve(run_id)
+        def browser(runtime, source, output, **kwargs):
+            self.assertTrue(read_json(source)['review_sheets'])
+            result = self.fixture.browser(runtime, source, output, **kwargs)
+            output = Path(output)
+            for row in result['viewports']:
+                for kind, color in [('action', '#ff0000'), ('panel', '#0000ff')]:
+                    filename = row['name'] + '-' + kind + '.png'
+                    Image.new('RGB', (40, 30), color).save(output/filename)
+                    row.update({kind + '_screenshot': filename, kind + '_sha256': file_digest(output/filename)})
+            review_sheets(output, result['viewports'])
+            atomic_json(output/'report.json', result)
+            return result
+        def reviewing(root, folder, prompt, phase, **kwargs):
+            if phase.startswith('verify'):
+                data = json.loads(prompt.split('\n', 1)[1])
+                self.assertEqual(len(kwargs['images']), 4)
+                self.assertEqual([row['stage'] for row in data['image_order']], ['baseline', 'baseline', 'candidate', 'candidate'])
+                for path, record in zip(kwargs['images'], data['image_order']):
+                    self.assertTrue(record['ref'].endswith('-review.png'))
+                    self.assertEqual(len(record['contains']), 4)
+                    self.assertTrue(any(name.endswith('-action.png') for name in record['contains']))
+                    self.assertTrue(any(name.endswith('-panel.png') for name in record['contains']))
+                    with Image.open(path) as sheet:
+                        self.assertEqual(sheet.getpixel((0, 30)), (255, 0, 0))
+                        self.assertEqual(sheet.getpixel((40, 30)), (0, 0, 255))
+            return self.model(root, folder, prompt, phase, **kwargs)
+        state = self.run_worker(run_id, model=reviewing, browser=browser)
+        self.assertEqual(state['status'], 'ready_review', state.get('error'))
+        for index in (0, 1):
+            path = task_run.run_folder(self.folder, run_id)/'captures'/str(index)/'output/desktop-review.png'
+            original = path.read_bytes(); path.write_bytes(b'changed sheet')
+            try:
+                with self.assertRaises(ValueError):
+                    task_run.promote(self.root, self.folder, run_id)
+                self.assertEqual(task_run.history(self.root, self.folder)[-1]['status'], 'inspection_required')
+            finally:
+                path.write_bytes(original)
 
     def test_detached_hud_blocks_qualification_and_reaches_repair_with_screenshots(self):
         run_id = self.prepare(); self.approve(run_id)
@@ -257,6 +362,7 @@ class TaskRunTests(unittest.TestCase):
                 dict(meets_task=True,preserves_scope=True,summary='SYNTHETIC independent check',issues=[]))
             if args[3].startswith('verify'):
                 result['criteria'] = assessments(data)
+                result['comparison'] = comparison(data)
             return dict(response=json.dumps(result))
         run=self.prepare();self.approve(run);state=self.run_worker(run,model=bounded)
         self.assertEqual(state['status'],'ready_review',state.get('error'));self.assertEqual(len(prompts),2)
@@ -286,6 +392,7 @@ class TaskRunTests(unittest.TestCase):
                 result=dict(meets_task=request_id=='verify-2',preserves_scope=True,
                     summary='SYNTHETIC separate verifier',issues=[] if request_id=='verify-2' else ['Scoring still needs improvement'])
                 result['criteria'] = assessments(data)
+                result['comparison'] = comparison(data)
             return dict(response=json.dumps(result))
         run_id=self.prepare();self.approve(run_id)
         state=self.run_worker(run_id,model=incremental)

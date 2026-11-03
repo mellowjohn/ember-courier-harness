@@ -63,6 +63,8 @@ def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None
         with exclusive(folder / 'build.lock'):
             snapshot = chat_build.proposal_snapshot(root, folder, ref)
             saved = gameplay.load(folder)
+            completed = chat_build.status(root, folder)['completed']
+            before_ref = completed[-1]['request_ref'] if completed else None
         original_ask = original_ask or ask
         context = dict(ask=ask, original_ask=original_ask, brief=brief, design=design, checks=checks)
         previous = load(folder, ref)
@@ -73,6 +75,10 @@ def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None
             return previous
         plan = deepcopy(saved['plan'])
         warnings = []
+        from .mechanic_workflow import binding as mechanic_binding, review as mechanic_review
+        source_review = mechanic_review(mechanic_binding(snapshot['before_files']), snapshot['files'])
+        if source_review:
+            warnings.extend(source_review['blockers'])
         if checks:
             gameplay.validate(checks)
             extra = [s for s in checks['scenarios'] if s not in plan['scenarios']]
@@ -101,7 +107,8 @@ def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None
                 if not files:
                     continue
                 progress('testing_before' if label == 'before' else 'testing_candidate')
-                observed = gameplay._capture(files,dict(plan=plan,sha256=digest(plan)),work/label,runtime)
+                observed = gameplay._capture(files,dict(plan=plan,sha256=digest(plan),revision=saved['revision']),work/label,runtime,
+                    build_ref=before_ref if label == 'before' else ref)
                 report['observations'][label] = observed
                 report['artifacts'][label] = dict(input_sha256=polish_runtime.file_digest(work/label/'input.json'),
                     report_sha256=polish_runtime.file_digest(work/label/'output/report.json'))

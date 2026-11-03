@@ -85,9 +85,12 @@ class GameplayTests(unittest.TestCase):
         self.assertEqual(gameplay.load(self.folder)['revision'], 0)
 
     def test_host_report_binding_idempotence_and_no_authority_changes(self):
+        from test_polish import PolishTests
         self.save(); before = chat_build.harness(self.folder)._entries()
-        saved = self.run_plan()
-        again = self.run_plan()
+        # Retried reports must retain real artifact hashes and PNGs for verification.
+        with patch.object(self, 'inspect', side_effect=PolishTests().browser):
+            saved = self.run_plan()
+            again = self.run_plan()
         self.assertEqual(saved, again)
         self.assertEqual(saved['plan_sha256'], digest(PLAN))
         self.assertEqual(saved['outcome'], 'passed')

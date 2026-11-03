@@ -13,7 +13,8 @@ import zipfile
 import test_project_plan as plans
 import test_findings as bugs
 import test_gameplay as checks
-from ember_harness import chat_build, gameplay, project_handoff, project_plan
+import test_task_run as tasks
+from ember_harness import chat_build, gameplay, project_handoff, project_plan, task_run
 from ember_harness.local_ui import server
 from ember_harness.recovery import atomic_json
 
@@ -139,6 +140,32 @@ class FindingHandoffTests(unittest.TestCase):
         work=fixture.folder/'task-runs'/run
         (work/'captures/1/output/desktop.png').write_bytes(b'tamper')
         with self.assertRaises(ValueError):fixture.app.export_handoff(fixture.sid,ref)
+
+
+class TaskQualityHandoffTests(unittest.TestCase):
+    def test_frozen_coverage_and_comparison_survive_handoff_without_human_acceptance(self):
+        fixture = tasks.TaskRunTests(); fixture.setUp(); self.addCleanup(fixture.doCleanups)
+        run = fixture.prepare(); fixture.approve(run)
+        state = fixture.run_worker(run)
+        self.assertEqual(state['status'], 'ready_review', state.get('error'))
+        ref = task_run.promote(fixture.root, fixture.folder, run)['request_ref']
+        fixture.app.respond(ref, 'approve', 'SYNTHETIC exact task candidate')
+        raw, _ = fixture.app.export_handoff(fixture.sid, ref)
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            text = archive.read('project-report.json').decode()
+            report = json.loads(text)
+        task = report['task_runs'][0]
+        self.assertEqual(task['coverage_review'], state['coverage_review'])
+        self.assertEqual(task['quality_criteria'], state['quality'])
+        self.assertEqual(task['attempts'][0]['comparison'], state['reports'][0]['comparison'])
+        self.assertEqual(task['attempts'][0]['quality_review'], state['reports'][0]['quality'])
+        self.assertFalse(report['project_plan']['tasks'][0]['accepted'])
+        self.assertNotIn(str(fixture.root), text)
+        self.assertNotIn(fixture.app.token, text)
+        work = task_run.run_folder(fixture.folder, run)
+        (work / 'captures/0/output/mobile.png').write_bytes(b'changed baseline capture')
+        with self.assertRaises(ValueError):
+            fixture.app.export_handoff(fixture.sid, ref)
 
 
 if __name__=='__main__':unittest.main()

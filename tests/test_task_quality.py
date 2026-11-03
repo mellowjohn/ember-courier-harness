@@ -3,7 +3,7 @@ from copy import deepcopy
 import unittest
 
 from ember_harness import task_quality
-from quality_fixture import assessments
+from quality_fixture import assessments, comparison
 
 
 class TaskQualityTests(unittest.TestCase):
@@ -114,3 +114,33 @@ class TaskQualityTests(unittest.TestCase):
         blockers=task_quality.review(quality,verdict,self.files,self.observed)['blockers']
         self.assertTrue(any('platformer-terrain: review both' in b for b in blockers))
         self.assertTrue(any('platformer-geometry: task and preservation judgments need a source' in b for b in blockers))
+
+    def test_comparison_requires_paired_evidence_and_meaningful_improvement(self):
+        baseline = {'app.js': 'const deliveryLabel = "Unclear old action";'}
+        frozen = dict(baseline_status='captured')
+        verdict = dict(comparison=comparison(dict(files=self.files, baseline_files=baseline, comparison=frozen)))
+        check = lambda value: task_quality.compare(frozen, value, self.files, baseline, self.observed, self.observed)
+        self.assertEqual(check(verdict)['blockers'], [])
+        for defect in ('unchanged', 'loss', 'missing_before', 'forged_before', 'missing_after', 'missing_scenario'):
+            value = deepcopy(verdict)
+            if defect == 'unchanged': value['comparison'].update(improved=False, improvement='Only the background changed; delivery is still unclear')
+            elif defect == 'loss': value['comparison']['losses'] = ['Restart no longer resets the delivery state']
+            elif defect == 'missing_before': value['comparison']['evidence'] = [e for e in value['comparison']['evidence'] if e['kind'] != 'baseline_capture']
+            elif defect == 'forged_before': next(e for e in value['comparison']['evidence'] if e['kind'] == 'baseline_source')['detail'] = 'This was never in the starting source'
+            elif defect == 'missing_after': value['comparison']['evidence'] = [e for e in value['comparison']['evidence'] if e['kind'] != 'capture']
+            else: value['comparison']['evidence'] = [e for e in value['comparison']['evidence'] if e['kind'] != 'gameplay']
+            with self.subTest(defect=defect):
+                self.assertTrue(check(value)['blockers'])
+        self.assertTrue(check({})['blockers'])
+        unchanged = dict(comparison=comparison(dict(files=baseline, baseline_files=baseline, comparison=frozen)))
+        self.assertTrue(task_quality.compare(frozen, unchanged, baseline, baseline, self.observed, self.observed)['blockers'])
+
+    def test_blank_comparison_does_not_invent_before_evidence_or_change_legacy_schema(self):
+        frozen = dict(baseline_status='no_playable_baseline')
+        verdict = dict(comparison=comparison(dict(files=self.files, comparison=frozen)))
+        result = task_quality.compare(frozen, verdict, self.files, {}, self.observed, None)
+        self.assertEqual(result['blockers'], [])
+        verdict['comparison']['evidence'].append(dict(kind='baseline_capture', ref='desktop.png', detail='Invented starting game'))
+        self.assertTrue(task_quality.compare(frozen, verdict, self.files, {}, self.observed, None)['blockers'])
+        self.assertNotIn('comparison', task_quality.VERDICT_SCHEMA['required'])
+        self.assertIn('comparison', task_quality.comparison_schema(task_quality.VERDICT_SCHEMA)['required'])

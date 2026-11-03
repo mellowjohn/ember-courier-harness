@@ -44,7 +44,7 @@ A changed asset, source, capture or run manifest fails and returns a nonzero
 exit status. The Markdown report is a historical result; refresh before relying
 on it after any changes.
 
-Tests: `py -m unittest discover -s tests -p test_product_demo.py -v`.
+Tests: `py tools/offline_tests.py --pattern test_product_demo.py`.
 The release gate runs this as the twelfth demo with explicit fixture approvals. Generated runs and
 evidence are retained for review; they are not checked into the source repo.
 
@@ -144,8 +144,10 @@ validation copy; it refuses a non-Windows or non-virtual-environment interpreter
 
 These are automated desktop observations with synthetic session text. Live Muse
 quality, Johnathan's approvals and human gameplay acceptance remain separate.
-The source snapshot includes current uncommitted work; an actual clean Git-checkout
-handoff remains a later release gate.
+The source snapshot includes current uncommitted work. The November 3 delivery
+checkpoint additionally passes this gate from an actual clean Git clone of a
+local snapshot containing the delivery patch; see [MVP status](MVP_STATUS.md#explicit-boundaries-retained).
+The ordinary command above still validates the working source snapshot.
 
 ## Real local coding agent at $0
 

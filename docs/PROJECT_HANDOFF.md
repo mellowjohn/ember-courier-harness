@@ -17,6 +17,13 @@ In **Handoff**, choose **Download project handoff**. The download contains:
   GLB specification, task attempts, separate AI judgments, findings/closures,
   current gameplay reports and recorded playtest observations.
 
+For reviewed task runs, the report also retains the frozen quality criteria,
+advisory interaction-coverage inventory, per-attempt blockers and paired
+before/after assessment with its source, capture and scenario references.
+Those references are rechecked against the retained local evidence before
+export. Raw screenshots remain in the session workspace. The assessment is
+an AI judgment; a supported comparison does not record human acceptance.
+
 The game ZIP's hash is recorded in the report. The download checks current files,
 reviewed bytes, owner receipts, the audit chain and contract-lock. Retained task
 reports, production outputs and current gameplay captures are rechecked. Changed

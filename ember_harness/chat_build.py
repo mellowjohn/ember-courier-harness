@@ -178,9 +178,14 @@ def context(root, folder):
             files[target.name] = target.read_bytes().decode('utf-8')
     validate_files(files, empty=True)
     manifest = {name: sha256(content.encode('utf-8')).hexdigest() for name, content in files.items()}
-    return dict(workspace_kind='browser project', directory=str(destination), file='index.html',
+    result = dict(workspace_kind='browser project', directory=str(destination), file='index.html',
                 sha256=manifest_hash(manifest), content=files.get('index.html'),
                 files=[dict(path=name, content=content) for name, content in files.items()], manifest=manifest)
+    from .mechanic_workflow import binding
+    mechanics = binding(files)
+    if mechanics is not None:
+        result['mechanics'] = mechanics
+    return result
 
 
 def manifest_hash(manifest):
@@ -435,6 +440,11 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None,
         body['build']['checks'].append('Entity roles, required clips, state graphs and exact draw replacements checked; '+str(len(asset_actions))+' changed assets require individual acceptance receipts')
     if asset_source is not None:
         body['build']['asset_source']=deepcopy(asset_source)
+    from .mechanic_workflow import binding as mechanic_binding
+    mechanics = mechanic_binding(files)
+    if mechanics is not None:
+        body['build']['mechanics'] = mechanics
+        body['build']['checks'].append('Versioned reference mechanics and exact settings retained; fixed-step checks and human feel remain separate')
     return OwnerReview()._request(h, 'contracts', body, wait=False)
 
 

@@ -75,6 +75,37 @@ async function gameplay(browser){
   }
   return {plan_sha256:input.gameplay_plan_sha256,scenarios,outcome:scenarios.every(s=>s.outcome==='passed')?'passed':'failed'};
 }
+async function mechanicObservations(browser){
+  if(!input.mechanic_binding)return null;
+  if(!['ember-platformer-v1','ember-platformer-v2'].includes(input.mechanic_binding.profile))throw Error('Unsupported mechanic observation profile');
+  const game=await openGame(browser,'desktop');
+  try{
+    await game.frame.locator('#check-mechanics').click();
+    const text=await game.frame.locator('#mechanic-report').textContent();
+    if(!text||text.length>65536)throw Error('Missing or oversized mechanic observations');
+    if(game.errors.length)throw Error('Reference mechanics reported a browser error');
+    return JSON.parse(text);
+  }finally{await game.context.close()}
+}
+async function reviewSheet(browser,name,files){
+  // Fixed, bounded image packing inside the same gated browser invocation.
+  // Labels identify the original evidence refs; all originals remain retained.
+  const tileWidth=name==='desktop'?800:390,tileHeight=Math.ceil(tileWidth*(name==='desktop'?740/1100:844/390));
+  const context=await browser.newContext({viewport:{width:tileWidth*2,height:(tileHeight+28)*2},deviceScaleFactor:1,
+    serviceWorkers:'block',acceptDownloads:false});
+  try{
+    await context.route('**/*',route=>route.abort());
+    const page=await context.newPage();
+    await page.setContent('<!doctype html><html><body style="margin:0;background:#14191e;color:white;font:16px sans-serif;display:grid;grid-template-columns:1fr 1fr">'+
+      files.map(file=>'<section style="margin:0;overflow:hidden"><div style="height:28px;padding:4px;box-sizing:border-box">'+file+'</div><img width="'+tileWidth+'" height="'+tileHeight+'" style="display:block;object-fit:contain" src="data:image/png;base64,'+fs.readFileSync(path.join(output,file)).toString('base64')+'"></section>').join('')+'</body></html>');
+    await page.locator('img').evaluateAll(images=>Promise.all(images.map(image=>image.decode())));
+    const filename=name+'-review.png';
+    await page.screenshot({path:path.join(output,filename),animations:'disabled'});
+    const bytes=fs.readFileSync(path.join(output,filename));
+    if(bytes.length>4*1024*1024)throw Error('Review contact sheet exceeds the image allowance');
+    return {review_screenshot:filename,review_sha256:hash(bytes),review_sources:files};
+  }finally{await context.close()}
+}
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
   const browser=await chromium.launch({headless:true,executablePath:process.env.EMBER_BROWSER_EXECUTABLE});
@@ -128,7 +159,8 @@ async function gameplay(browser){
           }
         }catch{/* Missing panel evidence stays unobserved; gameplay captures remain available. */}
       }
-      results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,...(sprites?{sprites}:{}),
+      const reviewCapture=input.review_sheets?await reviewSheet(browser,name,[name+'.png',name+'-before.png',name+'-action.png',...(panelCapture.panel_screenshot?[panelCapture.panel_screenshot]:[])]):{};
+      results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,...(sprites?{sprites}:{}),...reviewCapture,
                     ...panelCapture,
                     screenshot:path.basename(screenshot),sha256:hash(fs.readFileSync(screenshot)),
                     action_screenshot:path.basename(action),action_sha256:hash(fs.readFileSync(action)),action_input:'ArrowRight held for 120ms',
@@ -136,8 +168,10 @@ async function gameplay(browser){
       await context.close();
     }
     const checks=await gameplay(browser);
+    const mechanics=await mechanicObservations(browser);
     const report={complete:true,input_sha256:hash(fs.readFileSync(process.argv[2])),viewports:results,
       ...(checks?{gameplay:checks}:{}),
+      ...(mechanics?{mechanics}:{}),
       basis:'Real Chromium input and screenshots; DOM and error text are untrusted observations, not gameplay proof.'};
     fs.writeFileSync(path.join(output,'report.tmp'),JSON.stringify(report));
     fs.renameSync(path.join(output,'report.tmp'),path.join(output,'report.json'));

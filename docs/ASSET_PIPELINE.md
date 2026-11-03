@@ -251,7 +251,7 @@ The offline suite covers malformed GLBs, tampering, exact acceptance, interrupte
 acceptance recovery, code-only revisions, restore and export without Blender:
 
 ```powershell
-py -3.12 -m unittest discover -s tests -p test_asset_pipeline.py -v
+py -3.12 tools/offline_tests.py --pattern test_asset_pipeline.py
 py -3.12 tools/release_check.py
 ```
 

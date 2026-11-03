@@ -69,7 +69,7 @@ versioning and separate widening acknowledgement workflow.
 
 ```powershell
 py examples/scope_demo.py
-py -m unittest discover -s tests -p test_scope.py -v
+py tools/offline_tests.py --pattern test_scope.py
 py tools/release_check.py
 ```
 

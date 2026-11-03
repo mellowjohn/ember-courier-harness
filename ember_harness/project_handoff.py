@@ -31,10 +31,12 @@ def current_checks(folder, saved, game):
         if (data['html'] != ''.join(parser.output) or data['gameplay_plan'] != saved['plan'] or
                 data['gameplay_plan_sha256'] != saved['sha256'] or event['manifest'] != game['manifest'] or
                 event['plan_revision'] != saved['revision'] or event['plan'] != saved['plan'] or
-                observed['gameplay'] != event['gameplay'] or event['outcome'] != observed['gameplay']['outcome']):
+                observed['gameplay'] != event['gameplay'] or event['outcome'] != gameplay.capture_outcome(observed) or
+                event.get('mechanics') != gameplay.mechanic_evidence(area, observed)):
             raise ValueError('Gameplay handoff binding changed')
         rows.append(dict(report_id=event['report_id'], outcome=event['outcome'],
-            scenarios=observed['gameplay']['scenarios'], basis=event['basis'], capture_sha256=event['report_sha256']))
+            scenarios=observed['gameplay']['scenarios'], mechanics=event.get('mechanics'),
+            basis=event['basis'], capture_sha256=event['report_sha256']))
     return rows
 
 
@@ -67,9 +69,32 @@ def report(root, folder, ref):
             author=packet['body']['contracts'][0]['contract']['agent'],
             reviewer=packet['body']['contracts'][1]['contract']['agent'],
             selected_direction=row.get('selected_direction'),
+            quality_criteria=task.get('quality'), coverage_review=task.get('coverage_review'),
+            mechanics=task.get('mechanics'),
             attempts=[dict(index=r['index'], qualified=r['qualified'], manifest=r['manifest'],
                 matches_current_files=r['manifest'] == game['manifest'],
-                browser_outcome=r['observations']['gameplay']['outcome'], ai_judgment=r['verdict']) for r in row['reports']]))
+                browser_outcome=r['observations']['gameplay']['outcome'], ai_judgment=r['verdict'],
+                quality_review=r.get('quality'), comparison=r.get('comparison'), mechanic_review=r.get('mechanics')) for r in row['reports']]))
+        if task.get('git_repair'):
+            runs[-1].update(git_repair=True, git_run_id=row.get('git_run_id'),
+                finding_id=task.get('finding', {}).get('bug', {}).get('id'))
+    from . import git_task
+    git_runs = []
+    for row in git_task.history(root, folder):
+        if row['status'] == 'inspection_required':
+            raise ValueError('Retained Git evidence needs inspection before handoff')
+        proof = row['report']
+        git_runs.append(dict(id=row['id'], goal=row['goal'], status=row['status'], proposal_ref=row['proposal_ref'],
+            applies_to_current_build=row['proposal_ref'] == ref,
+            verification=None if proof is None else {key: proof.get(key) for key in
+                ('qualified', 'reason', 'base', 'head', 'base_manifest', 'candidate_manifest', 'gameplay_plan_sha256', 'author', 'reviewer', 'basis')}))
+        origin = row.get('origin') or {}
+        if origin.get('task_run_id'):
+            source = next((item for item in runs if item['id'] == origin['task_run_id']), None)
+            if source is None or not source.get('git_repair'):
+                raise ValueError('Automated Git handoff lacks its verified coding task')
+            git_runs[-1].update(source_task_run_id=source['id'], source_index=origin['index'],
+                source_report_sha256=origin['report_sha256'], finding_id=source.get('finding_id'))
     bugs = []
     for row in findings.history(root, folder):
         bug, closure = row['bug'], row['closure']
@@ -97,7 +122,7 @@ def report(root, folder, ref):
         project_plan=dict(managed=plan['managed'], active=plan['active'], reason=plan['reason'],
             approved=approved, history=plan_history, tasks=tasks,
             acceptance_history=[{k:e[k] for k in ('plan_ref', 'task_id', 'request_ref', 'manifest')}
-                for e in entries if e['kind'] == 'project_task_accepted']), asset=asset, task_runs=runs, findings=bugs,
+                for e in entries if e['kind'] == 'project_task_accepted']), asset=asset, task_runs=runs, git_runs=git_runs, findings=bugs,
         gameplay=dict(saved_plan=saved, current_build_checks=checks, limit=gameplay.LIMIT),
         playtests=[dict(report_id=e['report_id'], outcome=e['outcome'], note=e['note'],
             basis='Host-recorded human observation; not independent verification') for e in playtests.reports(folder)
@@ -108,6 +133,10 @@ def report(root, folder, ref):
     if 'sprite-plan.js' in game['files']:
         from .sprite_project import unpack_plan,asset_rows
         result['sprite_project']=dict(plan=unpack_plan(game['files']['sprite-plan.js']),assets=asset_rows(game['files']))
+    from .mechanic_workflow import binding as mechanic_binding
+    mechanics = mechanic_binding(game['files'])
+    if mechanics is not None:
+        result['mechanics'] = mechanics
     # Task workers append without holding the project lock. Never combine two audit snapshots.
     if h._entries() != entries or gameplay.load(folder) != saved:
         raise ValueError('Project evidence changed during handoff; try again when the worker is idle')

@@ -15,21 +15,22 @@ assessments, not percentages.
 |---|---|---|
 | A0: approved project scope before work; descendants remain subsets | **Usable/partial:** opt-in persistent project plans, ordered tasks, scope-bound exact builds and isolated worker/verifier contracts, inherited art direction, reviewed amendments and version-bound human task acceptance (`project_plan.py`, [guide](PROJECT_PLAN.md)) | Complete plan-first onboarding and broader project workers; legacy sessions retain per-build behavior until adopting a plan |
 | A1: schema, hash-locked approvals, deny-by-default gate, evidence, audit, amendments | **Library/demo and usable:** core, amendments, owner review and app exact-build approvals | Keep new workers behind the existing gate; no parallel permission mechanism |
-| A2: iteration, C0–C3 checkpoints, one amendment, three-attempt escalation | **Usable/partial:** browser task allocations and real-finding bug attempts, frozen baseline/candidate/applied/owner-closure witnesses, three-attempt breaker, one-extra-attempt decisions and resumable evidence ([findings](FINDINGS.md)); library Git rounds/amendments remain available | General Git fix rounds and failure-driven scope amendments remain separate; ordinary task runs do not manufacture or close findings |
-| A3: orchestrator → coding worker → independent verifier, sequential | **Usable/partial:** host-sequenced Muse browser-task coder, separate read-only verifier, real frozen Chromium checks and captures, exact promotion (`task_run.py`, [guide](TASK_RUNS.md)); staged Git fixes remain library/demo | Live Muse task-quality rehearsal; arbitrary-project Git workers and clean base/head regression verification remain separate from browser-task execution |
+| A2: iteration, C0–C3 checkpoints, one amendment, three-attempt escalation | **Usable/partial:** browser task allocations and canonical finding attempts, frozen baseline/candidate/applied/owner-closure witnesses, three-attempt breaker, explicit extra allowance and resumable evidence ([findings](FINDINGS.md)); generated Git repairs retain the same task/bug allocation through source and Git stages and connect canonical browser findings to a clean Git witness and explicit C3 closure ([guide](GIT_TASKS.md)) | Expanded Git lifecycle, canonical closure and handoff checks pass in the clean installed release and browser rehearsals. General failure-driven Git scope amendments remain separate; ordinary task/Git runs do not manufacture findings, and S0/S1 closure remains Johnathan-only |
+| A3: orchestrator → coding worker → independent verifier, sequential | **Usable/partial:** approved Muse coding → separate source verifier → exact generated-source Git permission review → clean named baseline/head verifier → exact application; both Git stages reuse the existing scope, gate and attempts ([Git repairs](GIT_TASKS.md)); ordinary browser task execution remains available ([task runs](TASK_RUNS.md)) | Expanded end-to-end and clean installation checks pass; live Muse quality remains pending; autonomous arbitrary-project/native Git coding, repository test commands and engine work remain separate |
 | A4: observed statuses, evidence labels, report, AI judgment vs owner acceptance | **Usable/partial:** activity, audit, browser reports, proposal comparisons, polish and independent task reports, scope-bound task outcome cards and a verified project handoff spanning asset steps and findings ([guide](PROJECT_HANDOFF.md)) | Broader pipeline evidence and live quality review remain separate |
 | A5: concept directions and B1 ingest | **Usable/partial:** three generated procedural Blender directions with hero/open views, palette, notes and comparison sheet, explicit hash-bound human pick; supplied PNG ingest remains available (`assets.py`, [production guide](ASSET_PRODUCTION.md)) | General painted/image-model concepts, pre-pick concept refinement and broader art-direction scoring remain separate work; the current generated studies use bounded original prop geometry |
-| A6: Git layout, trailers and local contract-lock | **Library/demo:** local commits, contract trailers, contract-lock | Connect a general coding worker to the same implementation; hosted CI is not an MVP prerequisite |
+| A6: Git layout, trailers and local contract-lock | **Usable/partial:** approved browser repairs create fresh private local repositories, named baseline/head commits, contract/round trailers and Git-aware contract-lock; retained source, commits and captures are rechecked before review/export ([guide](GIT_TASKS.md)) | General repository workers and original-history integration remain separate; source repositories are unchanged; hosted CI is not an MVP prerequisite |
 | B7: concept/specification lock and validation | **Usable/partial:** app direction pick locks identity, dimensions, interaction, art direction and palette; packaged Blender producer retains editable source, independent GLB inspection and fixed desktop/touch checks | Broader asset families, arbitrary artist-mesh editing and general production specifications remain separate work |
 | B7b: cached pipeline steps, invalidation, forced failure, amendment and retry | **Partial:** durable producer/verifier checkpoints, retained native/export versions, audit-backed task attempts and real collision-failure/source-refinement rehearsal; reviewed re-exports remain available | Original planner/step-key invalidation and failure-as-amendment across general pipeline workers remain separate from bounded parameter refinement |
-| B8: attach an existing workspace, read-only scan, rendered scaffold plan | **Usable/partial:** saved-session read-only inventory, bounded ignore/setup reads, excluded secret/link/engine paths, rendered setup contents/conflicts, pinned scan/plan inputs and separately approved create-only sandbox setup ([guide](WORKSPACE.md)) | Arbitrary source import/editing, full Git/engine/asset inventory, general templates and source-tree sandbox copies remain separate work |
-| Triage intake, deduplication, severity/repro/routing, verified closure/reopening | **Usable/partial:** build-bound human problem reports, reviewed existing intake, QA classification/duplicate review, scoped browser fixes, frozen failing baseline and independent passing candidate, exact apply, explicit closure and reopening with retained attempt limits ([guide](FINDINGS.md)) | Live Muse fix-quality rehearsal; automatic imported findings, late duplicate reconciliation controls and arbitrary-project Git fixes remain separate work; S0/S1 closure stays owner-only |
+| B8: attach an existing workspace, read-only scan, rendered scaffold plan | **Usable/partial:** read-only inventory with passive Git branch/commit metadata and asset filename hints; rendered setup/import contents, hashes and conflicts; separate reviewed create-only setup or flat browser-source copy, followed by normal scoped exact-build adoption ([guide](WORKSPACE.md)) | Git dirty/remotes and full engine/asset dependency inventories, nested/arbitrary source import, general templates and original-project editing remain separate work |
+| Triage intake, deduplication, severity/repro/routing, verified closure/reopening | **Usable/partial:** build-bound human reports, reviewed intake/QA routing, scoped browser fixes, frozen failing baseline and passing candidate, exact apply, explicit closure/reopening and retained limits ([guide](FINDINGS.md)); the generated browser-Git adapter adds clean commit/capture witnesses to canonical finding closure | Expanded Git closure/lifecycle checks pass; live Muse fix quality remains pending; automatic imported findings, late duplicate reconciliation and arbitrary-project Git fixes remain separate; S0/S1 closure stays owner-only |
 | One integrated sample: approved scope → assets → playable game → finding → amendment/fix → verify/report | **Partial:** one-session browser rehearsal and handoff across approved scope, real Blender production/refinement, exact asset acceptance, reviewed scope amendment, finding, scoped fix, independent verification, explicit closure and version-bound task acceptance ([guide](PROJECT_HANDOFF.md)); model replies and owner responses are fixtures | Live model output and human playtesting remain outstanding; failure-driven Git amendments remain separate |
-| Later request: saved conversations, briefs and project locations | **Usable:** persistent sessions, brief snapshots, remembered locations, reviewed Save as and bounded existing-workspace scan/setup | Full source import and arbitrary-project editing remain separate work |
+| Later request: saved conversations, briefs and project locations | **Usable/partial:** persistent sessions, brief snapshots, remembered locations, reviewed Save as, bounded workspace scan/setup and exact flat browser-source import/adoption ([guide](WORKSPACE.md)) | Nested imports, arbitrary-project editing and original-repository writes remain separate work |
 | Later request: gameplay comparisons, history, safe restore and ZIP | **Usable:** fixed desktop/touch plans, version-bound reports, exact restored/exported bytes | Broader human gameplay coverage; DOM checks do not establish arbitrary game quality |
 | Later request: overnight detailed polish | **Usable/partial:** isolated candidates, captures, critiques, limits, recovery and final review | Live Muse quality rehearsal; general asset-source/modeling tasks are not part of the polish worker |
 | Later request: Blender creation → integration → playtest → refinement | **Usable/partial:** selected-task producer, human concept pick, bounded Muse source-parameter edits, real Blender exports, independent geometry/gameplay checks and screenshot judgment, exact acceptance | Live Muse artistic-quality rehearsal, arbitrary existing-game integration, broader props/characters/textures and arbitrary native-source edits remain separate work |
-| Reproducible installation and handoff | **Usable/partial:** 510 tests and twelve demos pass from a fresh installed wheel, alongside real Blender production and Chromium workflow evidence; the Windows launcher now supports project/activated environments and has an installed-wheel desktop/mobile launch, session/brief recovery, fresh-token and zero-credit rehearsal ([installation checks](PRODUCT_DEMO.md#clean-installation-check)) | Actual clean Git-checkout handoff, live Muse quality and complete real-user demonstration remain outstanding |
+| Later request: reusable mechanic improvements | **Usable/partial:** Lantern Trail movement/jumps and the expanded Lantern Vale camera, hit-stop/protection, sentinel states and seeded-layout recipes; scoped full-profile migration, configuration-only retuning, twelve fixed observation groups and existing comparison/restore/handoff paths ([guide](MECHANICS.md)) | Sixteen focused runtime/integration cases, seven expanded evidence cases, the complete expanded browser rehearsal and the final installed gate pass. Human feel/comfort, automatic chat routing and arbitrary-game integration remain open |
+| Reproducible installation and handoff | **Usable/partial:** the current `fbf5` snapshot passes all 772 tests and twelve demos from a fresh installed wheel in a clean clone, plus desktop/mobile recovery and nine source-bound browser/feature rehearsals ([installation checks](PRODUCT_DEMO.md#clean-installation-check)) | The 230-file implementation manifest matches the verified delivery source; all 88 packaged files match the wheel. The verification checkout stays clean. Live Muse quality and the complete real-user demonstration remain outstanding |
 
 ## Delivery order
 
@@ -38,8 +39,12 @@ assessments, not percentages.
    amendments and separate human task acceptance.
 2. Bounded task execution (implemented browser slice): one Muse coding worker
    followed by a separate verifier, using the existing gate, attempt module,
-   evidence/checkpoint executor and browser driver. Live model quality rehearsal
-   and broader Git-task/bug-round integration remain explicit boundaries.
+   evidence/checkpoint executor and browser driver. Generated browser Git repairs
+   now hand source-verifier-qualified bytes to separately approved private Git
+   work and clean named before/head checks, sharing one allocation. Canonical
+   browser findings retain explicit C3 closure backed by that Git witness.
+   General native/repository workers, failure-driven Git scope amendments and
+   live model quality remain boundaries. See [Git browser repairs](GIT_TASKS.md).
 3. Concept and Blender production (implemented chest/waygate slice): generated
    original procedural directions, explicit human pick, bounded parametric source
    edits, editable native source, export, independent geometry/gameplay/visual
@@ -48,14 +53,28 @@ assessments, not percentages.
 4. Findings and iteration (implemented browser slice): connect human playtest
    findings to reviewed intake, scoped fixes, frozen failing baseline, separate
    candidate verification, exact apply, explicit closure, escalation and recurrence.
-   General Git rounds/amendments and live fix quality remain explicit boundaries.
-5. Existing workspace scan/dry-run onboarding (implemented bounded slice):
-   reviewed read-only inventory, full setup diff, conflicts and exact sandbox
-   application. Full Git/engine inventories and source import/editing remain
-   explicit boundaries. The integrated sample and verified handoff now connect
-   the browser slices. The installed-wheel desktop launch/restart rehearsal now
-   exercises the actual Windows launcher and saved-session UI. Next: live model
-   rehearsal, human playtest and actual clean Git-checkout handoff.
+   The bounded generated-browser Git adapter now joins that canonical closure
+   path. General failure-driven Git amendments and live fix quality remain
+   explicit boundaries; the expanded lifecycle and canonical closure checks pass.
+5. Existing workspace onboarding (implemented bounded slice): reviewed read-only
+   inventory, passive Git metadata, asset filename hints, full setup/import
+   contents and conflicts, and separate exact create-only copies. Supported flat
+   browser sources can enter the current game only through its normal scoped
+   exact-build review. Nested source trees, full Git/engine dependencies and
+   original-project editing remain outside this slice. See [workspace onboarding](WORKSPACE.md).
+6. Mechanic recipes (implemented bounded references): versioned movement/jumps
+   in Lantern Trail plus Lantern Vale camera, impact/protection, sentinel states
+   and seeded layouts. The first v2 use reviews a full reference migration;
+   subsequent edits change configuration only. Focused timing, viewport,
+   actual-route and forged-evidence checks pass, as do the complete expanded
+   browser rehearsal and installed gate; human feel, automatic chat recipe
+   routing and arbitrary-game integration remain open. See [mechanics](MECHANICS.md).
+
+The integrated sample and verified handoff connect the browser slices. The
+earlier Git/import/movement snapshot passed clean installation, launcher,
+recovery and the offline gate. The current automated Git/expanded recipe
+snapshot also passes its full installed release and product rehearsals. Live model quality and human playtesting
+remain separate gates.
 
 Implement one complete stage at a time and update this checklist with the exact
 working boundary. Design choices requiring user input should be resolved against
@@ -75,18 +94,96 @@ on missing, unsupported or unmet evidence. Human experience remains pending;
 finding and asset adapters retain their existing specialized reviews. WQ-03 now
 carries bounded criticism and browser/gameplay failures from rejected polish
 attempts into the next revision while retaining the strongest editing base and
-identical recovery context. WQ-04, before/after evidence for ordinary task runs,
-is next. These tickets preserve the existing delivery gates.
+identical recovery context. WQ-04 now compares new ordinary task runs against
+the frozen starting experience; WQ-05 exposes blockers, losses and retained
+playable attempts; WQ-06 shows advisory interaction-coverage gaps before dispatch.
+The reviewed run freezes those inputs and all configured failures remain
+blocking. WQ-07's representative live Muse rehearsal and human playtesting remain
+open. These tickets preserve the existing delivery gates.
 
 ## Mechanic recipe backlog
 
 The [MVP mechanic tickets](MECHANIC_TICKETS.md) document the October 31 request
-for reusable, reviewable game improvements. MR-01 through MR-05 propose the first
-movement/jumping slice; MR-06 through MR-09 queue camera, combat feedback, enemy
-states and seeded levels. All are documented / unimplemented. Their proposed
-priority does not replace the delivery order or existing completion gates above.
+for reusable, reviewable game improvements. MR-01 through MR-04 are implemented
+for the bounded [Lantern Trail reference profile](MECHANICS.md): versioned
+settings, reproducible observations, acceleration/friction and forgiving jumps.
+The integration retains exact build/manifest/plan bindings and rejects missing,
+forged, stale or failed mechanic evidence even when DOM checks or AI judgments
+are positive. MR-05's guarded automated product rehearsal and final
+installed-release validation passed; Johnathan's own playtest remains pending.
+MR-01's verified entry is the Plan recipe UI; automatic chat recipe/task routing
+remains a follow-up. MR-06 through MR-09 are now implemented for the bounded
+Lantern Vale profile: camera follow/reduced motion, hit pause/protection,
+sentinel states and versioned seeded layouts. Sixteen runtime/integration cases
+and seven expanded evidence cases pass, together with the complete expanded
+product rehearsal and final installed gate. None replaces Johnathan's human
+comfort, impact-feel or overall gameplay judgment.
 
-## Explicit boundaries retained
+## Current expanded verification — November 3
+
+The automated browser-Git and Lantern Vale implementation passes **772 tests
+and twelve demos** from a fresh installed wheel in a clean Git checkout. The
+230-file implementation manifest matches the delivery source; all 88 packaged
+implementation/resource files match the wheel. Desktop/mobile launch and restart,
+nine source-bound browser/feature rehearsals and both Git handoff exports pass.
+The checkout stays clean and the shared credit ledger is unchanged. No runtime
+package dependency was added.
+
+Local verification snapshot: `de404a8ae8142f1d1e65e6b33a92f01b97ec056f`.
+Reports: `.harness/v/fbf5/DELIVERY.md`, `.harness/v/fbf5/REPORT.md` and
+`.harness/v/fbf5/c/.harness/clean-installs/b2af738e/REPORT.md`. This local commit
+exists only in the ignored verification repository; the original working patch
+is uncommitted. Model replies and owner choices are fixtures; installation,
+Git, captures, browser input and file checks are real. Live Muse output quality
+and Johnathan's own integrated playtest remain open.
+
+## Earlier verified checkpoint — November 3
+
+The earlier local delivery snapshot passes **735 tests and twelve demos** from a
+fresh installed wheel, plus installed imports/resources/dependencies, command
+entry points and real Windows desktop/mobile launch/restart. The clean Git
+checkout remained clean and its 217 implementation hashes matched that delivery
+source before the later automated Git/expanded recipe changes. Its local verification commit is
+`5005b73e2df567c6e999365b39f9a1cd4b918e6d`; it does not commit or push the original
+working patch. Parent report: `.harness/v/bdf9/REPORT.md`; installation:
+`.harness/v/bdf9/c/.harness/clean-installs/4bd1798c/REPORT.md`.
+
+The same frozen checkout passes the complete Chromium workflow, import/adoption,
+both Git review routes, the movement/jump product rehearsal, guarded quality
+repair and overnight polish. `.harness/v/bdf9/DELIVERY.md` indexes those reports,
+the playable sample ZIP and source additions. Model replies and owner choices
+are fixtures; browser input, Git commits, captures, installation and file checks
+are real. The shared credit ledger remained byte-for-byte unchanged. No new
+runtime package dependency was added. Live Muse quality, Johnathan's acceptance
+and the broader remaining MVP integrations stay open.
+
+## Earlier validation checkpoints
+
+The retained reports below describe earlier frozen snapshots. Their counts,
+source manifests and remaining-work statements apply to those checkpoints;
+the current capability table and guides above describe the later bounded
+Git/import/mechanic implementation. They are not final validation of this slice.
+
+The earlier November 3 delivery checkpoint implements WQ-04 through WQ-06 and verifies
+the exact implementation in a clean Git clone of a local source snapshot. Its
+fresh installed wheel passes all **680 tests and twelve demos**, installed
+imports/resources, dependencies, entry points and Windows desktop/mobile
+launch/restart checks. The checkout stays clean and the implementation manifest
+matches the working delivery source. Parent report:
+`.harness/v/e67a/REPORT.md`; installed report:
+`.harness/v/e67a/c/.harness/clean-installs/3ada4d32/REPORT.md`.
+
+The same frozen checkout passes the complete Chromium workflow, guarded quality
+repair and overnight polish rehearsals. Reports are in its
+`.harness/browser-checks/20261103T140407Z-29369bba/`,
+`.harness/quality-checks/20261103T140538Z-a2eb9d/` and
+`.harness/polish-checks/20261103T141309Z-6f627ab7/` directories. Model replies and
+owner choices in these successful rehearsals are fixtures; browser interactions,
+captures, installation and file evidence are real. The release test runner
+disables host Muse discovery; browser fixture tools deny unstubbed reservations.
+This checkpoint establishes the bounded implementation and automated delivery
+checks at that time, not live output quality, human acceptance or upstream
+publication. It predates the bounded Git/import/mechanic slice described above.
 
 The live Muse rehearsal now has a repeatable preparation command,
 `tools/prepare_live_task.py`, described in [task execution](TASK_RUNS.md#prepare-the-live-mvp-rehearsal).
@@ -159,9 +256,11 @@ source: `.harness/clean-installs/1ee8f851/` (nested full release:
 `.harness/browser-checks/20261031T232548Z-8ab64106/`. Workspace and finding
 contract-lock checks passed. Owner responses and provider replies are synthetic;
 file evidence and Chromium observations are real. No live Muse calls, credits or
-human quality acceptance are claimed. Full source import/editing, complete
-Git/engine/asset inventories, the integrated human demonstration and live model
-quality remain separate delivery work. See [workspace onboarding](WORKSPACE.md).
+human quality acceptance are claimed. Source import and broader inventories
+were still pending at this earlier checkpoint; the current bounded import path
+is described in [workspace onboarding](WORKSPACE.md). Complete engine/asset
+dependency inventories, the integrated human demonstration and live model
+quality remain separate delivery work.
 
 The browser-findings checkpoint passed 473 tests and twelve demos from both the
 checkout and a clean-installed wheel. The final Chromium rehearsal exercised

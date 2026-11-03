@@ -84,9 +84,16 @@ def snapshot(root, folder, ref):
         if actual != manifest or build.get('manifest', manifest) != manifest:
             raise ValueError('Historical project manifest does not match reviewed content')
         chat_build.validate_files(contents)
+        if build.get('mechanics') is not None:
+            from .mechanic_workflow import binding
+            if binding(contents) != build['mechanics']:
+                raise ValueError('Historical mechanic recipe binding changed')
         if complete['request_ref'] == ref:
-            return dict(number=index + 1, request_ref=ref, title=build['title'], created_at=complete['ts'],
+            result = dict(number=index + 1, request_ref=ref, title=build['title'], created_at=complete['ts'],
                         manifest=manifest, files=contents)
+            if build.get('mechanics') is not None:
+                result['mechanics'] = build['mechanics']
+            return result
     raise ValueError('Build version was not found')
 
 

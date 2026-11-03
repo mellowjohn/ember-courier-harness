@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from ember_harness import chat_build, polish, polish_runtime
 from ember_harness.local_ui import App, server
-from tools.browser_check import FILES
+from tools.browser_check import FILES, synthetic_provider_guard
 from tools.release_check import source_manifest
 
 STYLE = '''*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;align-content:center;justify-items:center;
@@ -64,7 +64,7 @@ def main():
     try:
         env=dict(os.environ,EMBER_PLAYWRIGHT_MODULE=runtime['module'],EMBER_BROWSER_EXECUTABLE=runtime['browser'],
             EMBER_BROWSER_URL=f'http://127.0.0.1:{http.server_port}/',EMBER_BROWSER_TOKEN=app.token,EMBER_BROWSER_OUTPUT=str(output))
-        with patch('ember_harness.polish.installed_binary',return_value=binary),patch('ember_harness.polish.run_muse',side_effect=model),\
+        with synthetic_provider_guard(),patch('ember_harness.polish.installed_binary',return_value=binary),patch('ember_harness.polish.run_muse',side_effect=model),\
                 patch('ember_harness.polish.launch',side_effect=launch),redirect_stdout(io.StringIO()):
             with (output/'browser.log').open('w',encoding='utf-8') as log:
                 result=subprocess.run([runtime['node'],str(ROOT/'tools/polish_check.js')],cwd=ROOT,env=env,

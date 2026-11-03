@@ -377,6 +377,9 @@ def closure_proof(root, folder, run_id):
     promoted = next((e for e in entries if e['kind'] == 'task_run_promoted' and e['run_id'] == run_id), None)
     if not promoted:
         raise ValueError('Review and apply the exact fix before closure')
+    if plan.get('git_repair'):
+        from .git_automation import witness
+        witness(folder, run_id, promoted['request_ref'])
     _current(root, folder, promoted['request_ref'], report['manifest'])
     active = h._active(entries)
     for item in packet['body']['contracts']:
@@ -397,17 +400,26 @@ def closure_proof(root, folder, run_id):
 def prepare_close(root, folder, run_id):
     with exclusive(Path(folder) / 'chat.lock'), exclusive(Path(folder) / 'build.lock'):
         h, plan, coder, verifier, promoted, report = closure_proof(root, folder, run_id)
+        git_context = {}
+        if plan.get('git_repair'):
+            from .git_automation import witness
+            git_context['git_verification'] = witness(folder, run_id, promoted['request_ref'])
         action = dict(agent=verifier['agent'], contract_id=verifier['id'], contract_version=verifier['version'],
                       tool='triage.close', args=dict(bug_id=plan['finding']['bug']['id'], severity=plan['finding']['bug']['severity']),
                       paths=dict(read=[], write=[]), spend=0)
         ref = OwnerReview()._request(h, 'action', dict(action=action, contract_hash=content_hash(verifier),
             finding_closure=dict(run_id=run_id, bug=plan['finding']['bug'], build_ref=promoted['request_ref'],
-                                 report=report, notice='Explicit bug closure; task and asset acceptance remain separate.')), wait=False)
+                                 report=report, **git_context,
+                                 notice='Explicit bug closure; task and asset acceptance remain separate.')), wait=False)
         return dict(request_ref=ref)
 
 
 def close(root, folder, run_id):
     h, plan, coder, verifier, promoted, report = closure_proof(root, folder, run_id)
+    git_context = {}
+    if plan.get('git_repair'):
+        from .git_automation import witness
+        git_context['git_verification'] = witness(folder, run_id, promoted['request_ref'])
     if not any(r['decision'] and r['decision']['choice'] == 'approve' and
                r['payload']['body'].get('finding_closure', {}).get('run_id') == run_id for r in requests(folder)):
         raise ValueError('Explicit owner closure approval required')
@@ -431,7 +443,8 @@ def close(root, folder, run_id):
             status='closed', build=promoted['request_ref'], fix_contract_id=coder['id'], fix_version=1,
             verifier_contract_id=verifier['id'], verifier_version=1, author=coder['agent'], reviewer=verifier['agent'],
             review_kind='browser_regression_and_separate_ai_judgment', run_id=run_id, decision_seq=decision['audit_seq'],
-            checkpoints=dict(C0='captures/0', C1='reports/1.json', C2=promoted['request_ref'], C3='explicit_owner_closure'))
+            checkpoints=dict(C0='captures/0', C1='reports/1.json', C2=promoted['request_ref'], C3='explicit_owner_closure'),
+            **git_context)
     return dict(status='closed', status_basis=e['seq'])
 
 
@@ -453,6 +466,12 @@ def validate_history(h, entries):
         decision = entries[event['decision_seq'] - 1]
         expected_action = dict(agent=verifier['agent'], contract_id=verifier['id'], contract_version=1, tool='triage.close',
             args=dict(bug_id=bug['id'], severity=bug['severity']), paths=dict(read=[], write=[]), spend=0)
+        if plan.get('git_repair'):
+            from .git_automation import witness
+            # The outer pass is validating this closure. Its Git witness checks
+            # contracts/commits/source/captures without recursing into C3 again.
+            if not promoted or event.get('git_verification') != witness(folder, plan['id'], promoted['request_ref'], _checking_closure=True):
+                raise ValueError('Historical finding closure lost its clean Git witness')
         if (event['status'] != 'closed' or event['bug_id'] != bug['id'] or event['severity'] != bug['severity'] or
                 event['fix_contract_id'] != coder['id'] or event['verifier_contract_id'] != verifier['id'] or
                 event['author'] != coder['agent'] or event['reviewer'] != verifier['agent'] or coder['agent'] == verifier['agent'] or

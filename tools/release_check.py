@@ -25,7 +25,7 @@ def source_manifest():
             for p in sorted(paths)}
 
 
-def run_check(name, args, output, timeout=1800, *, require_tests=False, cwd=None):
+def run_check(name, args, output, timeout=3600, *, require_tests=False, cwd=None):
     env = dict(os.environ)
     env.pop('PYTHONOPTIMIZE', None)  # Demo assertions are acceptance checks.
     env.pop('PYTHONPATH', None)
@@ -59,7 +59,7 @@ def main(argv=None):
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
     output.mkdir(parents=True)
     before = source_manifest()
-    checks = [('tests', [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v'])]
+    checks = [('tests', [sys.executable, str(ROOT / 'tools/offline_tests.py')])]
     checks += [(name, [sys.executable, str(ROOT / 'examples' / (name + '_demo.py'))])
                for name in DEMOS]
     checks[-1][1].append('--fixture-approvals')

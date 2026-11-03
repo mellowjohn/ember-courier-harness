@@ -41,6 +41,15 @@ def review_images(output):
     output = Path(output)
     images = [output / (name + '.png') for name in ('desktop', 'mobile')]
     recorded = {v['name']: v for v in read_json(output / 'report.json')['viewports']}
+    if any(row.get('review_screenshot') for row in recorded.values()):
+        images = []
+        for name in ('desktop', 'mobile'):
+            row = recorded[name]
+            target = output / (name + '-review.png')
+            if row.get('review_screenshot') != target.name or target.is_symlink() or file_digest(target) != row.get('review_sha256'):
+                raise ValueError('Browser review contact sheet changed')
+            images.append(target)
+        return images
     for name in ('desktop', 'mobile'):
         for kind in ('panel', 'action'):
             filename = name + '-' + kind + '.png'
@@ -115,6 +124,21 @@ def verified_report(source, output):
             if row['panel_screenshot'] != name or target.is_symlink() or file_digest(target) != row.get('panel_sha256'):
                 raise ValueError('Browser panel capture changed')
     request = read_json(source)
+    if request.get('mechanic_binding'):
+        from .mechanic_recipes import validate_report
+        validate_report(request['mechanic_binding'], data.get('mechanics'))
+    elif data.get('mechanics') is not None:
+        raise ValueError('Unexpected mechanic observations without a frozen reference binding')
+    for row in data['viewports']:
+        if request.get('review_sheets'):
+            names = [row['name'] + '.png', row['name'] + '-before.png']
+            names += [row[key + '_screenshot'] for key in ('action', 'panel') if row.get(key + '_screenshot')]
+            target = output / (row['name'] + '-review.png')
+            if (row.get('review_screenshot') != target.name or row.get('review_sources') != names or
+                    target.is_symlink() or file_digest(target) != row.get('review_sha256')):
+                raise ValueError('Browser review contact sheet changed or has incomplete evidence')
+        elif any(key.startswith('review_') for key in row):
+            raise ValueError('Unexpected review contact sheet without a reviewed request')
     if 'gameplay_plan' in request:
         if request.get('gameplay_plan_sha256') != gameplay.digest(request['gameplay_plan']):
             raise ValueError('Browser gameplay plan hash changed')

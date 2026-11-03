@@ -124,7 +124,9 @@ def validate(contract):
             if constraints["force"]["equals"] is not False:
                 raise ValueError("force push forbidden")
         if action["tool"] in ("git.add", "git.commit"):
-            if set(constraints.get("branch", {})) != {"equals"}:
+            ceiling = contract.get('extensions', {}).get('orchestration', {}).get('role') == 'scope'
+            branch_rule = set(constraints.get('branch', {}))
+            if branch_rule != {'equals'} and not (ceiling and branch_rule == {'pattern'}):
                 raise ValueError("local Git operations require a fixed branch")
     window = contract["limits"]["time_window"]
     if "ttl_hours" in window and contract["status"] != "draft":

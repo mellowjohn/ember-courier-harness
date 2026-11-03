@@ -1,6 +1,6 @@
 """Run the local browser QA/restore rehearsal with synthetic fixtures and no Muse calls."""
 import argparse
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from datetime import datetime, timezone
 import io
 import json
@@ -27,6 +27,23 @@ FILES = {
               'button.onclick=()=>{button.textContent="Started";document.querySelector("#score").textContent=++score};'
               'addEventListener("keydown",e=>{if(e.key==="ArrowRight")document.querySelector("#score").textContent=++score});',
 }
+
+
+@contextmanager
+def synthetic_provider_guard():
+    """Fail before any unstubbed provider can reserve credits or dispatch."""
+    with patch('ember_harness.muse_chat.CreditLedger.reserve',
+               side_effect=AssertionError('Synthetic rehearsal attempted an unstubbed live provider request')):
+        yield
+
+
+def proposal_verdict(*args, **kwargs):
+    sys.path.insert(0, str(ROOT / 'tests'))
+    from quality_fixture import assessments
+    data = json.loads(args[2].split('\n', 1)[1])
+    return dict(response=json.dumps(dict(meets_task=True, preserves_scope=True,
+        summary='SYNTHETIC proposal assessment; configured failures remain blocking.',
+        issues=[], criteria=assessments(data))))
 
 
 def main(argv=None):
@@ -96,6 +113,10 @@ def main(argv=None):
         else:
             result=dict(meets_task=True,preserves_scope=True,summary='SYNTHETIC separate task assessment',issues=[])
             data=json.loads(prompt.split('\n',1)[1])
+            if data.get('comparison'):
+                sys.path.insert(0, str(ROOT / 'tests'))
+                from quality_fixture import comparison
+                result['comparison'] = comparison(data)
             if data.get('quality'):
                 result['criteria']=[]
                 for c in data['quality']['criteria']:
@@ -185,7 +206,8 @@ def main(argv=None):
         env['EMBER_BROWSER_EXECUTABLE'] = str(Path(args.browser_executable).resolve())
     error = None
     try:
-        with patch('ember_harness.session_chat.run_muse', side_effect=model), \
+        with synthetic_provider_guard(), patch('ember_harness.session_chat.run_muse', side_effect=model), \
+                patch('ember_harness.proposal_quality.run_muse', side_effect=proposal_verdict), \
                 patch('ember_harness.project_locations.pick', return_value=str(copy_parent)), \
                 patch('ember_harness.task_run.run_muse', side_effect=task_model), \
                 patch('ember_harness.task_run.installed_binary', return_value=task_binary), \
@@ -279,7 +301,7 @@ def main(argv=None):
     if args.build_loading_only:
         report['checks'] = 'Real build approval with delayed application and preview response; loading persists until iframe load; approval rejection retains the live game; preview failure releases the screen and permits retry; mobile layout and reduced motion.'
     elif args.ui_only:
-        report['checks'] = 'Desktop/mobile chat and game layout, tool drawer, remembered drafts and game state, isolated popout, fullscreen, restart and old-server compatibility.'
+        report['checks'] = 'Desktop/mobile chat and game layout, tool drawer, remembered drafts and game state, isolated popout, fullscreen, restart and old-server compatibility; synthetic task-review blockers, exhausted attempts, isolated retained candidates, unavailable evidence, pending human playtest and coverage-purpose editing.'
     elif args.playtest_fix_only:
         report['checks'] = 'Notes-only scoped bug fixing, observed investigation/code/application progress, browser dictation and exact reviewed application.'
     (output / 'report.json').write_text(json.dumps(report, indent=2), encoding='utf-8')

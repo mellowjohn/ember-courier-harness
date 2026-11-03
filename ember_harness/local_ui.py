@@ -20,7 +20,9 @@ from .recovery import Recovery, exclusive, worker_active, read_json
 from .session_chat import transcript, send, activity as chat_activity, MUSE_UNAVAILABLE
 from .muse_chat import installed_binary, CreditLedger
 from . import chat_build, playtests, project_versions, project_brief, browser_checks, polish, polish_runtime, gameplay, asset_library, project_locations, project_plan
-from . import task_run, asset_run, findings, workspace, project_handoff
+from . import task_run, task_coverage, asset_run, findings, workspace, project_handoff
+from . import mechanic_workflow
+from . import git_task, git_automation
 from . import muse_image, asset_2d
 from . import proposal_quality
 
@@ -197,11 +199,104 @@ class App:
             folder = self.sessions_dir / session_id
             if action == 'scan':
                 return workspace.prepare(folder, body['source'])
-            if action in ('plan', 'apply'):
+            if action in ('plan', 'apply', 'import_plan', 'import_apply'):
                 return workspace.prepare(folder, stage=action, run_id=body['run_id'])
+            if action == 'promote_import':
+                with exclusive(folder / 'chat.lock'), exclusive(folder / 'build.lock'):
+                    frozen = project_plan.context(self.root, folder)
+                    if not frozen:
+                        raise ValueError('Approve a project plan before reviewing imported game changes')
+                    files = workspace.imported_files(folder, body['run_id'])
+                    current = chat_build.context(self.root, folder)
+                    if current['manifest'] != body['expected_manifest']:
+                        raise ValueError('The current game changed; review the import again')
+                    operation = body.get('operation_id', '')
+                    if operation and (not isinstance(operation, str) or not re.fullmatch(r'[a-zA-Z0-9-]{16,80}', operation)):
+                        raise ValueError('Use a fresh import review request')
+                    identity = sha256(json.dumps(dict(manifest=current['manifest'], binding=frozen['binding'], operation=operation), sort_keys=True).encode()).hexdigest()[:16]
+                    turn_id = 'import-' + body['run_id'] + '-' + identity
+                    prior = next((row for row in chat_build.list_requests(folder) if row['payload']['body']['build']['turn_id'] == turn_id), None)
+                    if prior and prior['decision']:
+                        raise ValueError('This import review was already decided. Use Review imported game changes again to prepare a fresh review.')
+                    ref = chat_build.propose_build(self.root, folder, turn_id, 'Review imported browser game',
+                        dict(title='Imported browser game', summary='Review the isolated imported source as exact game changes; original workspace stays unchanged.',
+                            files=[dict(path=name, content=content) for name, content in files.items()]),
+                        expected_before=current['sha256'], project_scope=frozen['binding'])
+                    return dict(request_ref=ref)
             if action == 'resume':
                 return workspace.respond(folder, body['ref'], 'approve', 'Resume the previously approved workspace step')
             raise ValueError('Unknown workspace action')
+
+    def mechanic_control(self, session_id, action, **body):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before preparing mechanic work')
+            folder = self.sessions_dir / session_id
+            if action == 'checks':
+                context = chat_build.context(self.root, folder)
+                if not context.get('mechanics'):
+                    raise ValueError('Reference gameplay checks require the supported platformer')
+                return mechanic_workflow.save_checks(folder, body['revision'], context['mechanics']['profile'])
+            return mechanic_workflow.prepare(self.root, folder, action=action, **body)
+
+    def git_control(self, session_id, action, **body):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before reviewing Git work')
+            folder = self.sessions_dir / session_id
+            if action == 'prepare-automated':
+                return git_automation.prepare(self.root, folder, finding=body.get('finding'))
+            if action == 'advance-automated':
+                return git_automation.advance(self.root, folder, body['task_run_id'])
+            if action == 'prepare-proposal':
+                with exclusive(folder / 'build.lock'):
+                    current = chat_build.context(self.root, folder)
+                    if current['manifest'] != body['expected_manifest']:
+                        raise ValueError('The current game changed; review the proposal again')
+                    candidate = chat_build.proposal_snapshot(self.root, folder, body['request_ref'])
+                    request = next(row for row in chat_build.list_requests(folder) if row['ref'] == body['request_ref'])
+                    binding = project_plan.context(self.root, folder)
+                    if not binding or request['payload']['body']['build'].get('project_scope') != binding['binding']:
+                        raise ValueError('Choose a proposal for the selected task under the active project plan')
+                return git_task.prepare(self.root, folder, candidate_files=candidate['files'],
+                    expected_manifest=current['manifest'], origin=dict(proposal_ref=body['request_ref']),
+                    goal=candidate['title'])
+            if action == 'prepare':
+                current = chat_build.context(self.root, folder)
+                if current['manifest'] != body['expected_manifest']:
+                    raise ValueError('The current game changed; review the edit again')
+                base = {row['path']: row['content'] for row in current['files']}
+                build = chat_build.materialize_build(dict(title='Local Git repair', summary=body['goal'], edits=[
+                    dict(path=body['path'], before=body['before'], after=body['after'])]), base)
+                return git_task.prepare(self.root, folder, candidate_files={row['path']: row['content'] for row in build['files']},
+                    expected_manifest=current['manifest'], goal=body['goal'])
+            if action in ('start', 'resume'):
+                return git_task.launch(self.root, folder, body['run_id'])
+            if action == 'stop':
+                return git_task.stop(self.root, folder, body['run_id'])
+            if action == 'promote':
+                return git_task.promote(self.root, folder, body['run_id'])
+            if action == 'escalate':
+                _, h, _, plan = git_task.load(folder, body['run_id'])
+                from .attempts import TaskAttempts, Attempts
+                if (plan.get('origin') or {}).get('task_run_id'):
+                    _, _, _, source_plan = git_automation.audited_source(folder, plan['origin'])
+                    if source_plan.get('kind') == 'finding':
+                        return Attempts(h).decide(source_plan['finding']['bug']['id'], choice=body['choice'],
+                            expected_state_hash=body['state_hash'], approver='johnathan',
+                            quote='Owner chose ' + body['choice'] + ' after reviewing the blocked Git finding attempts')
+                return TaskAttempts(h, plan['task_identity']).decide(body['choice'], body['state_hash'],
+                    'Owner chose ' + body['choice'] + ' after reviewing the blocked Git task attempts')
+            raise ValueError('Unknown Git workflow action')
+
+    def git_preview(self, session_id, run_id, stage=None, image_name=None):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before inspecting Git evidence')
+            folder = self.sessions_dir / session_id
+            if image_name is not None:
+                return git_task.image(folder, run_id, stage, image_name)
+            return git_task.preview(folder, run_id)
 
     def plan_control(self, session_id, action, **body):
         with self.lock:
@@ -346,9 +441,16 @@ class App:
                 result['project_plan'] = project_plan.status(self.root, session_folder)
                 result['workspace'] = workspace.status(session_folder)
                 result['task_runs'] = task_run.history(self.root, session_folder)
+                result['git_runs'] = git_task.history(self.root, session_folder)
+                result['git_automation'] = git_automation.history(self.root, session_folder, tasks=result['task_runs'])
                 result['findings'] = findings.history(self.root, session_folder)
                 result['finding_requests'] = findings.requests(session_folder)
                 result['gameplay_plan'] = gameplay.load(session_folder)
+                selected = next((task for task in result['project_plan'].get('tasks', [])
+                    if task['id'] == result['project_plan'].get('selected_task')), None)
+                if selected:
+                    result['coverage_review'] = task_coverage.analyze(selected['title'],
+                        result['project_brief'], result['gameplay_plan'])
                 result['messages'] = transcript(session_folder)
                 result['chat_activity'] = chat_activity(session_folder)
                 result['build'] = chat_build.status(self.root, session_folder)
@@ -369,6 +471,10 @@ class App:
                     result['sprite_project']=dict(revision=None,plan=None,applied_plan=None,inventory=[])
                     sprite_issue=str(error)
                 if sprite_issue:result['sprite_project']['inspection_required']=sprite_issue
+                result['mechanics'] = mechanic_workflow.status(project_files)
+                result['project_file_names'] = sorted(project_files)
+                if sprite_issue:
+                    result['mechanics'].update(supported=False, can_prepare_sample=False, reason=sprite_issue)
                 result['build']['playtests'] = playtests.reports(session_folder)
                 result['build']['versions'] = project_versions.history(session_folder)
                 result['build']['smoke_checks'] = browser_checks.reports(session_folder)
@@ -384,6 +490,7 @@ class App:
                 result['requests'].extend(result['build']['requests'])
                 result['requests'].extend(project_plan.requests(session_folder))
                 result['requests'].extend(result['workspace']['requests'])
+                result['requests'].extend(git_task.requests(session_folder))
                 checkpoint = session_folder / 'recovery.json'
                 declined = any(r['decision'] and r['decision']['choice'] == 'decline' for r in result['requests'])
                 result['recovery_available'] = checkpoint.is_file() and result['status'] in ('interrupted', 'stopped') and not declined
@@ -397,6 +504,13 @@ class App:
     def respond(self, ref, choice, quote):
         with self.lock:
             state = self.snapshot()
+            if self.session:
+                folder = self.sessions_dir / self.session['id']
+                request = next((row for row in git_task.requests(folder) if row['ref'] == ref), None)
+                if request:
+                    run_id = request['payload']['body']['git_task']['id']
+                    result = git_task.respond(self.root, folder, run_id, choice, quote)
+                    return git_task.launch(self.root, folder, run_id) if choice == 'approve' and result['status'] in ('ready', 'interrupted') else result
             if self.session and any(r['ref'] == ref for r in workspace.requests(self.sessions_dir / self.session['id'])):
                 return workspace.respond(self.sessions_dir / self.session['id'], ref, choice, quote)
             if self.session and any(r['ref'] == ref for r in project_plan.requests(self.sessions_dir / self.session['id'])):
@@ -627,7 +741,8 @@ class App:
             if action == 'resume':
                 return task_run.launch(self.root, folder, body['run_id'])
             if action == 'stop':
-                return task_run.stop(self.root, folder, body['run_id'])
+                _, _, _, plan = task_run.load(folder, body['run_id'])
+                return (git_automation.stop if plan.get('git_repair') else task_run.stop)(self.root, folder, body['run_id'])
             if action == 'promote':
                 return task_run.promote(self.root, folder, body['run_id'])
             if action == 'escalate':
@@ -684,6 +799,17 @@ class App:
             if image_name is not None:
                 return polish.image(folder, run_id, index, image_name)
             return polish.preview(folder, run_id, index)
+
+    def task_preview(self, session_id, run_id, index, image_name=None, stage='candidate'):
+        with self.lock:
+            if not self.session or self.session['id'] != session_id:
+                raise ValueError('Reopen the intended session before viewing a task run')
+            folder = self.sessions_dir / session_id
+            if image_name is not None:
+                return task_run.image(folder, run_id, index, image_name, stage=stage)
+            if stage != 'candidate':
+                raise ValueError('Choose a saved task candidate')
+            return task_run.preview(folder, run_id, index)
 
     def verify(self):
         with self.lock:
@@ -785,6 +911,24 @@ def server(app, port=0):
                     result = app.polish_preview(q['session_id'][0], q['run_id'][0], int(q['index'][0]),
                         q['name'][0] if url.path == '/api/polish-image' else None)
                     return self.reply(200, result, 'image/png' if url.path == '/api/polish-image' else 'application/json')
+                if url.path in ('/api/task-preview', '/api/task-image'):
+                    q = parse_qs(url.query)
+                    result = app.task_preview(q['session_id'][0], q['run_id'][0], int(q['index'][0]),
+                        q['name'][0] if url.path == '/api/task-image' else None,
+                        stage=q.get('stage', ['candidate'])[0])
+                    return self.reply(200, result, 'image/png' if url.path == '/api/task-image' else 'application/json')
+                if url.path in ('/api/git-preview', '/api/git-image'):
+                    q = parse_qs(url.query)
+                    result = app.git_preview(q['session_id'][0], q['run_id'][0], q.get('stage', [None])[0],
+                        q['name'][0] if url.path == '/api/git-image' else None)
+                    return self.reply(200, result, 'image/png' if url.path == '/api/git-image' else 'application/json')
+                if url.path == '/api/export-git':
+                    q = parse_qs(url.query)
+                    with app.lock:
+                        if not app.session or app.session['id'] != q['session_id'][0]:
+                            raise ValueError('Reopen the intended session before exporting Git work')
+                        data, filename = git_task.export(app.sessions_dir / app.session['id'], q['run_id'][0])
+                    return self.reply(200, data, 'application/zip', download=filename)
                 if url.path == '/api/export-version':
                     q = parse_qs(url.query)
                     data, filename = app.export_version(q['ref'][0])
@@ -836,6 +980,10 @@ def server(app, port=0):
                     result = app.copy_project(body['session_id'], body['current_ref'], body['name'], body['project_parent'])
                 elif self.path == '/api/workspace':
                     result = app.workspace_control(**body)
+                elif self.path == '/api/mechanics':
+                    result = app.mechanic_control(**body)
+                elif self.path == '/api/git-task':
+                    result = app.git_control(**body)
                 elif self.path == '/api/asset-update':
                     result = app.review_asset_update(body['session_id'], body['asset_ref'], body['current_ref'])
                 elif self.path == '/api/chat':

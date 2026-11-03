@@ -17,10 +17,10 @@ establish that outcome. AI assessments and human acceptance remain distinct.
 | WQ-01 | P0 | Carry the full approved intent into every task handoff | Implemented; synthetic regression coverage, live quality unverified |
 | WQ-02 | P0 | Review explicit quality criteria with supporting evidence | Implemented for new ordinary browser-task runs; live quality unverified |
 | WQ-03 | P0 | Learn from rejected polish attempts | Implemented; synthetic recovery coverage, live quality unverified |
-| WQ-04 | P0 | Compare improvement against the starting experience | Documented / unimplemented for ordinary task runs |
-| WQ-05 | P1 | Expose actionable quality blockers in the review | Documented / unimplemented |
-| WQ-06 | P1 | Expose missing behavior and interaction coverage | Documented / unimplemented |
-| WQ-07 | P0 release gate | Rehearse quality on representative real tasks | Documented / unimplemented |
+| WQ-04 | P0 | Compare improvement against the starting experience | Implemented for new ordinary task runs; live quality unverified |
+| WQ-05 | P1 | Expose actionable quality blockers in the review | Implemented for task review and polish history; live usefulness unverified |
+| WQ-06 | P1 | Expose missing behavior and interaction coverage | Implemented as advisory coverage review; semantic coverage requires owner review |
+| WQ-07 | P0 release gate | Rehearse quality on representative real tasks | Partial: guarded fixture rehearsals pass; representative live set and owner playtest remain open |
 
 WQ-01 through WQ-04 are the first implementation sequence. WQ-07 evaluates
 those changes before claiming an improvement in live output quality. The
@@ -165,6 +165,21 @@ browser observations forward; reuse that approach where appropriate.
 
 ## WQ-04 — Judge improvement against the starting experience
 
+Implemented November 3 for new ordinary browser-task runs. The reviewed packet
+freezes the starting manifest, saved checks and comparison protocol; the same
+bounded Chromium interactions capture both versions. The independent verifier
+must identify the improvement and losses using supported source, capture and
+scenario references. Missing evidence, unchanged source, a negative improvement
+assessment or reported losses block qualification despite a positive overall
+verdict. A blank project explicitly has no playable starting baseline.
+
+Capture inputs, images and reports are checked again on recovery, preview,
+promotion and handoff. Historical runs keep their original reviewed protocol;
+finding and asset adapters retain their specialized evidence. The host validates
+evidence references, not whether an AI interpretation is true. Whether a cosmetic
+change satisfies the intended interaction still requires judgment and play.
+See [task runs](TASK_RUNS.md) for the current boundary and evidence layout.
+
 **Observed gap:** ordinary task verification reads baseline source but attaches
 only candidate desktop/mobile captures. It does not have the same visual
 before/after comparison available to overnight polish.
@@ -186,6 +201,15 @@ existing proposal comparison and gameplay evidence flows.
 
 ## WQ-05 — Make quality blockers useful to the owner
 
+Implemented November 3 in the existing task cards. Requested outcome, observed
+result, failed behavior, visual concerns, unavailable evidence, comparison losses
+and the next suggested change are visible alongside the retained reports.
+Each completed attempt can be played in an isolated preview and its verified
+before/after screenshots opened without applying it. Failed/exhausted histories
+retain the attempt counts and owner-decision boundary. Human playtesting remains
+pending. Polish history also exposes review concerns and suggested revisions.
+See [the local app guide](LOCAL_UI.md).
+
 **Acceptance criteria:**
 
 - The existing task/review card shows the requested outcome, observed result,
@@ -200,6 +224,18 @@ existing proposal comparison and gameplay evidence flows.
 the existing attempt/evidence report. Reuse the current workflow surfaces.
 
 ## WQ-06 — Make coverage gaps visible
+
+Implemented November 3. The existing gameplay editor supports optional bounded
+purpose labels. A preflight inventory maps the selected expectation to configured
+scenarios and flags missing discoverability, success, failure, reset, repeated
+play, keyboard and touch paths. Labels are author-declared intent; names cannot
+prove coverage. Keyboard/touch entries require a configured input followed by an
+assertion, and even those observations do not establish causal correctness.
+The exact inventory is frozen in the reviewed run and supplied to every role
+and retry; editing the saved plan requires a new review. Missing categories are
+advisory, since their relevance requires judgment. Every configured scenario
+remains blocking, including reset, repeated play and touch. No action or timing
+limits were widened. See [saved gameplay checks](GAMEPLAY_CHECKS.md).
 
 **Acceptance criteria:**
 
@@ -217,6 +253,16 @@ the existing attempt/evidence report. Reuse the current workflow surfaces.
 the existing gameplay-plan editor. Reuse mechanic verification when available.
 
 ## WQ-07 — Representative live quality rehearsal
+
+November 3 checkpoint: the final implementation passes 680 installed Python
+cases and twelve demos from a clean Git checkout of the local delivery snapshot.
+Real Chromium rehearsals cover paired task evidence and exact promotion, a weak
+and broken proposal repaired using screenshots, secondary-path regressions,
+polish rejection and recovery. Successful rehearsals use synthetic replies and
+owner choices, with guarded provider dispatch. The retained evidence is listed
+in [MVP status](MVP_STATUS.md#explicit-boundaries-retained). These are fixture
+gate checks; the representative live task set and Johnathan's judgments below
+still need to be completed.
 
 **Scope:** a small retained set of original tasks: a clearer first-play loop,
 a responsive readable HUD, a more satisfying interaction, and a scoped repair

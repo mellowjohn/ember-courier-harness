@@ -1,9 +1,12 @@
 # Persistent project scope and ordered tasks
 
 Plan through the session's chat, or choose **Plan → Plan together in chat**.
-Ember asks the next useful question, remembers explicit answers in the project
-brief and gathers the game concept, core loop, features, exclusions, artwork estimates,
-completion criteria and art direction as they become relevant. You can change
+Ember groups the important unanswered decisions into one short numbered batch,
+usually 3–6 questions, so you can answer them together. It uses known answers,
+accepts partial replies and follows up only on consequential gaps or decisions
+revealed by your answers. It remembers explicit answers in the project brief and
+gathers the game concept, core loop, features, exclusions, artwork estimates,
+completion criteria and art direction. You can change
 these decisions through conversation. No project-plan form is required.
 When enough decisions are known, ask Ember to prepare the plan for review.
 The model returns a structured design proposal; the host validates it and uses

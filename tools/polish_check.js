@@ -16,7 +16,7 @@ const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE);
     await page.getByLabel('Test plan name',{exact:true}).fill('Counter scoring and touch controls');
     async function scenario(name,viewport,actions){
       await page.getByRole('button',{name:'Add scenario',exact:true}).click();
-      const box=page.locator('#gameplay-editor fieldset').last();
+      const box=page.locator('#gameplay-editor > fieldset').last();
       await box.getByLabel('Scenario name',{exact:true}).fill(name);
       await box.getByLabel('Controls to test',{exact:true}).selectOption(viewport);
       for(const [index,step] of actions.entries()){

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ember · Lantern Trail</title><link rel="stylesheet" href="style.css"></head>
+<body><main id="reference-platformer" data-profile="ember-platformer-v1">
+<section class="stage" aria-label="Lantern Trail game"><header><span class="eyebrow">EMBER MECHANIC STUDY</span><h1>Lantern Trail</h1><p id="status">Carry your light across the broken trail.</p></header>
+<canvas id="scene" width="1000" height="440" tabindex="0" aria-label="A glowing courier and the broken trail"></canvas>
+<div class="hud" aria-label="Movement observations"><span>Position <output id="position">40</output></span><span>Speed <output id="velocity">0</output></span><span>On ground <output id="grounded">yes</output></span><span>Jumps <output id="jump-count">0</output></span></div>
+<div class="controls"><button id="left" aria-label="Move left">←</button><button id="right" aria-label="Move right">→</button><button id="jump">Jump</button><button id="restart">Restart trail</button></div>
+<p class="instructions">Hold ← / → or A / D to move. Press Space to jump. Reach the lantern on the far side.</p></section>
+<section class="checks"><div class="check-controls"><button id="check-mechanics">Run configured checks</button><p>Simulation checks: <output id="mechanic-result">not run</output></p></div>
+<details><summary>Fixed-step mechanic observations</summary><p>These are game-reported values from the declared reference simulation. Browser input and human feel need separate checks.</p>
+<div class="check-controls"><button id="scenario-start">Play normally</button><button id="scenario-coyote">Edge scenario</button><button id="scenario-buffer">Landing scenario</button><button id="step-one">Advance 1 step</button><button id="step-six">Advance 6 steps</button><button id="step-twelve">Advance 12 steps</button></div>
+<div id="check-list"></div><pre id="scenario-report" aria-label="Exact simulation observations"></pre><pre id="mechanic-report" aria-label="Configured mechanic report"></pre></details></section>
+</main><script src="mechanic-config.js"></script><script src="mechanic-runtime.js"></script><script src="app.js"></script></body></html>

@@ -83,7 +83,7 @@ All ordinary exact build and task acceptance rules still apply.
 
 ## Verification
 
-`py -3.12 -m unittest discover -s tests -p test_game_audio.py -v` checks no
+`py -3.12 tools/offline_tests.py --pattern test_game_audio.py` checks no
 autoplay, lifecycle, polyphony, cooldowns, invalid input, review boundaries,
 retained runtime, restore and ZIP content using synthetic owner decisions.
 

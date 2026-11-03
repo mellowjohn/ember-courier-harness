@@ -4,7 +4,7 @@ import json
 import unittest
 
 import test_task_run as tasks
-from quality_fixture import assessments
+from quality_fixture import assessments, comparison
 from ember_harness import chat_build, orchestration, project_plan, task_run
 from ember_harness.core import subset
 
@@ -69,6 +69,8 @@ class DelegationTests(unittest.TestCase):
             self.assertNotIn('PRIVATE', prompt)
             result = dict(meets_task=True, preserves_scope=True, summary='SYNTHETIC final verification', issues=[])
             result['criteria'] = assessments(data)
+            if data.get('comparison'):
+                result['comparison'] = comparison(data)
         return dict(response=json.dumps(result))
 
     def test_automatic_handoff_final_verification_and_exact_promotion(self):

@@ -132,7 +132,7 @@ are authored collision hints; game code controls physics and collision response.
 With an entity plan, `scene.createEntity("terrain")` exposes `tiles`,
 `drawTile`, `drawMap` and `solidAt`, and map draws appear in entity diagnostics.
 
-Run `py -3.12 -m unittest discover -s tests -p test_tiles.py -v` for contract,
+Run `py -3.12 tools/offline_tests.py --pattern test_tiles.py` for contract,
 request, runtime and export checks, or `py -3.12 tools/sprite_check.py --tiles`
 for real desktop/mobile PNG rendering and controls in both preview and ZIP games.
 The browser rehearsal uses original synthetic fixtures and makes no live model calls.
@@ -536,9 +536,9 @@ saved inventory with the actual approved game.
 ## Verify
 
 ```powershell
-py -3.12 -m unittest discover -s tests -p test_asset_2d.py -v
-py -3.12 -m unittest discover -s tests -p test_sprite_player.py -v
-py -3.12 -m unittest discover -s tests -p test_sprite_project.py -v
+py -3.12 tools/offline_tests.py --pattern test_asset_2d.py
+py -3.12 tools/offline_tests.py --pattern test_sprite_player.py
+py -3.12 tools/offline_tests.py --pattern test_sprite_project.py
 py -3.12 tools/sprite_check.py
 py -3.12 tools/sprite_scene_check.py
 ```

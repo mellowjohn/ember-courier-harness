@@ -13,7 +13,7 @@ import secrets
 import subprocess
 import sys
 
-from . import chat_build, gameplay, orchestration, polish, polish_runtime, project_brief, project_plan, task_quality
+from . import chat_build, gameplay, orchestration, polish, polish_runtime, project_brief, project_plan, task_quality, task_coverage
 from .attempts import TaskAttempts, LIMIT
 from .core import content_hash, digest, subset, validate
 from .muse_chat import CreditLedger, MODEL, RESERVATION_MICRO_USD, installed_binary, run as run_muse, execution_policy
@@ -58,8 +58,19 @@ def run_folder(folder, run_id):
 def load(folder, run_id):
     work = run_folder(folder, run_id)
     h = chat_build.harness(folder)
-    ref = read_json(work / 'run.json')['request_ref']
-    packet = load_request(h, ref)
+    control = work / 'run.json'
+    if control.is_symlink() or control.resolve() != control.absolute():
+        raise ValueError('Task run control path changed')
+    if control.exists():
+        saved = read_json(control)
+        if set(saved) != {'request_ref'}:
+            raise ValueError('Task run control reference changed')
+        packet = load_request(h, saved['request_ref'])
+    else:
+        matches = [request['payload'] for request in requests(folder) if request['payload']['body']['task_run']['id'] == run_id]
+        if len(matches) != 1:
+            raise ValueError('One audited task review is required for missing control recovery')
+        packet = matches[0]
     plan = packet['body']['task_run']
     if 'delegation' in plan:
         orchestration.validate(plan['delegation'], packet['body']['contracts'])
@@ -67,6 +78,20 @@ def load(folder, run_id):
         raise ValueError('Task run binding changed')
     validate_history(h, h._entries())
     return work, h, packet, plan
+
+
+def requests(folder):
+    if not (Path(folder) / 'build-authority').exists():
+        return []
+    h = chat_build.harness(folder); entries = h._entries()
+    decisions = {event['request_ref']: event for event in entries if event['kind'] == 'owner_decision'}
+    rows = []
+    for event in entries:
+        if event['kind'] == 'owner_request':
+            packet = load_request(h, event['request_ref'])
+            if 'task_run' in packet['body']:
+                rows.append(dict(ref=event['request_ref'], payload=packet, decision=decisions.get(event['request_ref'])))
+    return rows
 
 
 def identity(binding, title):
@@ -108,13 +133,22 @@ def model_context(files, baseline):
     return result
 
 
-def prepare(root, folder, *, asset_profile=None, finding=None):
+def prepare(root, folder, *, asset_profile=None, finding=None, git_repair=False):
     folder = Path(folder)
+    if type(git_repair) is not bool:
+        raise ValueError('Choose a valid Git repair workflow')
+    if git_repair and asset_profile:
+        raise ValueError('Git repair uses the browser coding workflow, not asset production')
     with exclusive(folder / 'chat.lock'), exclusive(folder / 'build.lock'):
         frozen = project_plan.context(root, folder)
         if not frozen:
             raise ValueError('Approve a project plan before running a task')
         parent = project_plan.check_binding(root, folder, frozen['binding'])
+        if git_repair:
+            from .git_task import history as git_history
+            if any(row.get('blocks_new_work', True) and row['status'] in ('awaiting_approval', 'ready', 'running', 'interrupted', 'inspection_required', 'ready_review')
+                   for row in git_history(root, folder)):
+                raise ValueError('Finish, discard or stop the existing Git repair before preparing another coding worker')
         if any(row['status'] in ('awaiting_approval', 'awaiting_direction', 'awaiting_refinement', 'ready', 'running', 'interrupted', 'inspection_required', 'ready_review')
                for row in history(root, folder)):
             raise ValueError('Finish, discard or stop the existing task run first')
@@ -122,7 +156,7 @@ def prepare(root, folder, *, asset_profile=None, finding=None):
         if state['resumable'] or any(not r['decision'] for r in state['requests']):
             raise ValueError('Finish the pending build before running a task')
         task = next(t for t in frozen['tasks'] if t['id'] == frozen['selected_task'])
-        if asset_profile is None and finding is None:
+        if asset_profile is None and finding is None and not git_repair:
             asset_profile = orchestration.asset_profile(task['title'])
         task_identity = identity(frozen['binding'], task['title'])
         if asset_profile:
@@ -140,8 +174,10 @@ def prepare(root, folder, *, asset_profile=None, finding=None):
             raise ValueError('Install and sign in to Muse before preparing a task run')
         budget = CreditLedger(root).summary()
         base = chat_build.context(root, folder)
+        if git_repair and not base['files']:
+            raise ValueError('Apply a starting browser game before preparing an automated Git repair')
         from . import task_artwork, asset_library, sprite_project
-        artwork = task_artwork.policy(frozen, base) if not asset_profile and not finding else None
+        artwork = task_artwork.policy(frozen, base) if not asset_profile and not finding and not git_repair else None
         route = orchestration.plan(task['title'], kind='asset' if asset_profile else 'finding' if finding else 'artwork' if artwork else None)
         call_count = len(route['stages']) if not asset_profile else 2
         minimum_credit = (call_count * RESERVATION_MICRO_USD + (artwork['max_image_micro_usd'] if artwork else 0)) / 1_000_000
@@ -155,6 +191,9 @@ def prepare(root, folder, *, asset_profile=None, finding=None):
             runtime=runtime, binary=str(binary), binary_sha256=polish_runtime.file_digest(binary),
             rounds=min(LIMIT, attempts['allowance'] - len(attempts['attempts'])), credits=30,
             created_at=datetime.now(timezone.utc).isoformat(), notice=NOTICE)
+        if git_repair:
+            plan['git_repair'] = dict(version=1, required_baseline='failed',
+                notice='Muse prepares isolated source. The same task allocation remains open until separately approved clean Git verification finishes. No current-game writes or automatic permission approval.')
         if artwork:
             files = {i['path']: i['content'] for i in base['files']}
             artwork['inventory'] = asset_library.context(root, folder, project_files=files)
@@ -177,6 +216,14 @@ def prepare(root, folder, *, asset_profile=None, finding=None):
         plan['delegation'] = route
         if not asset_profile and not finding:
             plan['quality'] = task_quality.prepare(plan)
+            if base.get('mechanics') is not None:
+                plan['mechanics'] = deepcopy(base['mechanics'])
+            plan['coverage_review'] = task_coverage.analyze(plan['goal'], plan['brief'], checks)
+            has_baseline = bool(base['files'])
+            plan['comparison'] = dict(version=1, baseline_status='captured' if has_baseline else 'no_playable_baseline',
+                baseline_manifest=base['manifest'], gameplay_plan_sha256=checks['sha256'], baseline_index=0 if has_baseline else None,
+                notice=('The starting game and each candidate use the same saved gameplay checks and fixed desktop/mobile capture protocol.'
+                    if has_baseline else 'No playable comparison baseline: this project starts empty. Judge the first build against the approved task.'))
         if not asset_profile:
             # Every scheduled call must fit even at its full reservation bound.
             if artwork:
@@ -224,6 +271,8 @@ def prepare(root, folder, *, asset_profile=None, finding=None):
             contexts = [(work / 'calls' / phase / 'input.json').as_posix() for phase in phases]
             if role == 'verifier':
                 contexts += [(work / 'captures' / str(i) / 'input.json').as_posix() for i in range(1, plan['rounds'] + 1)]
+                if plan.get('comparison', {}).get('baseline_status') == 'captured':
+                    contexts.append((work / 'captures' / '0' / 'input.json').as_posix())
             child['allowed_paths']['write'] = paths + [(work / 'calls' / phase).as_posix() + '/**' for phase in phases]
             child['allowed_actions'] = [
                 dict(action_id='context-write', tool='fs.write', **{'class': 'write'},
@@ -256,9 +305,17 @@ def prepare(root, folder, *, asset_profile=None, finding=None):
         for item in contracts:
             child = item['contract']
             child['inputs'] = [dict(name='baseline', path=baseline.as_posix(), sha256=polish_runtime.file_digest(baseline))]
-            for name in ('task_run.py', 'task_quality.py', 'orchestration.py', 'chat_build.py', 'polish.py', 'polish_runtime.py', 'muse_chat.py', 'attempts.py', 'polish_browser.js', 'findings.py', 'game_audio.py', 'asset_lab/ember-audio.js'):
+            for name in ('task_run.py', 'task_quality.py', 'task_coverage.py', 'gameplay.py', 'orchestration.py', 'chat_build.py', 'polish.py', 'polish_runtime.py', 'muse_chat.py', 'attempts.py', 'polish_browser.js', 'findings.py', 'game_audio.py', 'asset_lab/ember-audio.js'):
                 source = Path(__file__).parent.joinpath(name).resolve()
                 child['inputs'].append(dict(name='host_' + name.replace('.', '_').replace('/', '_'), path=source.as_posix(), sha256=polish_runtime.file_digest(source)))
+            if git_repair:
+                for name in ('git_automation.py', 'git_task.py', 'contract_lock.py'):
+                    source = Path(__file__).with_name(name).resolve()
+                    child['inputs'].append(dict(name='git_host_' + name.replace('.', '_'), path=source.as_posix(), sha256=polish_runtime.file_digest(source)))
+            from .mechanic_workflow import input_paths
+            for source in input_paths():
+                child['inputs'].append(dict(name='mechanics_' + source.parent.name + '_' + source.name.replace('.', '_'),
+                    path=source.resolve().as_posix(), sha256=polish_runtime.file_digest(source)))
             if asset_profile:
                 asset_run.pin_inputs(child,work,plan)
             if artwork:
@@ -286,7 +343,7 @@ def respond(root, folder, run_id, choice, quote):
     with exclusive(work / 'launch.lock'), exclusive(Path(folder) / 'chat.lock'), exclusive(Path(folder) / 'build.lock'):
         if choice != 'decline':
             _unchanged(root, folder, plan)
-        ref = read_json(work / 'run.json')['request_ref']
+        ref = digest(packet)
         prior = next((e for e in h._entries() if e['kind'] == 'owner_decision' and e['request_ref'] == ref), None)
         if prior:
             if (prior['choice'], prior['quote']) != (choice, quote):
@@ -294,6 +351,7 @@ def respond(root, folder, run_id, choice, quote):
         else:
             decide(h, ref, choice, quote)
         if choice == 'decline':
+            attempt_ledger(h, plan, packet).abandon(run_id, 'Owner discarded source task permissions')
             atomic_json(work / 'state.json', dict(status='declined', phase='Task run discarded', error=None))
             return dict(status='declined')
     return launch(root, folder, run_id)
@@ -330,13 +388,33 @@ def make_worker(root, folder, run_id):
 
 def stop(root, folder, run_id):
     work, h, packet, plan = load(folder, run_id)
+    return _stop_loaded(root, folder, work, h, packet, plan)
+
+
+def _stop_loaded(root, folder, work, h, packet, plan):
+    """Cancel using a loaded audited identity, without requiring positive proof."""
+    run_id = plan['id']
+    if plan['session_id'] != Path(folder).name or plan['workspace'] != work.as_posix():
+        raise ValueError('Task cancellation identity changed')
     atomic_json(work / 'stop.json', dict(requested_at=datetime.now(timezone.utc).isoformat()))
     with h._lock():
-        h._append('task_run_stopped', run_id=run_id, actor='johnathan', actor_type='human')
+        if not any(e['kind'] == 'task_run_stopped' and e['run_id'] == run_id for e in h._entries()):
+            h._append('task_run_stopped', run_id=run_id, actor='johnathan', actor_type='human')
     if not worker_active(work):
-        worker = make_worker(root, folder, run_id)
-        worker.finish('Stopped at your request', 'stopped')
+        attempt_ledger(h, plan, packet).abandon(run_id, 'Stopped at your request')
+        with h._lock():
+            if not _finished(h, run_id):
+                h._append('task_run_finished', run_id=run_id, reason='Stopped at your request', status='stopped', index=None)
+        atomic_json(work / 'state.json', dict(status='stopped', phase='Stopped at your request', error=None,
+            updated_at=datetime.now(timezone.utc).isoformat()))
     return dict(status='stop_requested')
+
+
+def attempt_ledger(h, plan, packet):
+    if plan.get('kind') == 'finding':
+        from .findings import FixAttempts
+        return FixAttempts(h, plan, packet['body']['contracts'][0]['contract'])
+    return TaskAttempts(h, plan['task_identity'])
 
 
 class Worker(polish.Worker):
@@ -347,7 +425,7 @@ class Worker(polish.Worker):
         self.root, self.folder = Path(root), Path(folder)
         self.work, self.h, self.packet, self.plan = load(folder, run_id)
         self.contract = self.packet['body']['contracts'][0]['contract']
-        self.ref = read_json(self.work / 'run.json')['request_ref']
+        self.ref = digest(self.packet)
         self.model_runner = run_muse
 
     def contract_for(self, stage_id):
@@ -358,12 +436,29 @@ class Worker(polish.Worker):
                     if item['contract']['extensions']['orchestration']['stage_id'] == stage_id)
 
     def model(self, phase, instruction, data, schema, images):
+        if self.plan.get('mechanics') is not None:
+            data = {**data, 'mechanics': self.plan['mechanics']}
+            instruction += (' This task starts from the canonical reference platformer. Preserve its runtime, HTML and controls; '
+                            'apply only supported versioned mechanic settings and styling within the selected task. '
+                            'The host checks recipe identity and fixed-step observations independently of your verdict. ')
         if phase.startswith(('generate-', 'specialize-')):
             instruction += ' ' + chat_build.GAME_UI_INSTRUCTION
         if images:
             data = {**data, 'image_order': [Path(p).name for p in images]}
             instruction += (' Attached -action captures show a held movement key; -panel captures show an opened '
                             'help/settings view. Use the actual supplied image names and pixels when repairing defects. ')
+        if self.plan.get('comparison'):
+            data = {**data, 'comparison': self.plan['comparison'], 'coverage_review': self.plan.get('coverage_review')}
+            if images:
+                data['image_order'] = []
+                for path in images:
+                    row = next(v for v in read_json(Path(path).parent / 'report.json')['viewports']
+                        if Path(path).name == v.get('review_screenshot', v['screenshot']))
+                    data['image_order'].append(dict(stage='baseline' if Path(path).parents[1].name == '0' else 'candidate',
+                        ref=Path(path).name, contains=row.get('review_sources', [Path(path).name])))
+            if phase.startswith('verify-'):
+                instruction += ' ' + task_quality.COMPARISON_INSTRUCTION
+                schema = task_quality.comparison_schema(schema)
         if self.plan.get('quality'):
             data = {**data, 'quality': self.plan['quality']}
             if phase.startswith('verify-'):
@@ -433,10 +528,7 @@ class Worker(polish.Worker):
         return super().task(self.plan['id'] + ':' + phase, *args)
 
     def ledger(self):
-        if self.plan.get('kind') == 'finding':
-            from .findings import FixAttempts
-            return FixAttempts(self.h, self.plan, self.packet['body']['contracts'][0]['contract'])
-        return TaskAttempts(self.h, self.plan['task_identity'])
+        return attempt_ledger(self.h, self.plan, self.packet)
 
     def finish(self, reason, status, index=None):
         if status == 'stopped':
@@ -449,14 +541,30 @@ class Worker(polish.Worker):
     def run(self):
         with exclusive(self.work / 'worker.lock'):
             if _finished(self.h, self.plan['id']):
+                if self.plan.get('git_repair') and not (self.work / 'stop.json').exists():
+                    from .git_automation import advance
+                    advance(self.root, self.folder, self.plan['id'])
                 return
             ledger = self.ledger()
             try:
                 self.check()
                 base = read_json(self.work / 'baseline.json')['files']
+                comparison_baseline = base
+                baseline_observations = None
+                if self.plan.get('git_repair'):
+                    ledger.begin(self.plan['id'], 1)
+                if self.plan.get('comparison', {}).get('baseline_status') == 'captured':
+                    self.contract = self.contract_for('verify')
+                    self.browser(0, comparison_baseline)
+                    baseline_observations = baseline_report(self.folder, self.plan['id'])
                 if self.plan.get('kind') == 'finding':
                     from .findings import baseline
                     baseline(self, base)
+                if self.plan.get('git_repair'):
+                    self.contract = self.contract_for('verify')
+                    original = baseline_observations or self.browser(0, base)
+                    if original['gameplay']['outcome'] != 'failed':
+                        raise polish.Stopped('The saved regression did not fail on the starting game; revise its checks before preparing another Git repair')
                 feedback = None
                 revision_base = base
                 if self.plan.get('artwork'):
@@ -507,6 +615,12 @@ class Worker(polish.Worker):
                         manifest = {name: sha256(content.encode('utf-8')).hexdigest() for name, content in files.items()}
                         self.contract = self.contract_for('verify')
                         observations = self.browser(index, files)
+                        images = self.images(index)
+                        if baseline_observations is not None:
+                            # Two labeled sheets per side retain all starting,
+                            # gameplay, movement and open-panel views within the
+                            # provider's existing four-image allowance.
+                            images = self.images(0) + images
                         verdict = self.model('verify-' + str(index),
                             'Independently assess the selected task against the exact candidate source, approved design, '
                             'frozen gameplay assertions and attached desktop/mobile captures. You are a separate verifier; '
@@ -520,12 +634,19 @@ class Worker(polish.Worker):
                             'not proof of full gameplay or human acceptance. Do not rely on the coder narrative.',
                             dict(task=self.plan['goal'], finding=self.plan.get('finding'), **model_context(files,base), observations=observations,
                                  approved_design=self.plan['project_plan']['document'], brief=self.plan['brief'],
-                                 gameplay_plan=self.plan['gameplay_plan'], art_direction=self.contract['art_direction']),
-                            VERDICT_SCHEMA, self.images(index))
+                                 gameplay_plan=self.plan['gameplay_plan'], art_direction=self.contract['art_direction'],
+                                 **(dict(baseline_observations=baseline_observations) if self.plan.get('comparison') else {})),
+                            VERDICT_SCHEMA, images)
                         gameplay.validate_result(self.plan['gameplay_plan']['plan'], observations.get('gameplay'))
                         quality = task_quality.review(self.plan['quality'], verdict, files, observations) if self.plan.get('quality') else None
+                        comparison = comparison_review(self.plan, verdict, files, comparison_baseline,
+                            observations, baseline_observations) if self.plan.get('comparison') else None
+                        from .mechanic_workflow import review as mechanic_review
+                        mechanics = mechanic_review(self.plan.get('mechanics'), files)
                         qualified = bool(verdict['meets_task'] and verdict['preserves_scope'] and not verdict['issues']
                             and (quality is None or not quality['blockers'])
+                            and (comparison is None or not comparison['blockers'])
+                            and (mechanics is None or not mechanics['blockers'])
                             and observations['gameplay']['outcome'] == 'passed'
                             and all(v.get('loaded') for v in observations['viewports'])
                             and polish.failures(dict(observations=observations)) == 0
@@ -535,16 +656,27 @@ class Worker(polish.Worker):
                             basis='Hash-bound source and Chromium observations; separate AI task judgment; human acceptance pending')
                         if quality is not None:
                             report['quality'] = quality
+                        if comparison is not None:
+                            report['comparison'] = comparison
+                        if mechanics is not None:
+                            report['mechanics'] = mechanics
                         path = self.work / 'reports' / (str(index) + '.json')
                         path.parent.mkdir(exist_ok=True)
                         atomic_json(path, report)
                         with self.h._lock():
                             self.h._append('task_report', run_id=self.plan['id'], index=index,
                                 path=path.as_posix(), sha256=polish_runtime.file_digest(path))
-                    ledger.finish(attempt, report, self.work / 'reports' / (str(index) + '.json'))
+                    if not (self.plan.get('git_repair') and report['qualified']):
+                        ledger.finish(attempt, report, self.work / 'reports' / (str(index) + '.json'))
                     if report['qualified']:
-                        return self.finish('Candidate qualified for exact review', 'ready_review', index)
-                    feedback = dict(verdict=report['verdict'], observations=report['observations'], quality=report.get('quality'))
+                        self.finish('Candidate qualified for exact Git permission review' if self.plan.get('git_repair') else 'Candidate qualified for exact review', 'ready_review', index)
+                        if self.plan.get('git_repair'):
+                            from .git_automation import advance
+                            advance(self.root, self.folder, self.plan['id'])
+                        return
+                    feedback = dict(verdict=report['verdict'], observations=report['observations'], quality=report.get('quality'),
+                        mechanics=report.get('mechanics'),
+                        **(dict(comparison=report['comparison']) if 'comparison' in report else {}))
                     revision_base = candidate_files(self.work, index)
                 self.finish('Fix did not qualify; review finding evidence before another attempt' if self.plan.get('kind') == 'finding' else
                             'Task attempts exhausted; review evidence before authorizing one extra attempt', 'awaiting_decision')
@@ -554,8 +686,38 @@ class Worker(polish.Worker):
                 self.status('Task interrupted; resume the same attempt after inspecting the error', 'interrupted', str(error)[:1000])
 
 
+def baseline_report(folder, run_id):
+    """Reload the frozen starting capture through the same checkpoint evidence."""
+    work, h, packet, plan = load(folder, run_id)
+    if not plan.get('comparison') or plan['comparison']['baseline_status'] != 'captured':
+        return None
+    checkpoint = polish._checkpoint(h, run_id + ':browser-0', 'task_checkpoint')
+    if checkpoint is None:
+        return None
+    files = read_json(work / 'baseline.json')['files']
+    if {name: sha256(content.encode('utf-8')).hexdigest() for name, content in files.items()} != plan['comparison']['baseline_manifest']:
+        raise ValueError('Starting comparison source changed')
+    source = work / 'captures' / '0' / 'input.json'
+    polish._checkpoint(h, run_id + ':browser-context-0', 'task_checkpoint')
+    observed = polish_runtime.verified_report(source, source.parent / 'output')
+    if observed != checkpoint['result']:
+        raise ValueError('Starting comparison observations changed')
+    return observed
+
+
+def comparison_review(plan, verdict, files, baseline, observed, original):
+    return dict(baseline_status=plan['comparison']['baseline_status'],
+        baseline_manifest=plan['comparison']['baseline_manifest'],
+        candidate_manifest={name: sha256(content.encode('utf-8')).hexdigest() for name, content in files.items()},
+        gameplay_plan_sha256=plan['comparison']['gameplay_plan_sha256'],
+        baseline_observations=original,
+        **task_quality.compare(plan['comparison'], verdict, files, baseline, observed, original))
+
+
 def completed_report(folder, run_id, index):
     work, h, packet, plan = load(folder, run_id)
+    if type(index) is not int or not 1 <= index <= plan['rounds']:
+        raise ValueError('Choose a completed task candidate')
     event = next((e for e in h._entries() if e['kind'] == 'task_report' and e['run_id'] == run_id and e['index'] == index), None)
     if not event:
         return None
@@ -577,6 +739,19 @@ def completed_report(folder, run_id, index):
         checked = task_quality.review(plan['quality'], report['verdict'], files, observed)
         if checked != report.get('quality') or (report['qualified'] and checked['blockers']):
             raise ValueError('Task quality evidence differs from the frozen criteria')
+    if plan.get('mechanics') is not None:
+        from .mechanic_workflow import review as mechanic_review
+        checked = mechanic_review(plan['mechanics'], files)
+        if checked != report.get('mechanics') or (report['qualified'] and checked['blockers']):
+            raise ValueError('Task mechanic evidence differs from the frozen reference')
+    if plan.get('comparison'):
+        original = baseline_report(folder, run_id)
+        if plan['comparison']['baseline_status'] == 'captured' and original is None:
+            raise ValueError('Starting comparison evidence is missing')
+        checked = comparison_review(plan, report['verdict'], files,
+            read_json(work / 'baseline.json')['files'], observed, original)
+        if checked != report.get('comparison') or (report['qualified'] and checked['blockers']):
+            raise ValueError('Task comparison evidence differs from the frozen baseline')
     if plan.get('kind')=='asset':
         from .asset_run import verify_report
         verify_report(work,report)
@@ -588,6 +763,8 @@ def completed_report(folder, run_id, index):
 
 def candidate_files(work, index):
     plan = load(work.parent.parent, work.name)[3]
+    if type(index) is not int or not 1 <= index <= plan['rounds']:
+        raise ValueError('Choose a completed task candidate')
     area = 'specialist-candidates' if any(s['id'] == 'specialize' for s in plan.get('delegation', {}).get('stages', [])) else 'candidates'
     directory = work / area / str(index)
     if directory.resolve() != directory.absolute():
@@ -601,8 +778,41 @@ def candidate_files(work, index):
     return files
 
 
+def preview(folder, run_id, index):
+    if completed_report(folder, run_id, index) is None:
+        raise ValueError('Task candidate is not complete')
+    files = candidate_files(run_folder(folder, run_id), index)
+    parser = chat_build.ResourcePreview(files)
+    parser.feed(files['index.html']); parser.close()
+    return dict(html=''.join(parser.output), index=index)
+
+
+def image(folder, run_id, index, name, stage='candidate'):
+    if stage not in ('baseline', 'candidate'):
+        raise ValueError('Choose starting or candidate evidence')
+    name = name.removesuffix('.png') if isinstance(name, str) else None
+    if name not in tuple(view + suffix for view in ('desktop', 'mobile') for suffix in ('', '-action', '-panel', '-before', '-review')):
+        raise ValueError('Choose a saved task screenshot')
+    report = completed_report(folder, run_id, index)
+    if report is None:
+        raise ValueError('Task candidate is not complete')
+    original = baseline_report(folder, run_id) if stage == 'baseline' else report['observations']
+    if original is None:
+        raise ValueError('No playable comparison baseline')
+    filename = name + '.png'
+    if not any(row.get(key + 'screenshot') == filename for row in original['viewports']
+               for key in ('', 'before_', 'action_', 'panel_', 'review_')):
+        raise ValueError('This task screenshot was not observed')
+    target = run_folder(folder, run_id) / 'captures' / str(0 if stage == 'baseline' else index) / 'output' / filename
+    if target.is_symlink() or target.resolve() != target.absolute():
+        raise ValueError('Task screenshot path changed')
+    return target.read_bytes()
+
+
 def promote(root, folder, run_id):
     work, h, packet, plan = load(folder, run_id)
+    if plan.get('git_repair'):
+        raise ValueError('Use the separately approved clean Git verification before reviewing this automated repair')
     with exclusive(Path(folder) / 'chat.lock'), exclusive(Path(folder) / 'build.lock'):
         _unchanged(root, folder, plan)
         make_worker(root, folder, run_id).check()
@@ -635,9 +845,15 @@ def promote(root, folder, run_id):
 def history(root, folder):
     rows = []
     current_plan = None
-    for path in sorted((Path(folder) / 'task-runs').glob('*/run.json')):
-        work, h, packet, plan = load(folder, path.parent.name)
-        state = read_json(work / 'state.json')
+    for request in requests(folder):
+        work, h, packet, plan = load(folder, request['payload']['body']['task_run']['id'])
+        state_path = work / 'state.json'
+        if state_path.is_symlink() or state_path.resolve() != state_path.absolute():
+            raise ValueError('Task run state path changed')
+        state = read_json(state_path) if state_path.exists() else dict(status='awaiting_approval', phase='Review task permissions', error=None)
+        if state['status'] == 'awaiting_approval' and request['decision']:
+            state.update(status='declined' if request['decision']['choice'] == 'decline' else 'interrupted',
+                         phase='Task review discarded' if request['decision']['choice'] == 'decline' else 'Permissions recorded; resume the approved task')
         finished = _finished(h, plan['id'])
         if finished:
             state.update(status=finished['status'], phase=finished['reason'])
@@ -646,8 +862,10 @@ def history(root, folder):
         promoted = next((e for e in h._entries() if e['kind'] == 'task_run_promoted' and e['run_id'] == plan['id']), None)
         if promoted:
             state['status'] = 'promoted'
+        original = None
         try:
             reports = [completed_report(folder, plan['id'], i) for i in range(1, plan['rounds'] + 1)]
+            original = baseline_report(folder, plan['id'])
         except (ValueError, OSError, KeyError, UnicodeError) as error:
             reports = []
             state.update(status='inspection_required', error=str(error)[:1000], phase='Retained task evidence needs inspection')
@@ -663,8 +881,11 @@ def history(root, folder):
             delegation=plan.get('delegation'),
             model_execution=plan.get('model_execution'),
             quality=plan.get('quality'),
+            mechanics=plan.get('mechanics'),
+            comparison=plan.get('comparison'), baseline_observations=original,
+            coverage_review=plan.get('coverage_review'),
             artwork=plan.get('artwork'),
-            request_ref=read_json(path)['request_ref'], contracts=packet['body']['contracts'],
+            request_ref=digest(packet), contracts=packet['body']['contracts'],
             attempts=TaskAttempts(h, plan['task_identity']).status(), reports=[r for r in reports if r],
             proposal_ref=promoted['request_ref'] if promoted else None))
         if plan.get('kind')=='asset':
@@ -676,6 +897,9 @@ def history(root, folder):
             rows[-1].update(kind='finding', finding=plan['finding'], attempts=dict(
                 attempts=state['attempts'], blocked=state['status'] in ('awaiting_decision', 'stopped'),
                 state_hash=state['state_hash']))
+        if plan.get('git_repair'):
+            from .git_automation import decorate_task
+            decorate_task(folder, plan, rows[-1], packet=packet)
     return sorted(rows, key=lambda r: r['created_at'])
 
 
