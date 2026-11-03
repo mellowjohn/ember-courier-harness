@@ -103,6 +103,12 @@ class MuseImageTests(unittest.TestCase):
         self.cover(); app=App(self.root); app.start('SYNTHETIC bulk artwork',chat_only=True)
         turn='synthetic-bulk-chat-12345678'
         reply=dict(message='Prepare both original effects.',build=None,image_requests=self.batch_specs())
+        names=[]
+        def image_call(*args,**kwargs):
+            from ember_harness import session_chat
+            names.append(session_chat.activity(app.sessions_dir/app.session['id'])['generating_asset'])
+            return self.response
+        self.opener.open.side_effect=image_call
         with patch('ember_harness.muse_image.build_opener',return_value=self.opener),patch(
                 'ember_harness.session_chat.run_muse',return_value=dict(response=json.dumps(reply))) as spark:
             app.chat('Generate two original burst variations',turn)
@@ -110,6 +116,7 @@ class MuseImageTests(unittest.TestCase):
             app.generate_saved_image(app.session['id'],turn)
         self.assertEqual(spark.call_count,1)
         self.assertEqual(self.opener.open.call_count,2)
+        self.assertEqual(names,[spec['display_name'] for spec in self.batch_specs()])
         message=app.snapshot()['messages'][-1]; batch=message['image_batch']
         self.assertEqual((batch['status'],batch['completed'],batch['total']),('generated',2,2))
         self.assertEqual(CreditLedger(self.root).summary()['estimated_spent_usd'],.02)

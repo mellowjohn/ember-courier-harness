@@ -113,6 +113,42 @@ module.exports = async function checkLibrary(page, view) {
   assert((await page.locator('#agent-progress').textContent()).includes('Request stopped') || (await page.locator('#agent-progress').textContent()).includes('worker stopped'));
   assert.equal(await page.locator('.agent-timeline [aria-current="step"]').count(),0);
   await require('./task_review_ui_check')(page,view);
+  // Polling must never turn an unfinished candidate into a ready review, and
+  // a code-only fix must not re-present every retained artwork entity.
+  await page.evaluate(()=>{
+    const request=structuredClone(lastState.requests.find(r=>r.payload.body.build));
+    request.ref='d'.repeat(64);request.decision=null;
+    const build=request.payload.body.build;
+    build.turn_id='synthetic-diff-review';build.title='SYNTHETIC facing-only change';
+    build.files=[{name:'game.js',before_sha256:'before',after_sha256:'after'}];
+    build.diff='--- game.js\n+++ game.js\n-flipX:true\n+flipX:false';
+    build.sprite_plan={version:1,entities:['player','frosty','snowball','backdrop'].map(id=>({id}))};
+    build.sprite_changes=[];request.payload.body.asset_actions=[];
+    const now=new Date().toISOString();
+    window.diffReviewState={...lastState,requests:[request],chat_activity:{turn_id:build.turn_id,state:'active',phase:'visual_review',
+      title:'Inspecting game screenshots',started_at:now,updated_at:now,events:[],read_files:['index.html','game.js'],proposed_files:['game.js']},
+      build:{...lastState.build,requests:[request],quality_check:{request_ref:request.ref,status:'running',issues:[]}}};
+    renderReview(diffReviewState);renderAgentActivity(diffReviewState);
+  });
+  assert.equal(await page.locator('#review .brand').textContent(),'CHECKING PROPOSED CHANGES');
+  assert.equal(await page.locator('#review .decision').count(),0);
+  assert.equal(await page.locator('#review .artwork-preview').count(),0);
+  assert((await page.locator('#agent-progress').textContent()).includes('Reading source: index.html, game.js'));
+  assert((await page.locator('#agent-progress').textContent()).includes('Proposed files: game.js'));
+  await page.evaluate(()=>{
+    diffReviewState.chat_activity={...diffReviewState.chat_activity,state:'complete',phase:'awaiting_review'};
+    diffReviewState.build.quality_check={...diffReviewState.build.quality_check,status:'needs_changes',issues:['Facing fix is not proven.']};
+    renderReview(diffReviewState);
+  });
+  assert.equal(await page.locator('#review .brand').textContent(),'CHANGES NEED ATTENTION');
+  await page.getByText('Artwork unchanged · 4 existing entities retained',{exact:true}).waitFor();
+  assert.equal(await page.locator('#review .artwork-preview').count(),0);
+  assert.equal(await page.locator('#review details').filter({has:page.locator('summary',{hasText:'View code changes'})}).evaluate(n=>n.open),true);
+  await page.evaluate(()=>{
+    renderAgentActivity({...diffReviewState,chat_activity:{...diffReviewState.chat_activity,state:'active',phase:'image_generating',generating_asset:'Snowy backdrop',proposed_files:[]}});
+  });
+  assert((await page.locator('#agent-progress').textContent()).includes('Generating artwork: Snowy backdrop'));
+  await page.evaluate(()=>{current='';renderReview(lastState);renderAgentActivity(lastState);delete window.diffReviewState;});
   resumePolling();await page.unrouteAll({behavior:'wait'});
   await page.evaluate(() => renderAgentActivity(lastState));
   // Previously generated batches advance the game plan together, rather than

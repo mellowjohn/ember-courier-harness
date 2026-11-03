@@ -81,7 +81,8 @@ def prepare(worker, base):
     build, _ = sprite_project.prepare(worker.root, worker.folder, art, snapshot, build, base,
         worker.plan['id'] + '-artwork', budget=dict(id=worker.ref, limit_micro_usd=worker.plan['credits'] * 1_000_000),
         project_binding=worker.plan['project_plan']['binding'], generate=generate,
-        progress=lambda stage: worker.status('Artwork · ' + stage))
+        progress=lambda stage,**metadata: worker.status('Artwork · ' + stage +
+            (' · '+metadata['generating_asset'] if metadata.get('generating_asset') else ''),**metadata))
     prepared = {item['path']: item['content'] for item in build['files']}
     # The generated bundles are host-owned inputs for every coding attempt.
     basis = {**base, **{k:v for k,v in prepared.items() if k in chat_build.PROTECTED_FILES}}

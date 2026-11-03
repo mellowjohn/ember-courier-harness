@@ -126,6 +126,7 @@ class SpriteProjectTests(unittest.TestCase):
         self.send(updated,build,revision=1,turn='sprite-replace-impact-12345678')
         request=chat_build.list_requests(self.folder)[-1]
         self.assertEqual(len(request['payload']['body']['asset_actions']),1)
+        self.assertEqual(request['payload']['body']['build']['sprite_changes'],['impact'])
         files=chat_build.proposal_snapshot(self.root,self.folder,request['ref'])['files']
         self.assertEqual(files['game.js'],old['game.js'])
         self.assertEqual(sprite_project.unpack_assets(files['sprite-assets.js'])[self.hero],sprite_project.unpack_assets(old['sprite-assets.js'])[self.hero])

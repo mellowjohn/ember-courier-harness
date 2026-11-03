@@ -363,7 +363,9 @@ def prepare(root,folder,response,snapshot,build,basis,turn_id,*,budget=None,prog
             result=by_request.get(request['request_sha256'])
             if result is None:
                 try:
-                    result=(generate or muse_image.generate)(root,folder,request_id,request,budget=budget,progress=progress)
+                    name=e['generation']['display_name']
+                    notify=(lambda phase,**metadata:progress(phase,generating_asset=name,**metadata)) if progress else None
+                    result=(generate or muse_image.generate)(root,folder,request_id,request,budget=budget,progress=notify)
                 except muse_image.ImageUnavailable as error:
                     error.sprite_saved={**save_draft(folder,plan,response['expected_revision'],turn_id,source_sha256=digest(response['plan'])),'generated':generated}
                     raise

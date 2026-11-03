@@ -161,7 +161,7 @@ def parameters(request):
                 tool_enablement=dict(enable_image_search=False, enable_web_search=False, enable_shell=False))
 
 
-def generate_batch(root, folder, turn_id, requests, *, budget=None, progress=None):
+def generate_batch(root, folder, turn_id, requests, *, budget=None, progress=None, item_progress=None):
     """Checkpoint a bounded artwork batch using the single-image replay and credit gate."""
     from .chat_build import MAX_IMAGE_REQUESTS
     if not isinstance(turn_id, str) or not re.fullmatch('[a-zA-Z0-9-]{16,64}', turn_id):
@@ -188,7 +188,8 @@ def generate_batch(root, folder, turn_id, requests, *, budget=None, progress=Non
         for index, request in enumerate(requests):
             request_id = sha256((turn_id+':batch:'+str(index)).encode()).hexdigest()
             try:
-                generation = generate(root, folder, request_id, request, budget=budget, progress=progress)
+                notify=(lambda phase,name=request['specification']['display_name']:item_progress(phase,name)) if item_progress else progress
+                generation = generate(root, folder, request_id, request, budget=budget, progress=notify)
             except ValueError as error:
                 # A failed item cannot discard successful siblings. The single-image
                 # capture prevents resending any dispatch with an uncertain result.

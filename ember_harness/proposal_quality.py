@@ -169,6 +169,12 @@ def status(root, folder):
     if not pending:
         return None
     try:
+        with exclusive(Path(folder)/'quality.lock'):
+            pass
+    except ValueError:
+        return dict(request_ref=pending['ref'],status='running',issues=[],
+                    basis='Verification is still running; no result is ready for review.')
+    try:
         report = load(folder,pending['ref'])
         if report is None:
             return None

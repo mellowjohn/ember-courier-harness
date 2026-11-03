@@ -12,7 +12,7 @@ import test_chat_build as builds
 from test_gameplay import PLAN, result as gameplay_result
 from quality_fixture import assessments
 from ember_harness import chat_build, gameplay, polish_runtime, project_brief, proposal_quality
-from ember_harness.recovery import atomic_json, read_json
+from ember_harness.recovery import atomic_json, read_json, exclusive
 
 
 class ProposalQualityTests(unittest.TestCase):
@@ -80,6 +80,26 @@ class ProposalQualityTests(unittest.TestCase):
             self.run_quality(self.propose(),progress=lambda phase,**meta:events.append((phase,meta)))
         self.assertEqual([phase for phase,_ in events],['reviewed'])
         self.assertIn('could not finish',events[-1][1]['detail'])
+
+    def test_live_generation_and_verification_cannot_be_approved_or_discarded(self):
+        ref=self.propose()
+        for lock in ('chat.lock','quality.lock'):
+            with exclusive(self.folder/lock):
+                for choice in ('approve','decline'):
+                    with self.assertRaisesRegex(ValueError,'already active'):
+                        self.app.respond(ref,choice,'SYNTHETIC premature decision')
+                if lock=='quality.lock':self.assertEqual(proposal_quality.status(self.root,self.folder)['status'],'running')
+        self.assertFalse(self.fixture.target.exists())
+        observed=[]
+        def progress(phase,**metadata):
+            if phase=='visual_review':
+                observed.append(proposal_quality.status(self.root,self.folder)['status'])
+                with self.assertRaisesRegex(ValueError,'already active'):
+                    self.app.respond(ref,'approve','SYNTHETIC still checking')
+        report=self.run_quality(ref,progress=progress)
+        self.assertEqual(observed,['running']);self.assertEqual(report['status'],'passed')
+        self.app.respond(ref,'approve','SYNTHETIC completed verification')
+        self.assertTrue(self.fixture.target.exists())
 
     def test_exact_browser_and_visual_review_never_apply_or_accept_and_replay_is_free(self):
         ref=self.propose();before=chat_build.context(self.root,self.folder)

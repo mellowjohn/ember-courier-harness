@@ -56,6 +56,8 @@ class PlaytestFixTests(unittest.TestCase):
         phases = [e['phase'] for e in activity['events']]
         self.assertLess(phases.index('investigating'), phases.index('fixing'))
         self.assertEqual(activity['phase'], 'awaiting_review')
+        self.assertIn('app.js',activity['read_files'])
+        self.assertEqual(activity['proposed_files'],['app.js'])
         self.assertEqual((self.fixture.target.parent/'app.js').read_text(), builds.PROJECT['app.js'])
         proposal = result['messages'][-1]['proposal_ref']
         self.app.respond(proposal, 'approve', 'SYNTHETIC TEST: apply exact repair')

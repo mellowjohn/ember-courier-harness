@@ -109,9 +109,20 @@ function decision(parent,text,ref,choice,cls=''){
   button.onclick=()=>respond(ref,choice,text);
   return button;
 }
+function proposalReviewState(s,request){
+  const build=request?.payload.body.build,activity=s.chat_activity,report=s.build?.quality_check;
+  if(!build)return {waiting:false,label:null};
+  const own=activity?.turn_id===build.turn_id;
+  const status=report?.request_ref===request.ref?report.status:null;
+  const waiting=own&&activity.state==='active'||status==='running';
+  return {waiting,label:waiting?'CHECKING PROPOSED CHANGES':status==='needs_changes'?'CHANGES NEED ATTENTION':
+    status==='unavailable'||status==='stale'?'VERIFICATION INCOMPLETE':own&&['failed','interrupted'].includes(activity.state)?'VERIFICATION STOPPED':
+    build.restore_from?'READY TO RESTORE':status==='passed'?'READY FOR YOUR REVIEW':'PROPOSED CHANGES'};
+}
 function renderReview(s){
   const pending=s.requests.filter(r=>!r.decision).sort((a,b)=>Number(!!b.payload.body.git_task)-Number(!!a.payload.body.git_task));
-  const key=JSON.stringify([s.session?.id,s.status,pending.map(r=>[r.ref,!!r.widening_acknowledged]),s.requests.length]);
+  const reviewState=proposalReviewState(s,pending[0]);
+  const key=JSON.stringify([s.session?.id,s.status,pending.map(r=>[r.ref,!!r.widening_acknowledged]),s.requests.length,reviewState]);
   if(key===current){document.querySelectorAll('.decision').forEach(b=>b.disabled=busy||sending||s.chat_activity?.state==='active'||b.dataset.needsScopeAck==='true'||b.dataset.needsAssetAccept==='true');renderProposalCheck(s);renderQualityCheck(s);return;}current=key;urls.splice(0).forEach(URL.revokeObjectURL);
   $('review').replaceChildren();$('proposal-preview-host').replaceChildren();$('review').hidden=!pending.length;buildReviewRef=null;
   if(!pending.length)return;
@@ -161,15 +172,29 @@ function renderReview(s){
   }
   if(body.build){
     buildReviewRef=r.ref;
-    el('small',body.build.restore_from?'READY TO RESTORE':'READY TO BUILD',p).className='brand';el('h3',body.build.title,p);el('p',body.build.summary,p);
+    el('small',reviewState.label,p).className='brand';el('h3',body.build.title,p);
     const files=body.build.files||[{name:'index.html',before_sha256:body.build.before_sha256}];
     el('p',files.map(file=>(file.before_sha256?'Update ':'Create ')+file.name).join(' · '),p);
+    if(reviewState.waiting){
+      el('p','The proposed edits are still being tested and reviewed. The final review will appear when checking finishes.',p).setAttribute('role','status');
+      const diff=el('details',undefined,p);el('summary','Preview pending code changes',diff);el('pre',body.build.diff,diff);
+      return;
+    }
+    el('p',body.build.summary,p);
     const assetCount=(body.asset_actions||[]).length;
     el('small',assetCount?'Acceptance covers each listed asset and these exact file changes. Try the proposal before accepting.':'One approval applies all of these exact file changes and opens the preview.',p);
     if(body.build.asset)detail('Asset specification and measured export',body.build.asset,p);
     if(body.build.asset_source)detail('Asset source and recorded export',body.build.asset_source,p);
     if(body.build.mechanics)renderMechanicBinding(body.build.mechanics,p);
-    if(body.build.sprite_plan)renderSpritePlan(body.build.sprite_plan,p,s,[],urls);
+    if(body.build.sprite_plan){
+      const changed=new Set(body.build.sprite_changes||[]),hashes=new Set((body.asset_actions||[]).map(a=>a.args.sha256));
+      const refs=new Set((body.build.sprite_assets||[]).filter(a=>hashes.has(a.package_sha256)).map(a=>a.ref));
+      const legacyPlanChange=!('sprite_changes' in body.build)&&files.some(f=>f.name==='sprite-plan.js');
+      const entities=body.build.sprite_plan.entities.filter(e=>changed.has(e.id)||refs.has(e.asset_ref)||legacyPlanChange);
+      if(entities.length)renderSpritePlan({...body.build.sprite_plan,entities},p,s,[],urls);
+      const unchanged=body.build.sprite_plan.entities.length-entities.length;
+      if(unchanged)el('small','Artwork unchanged · '+unchanged+' existing '+(unchanged===1?'entity retained':'entities retained'),p);
+    }
     const acceptBoxes=[];
     if(assetCount>1){
       const list=el('fieldset',undefined,p);el('legend','Accept each changed artwork',list);
@@ -185,6 +210,7 @@ function renderReview(s){
     const checks=el('section',undefined,p);checks.id='proposal-gameplay-review';checks.setAttribute('aria-label','Proposal gameplay comparison');
     const quality=el('section',undefined,p);quality.id='proposal-quality-review';quality.setAttribute('aria-label','Game verification');
     const code=el('details',undefined,p);el('summary','View code changes',code);el('pre',body.build.diff,code);
+    code.open=files.some(file=>file.before_sha256&&!['asset.js','engine.js','sprite-assets.js','sprite-plan.js','sprite-player.js','ember-audio.js'].includes(file.name));
     const permissions=el('details',undefined,p);el('summary','Permissions and checks',permissions);
     el('p',body.build.restore_from?'Restoration stays in this session and does not call Muse.':'Changes are limited to this session project. Muse uses the shared credit budget.',permissions);
     for(const check of body.build.checks)el('p',check,permissions);
@@ -248,7 +274,7 @@ function renderQualityCheck(s){
   if(area.dataset.key===key)return;area.dataset.key=key;qualityURLs.splice(0).forEach(URL.revokeObjectURL);area.replaceChildren();
   el('h4','Game verification',area);
   if(!report){el('p',s.chat_activity?.state==='active'?'Testing and visual review are in progress…':'Automatic verification has not run for this proposal.',area);return;}
-  const labels={passed:'Checks passed · ready for your review',needs_changes:'Verification found issues to fix',unavailable:'Verification incomplete',stale:'Verification is stale'};
+  const labels={running:'Testing and visual review are in progress…',passed:'Checks passed · ready for your review',needs_changes:'Verification found issues to fix',unavailable:'Verification incomplete',stale:'Verification is stale'};
   el('p',labels[report.status]||'Verification incomplete',area).setAttribute('role','status');
   const observed=report.observations?.candidate;
   el('p','Gameplay assertions: '+(observed?.gameplay?.outcome||'not run')+' · AI visual review: '+(report.verdict?'completed':'not completed'),area);
@@ -1188,7 +1214,9 @@ function renderAgentActivity(s){
   const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(a.started_at))/1000));
   const task=s.project_plan?.tasks.find(t=>t.id===s.project_plan.selected_task);
   const planBuild=a.kind==='plan_build';
-  const key=JSON.stringify([a.turn_id,a.kind,a.plan_start,a.state,a.phase,a.title,a.detail,a.error,review,task?.title,a.events,a.diagnosis,a.execution]);
+  const quality=s.build?.quality_check;
+  const issues=review&&quality?.status==='needs_changes';
+  const key=JSON.stringify([a.turn_id,a.kind,a.plan_start,a.state,a.phase,a.title,a.detail,a.error,a.read_files,a.proposed_files,a.generating_asset,review,issues,task?.title,a.events,a.diagnosis,a.execution]);
   const updateCounters=()=>{const timer=$('agent-elapsed');if(!timer)return;
     timer.textContent=(elapsed<60?elapsed+'s':Math.floor(elapsed/60)+'m '+elapsed%60+'s')+' elapsed · '+(a.phase?.startsWith('image_')?'Muse Image':'Muse Spark 1.3');
     $('agent-received').hidden=!a.response_chars;$('agent-received').textContent=(a.response_chars||0).toLocaleString()+' response characters received';
@@ -1203,11 +1231,15 @@ function renderAgentActivity(s){
   const expanded=area.dataset.turnId===a.turn_id&&!!area.querySelector('details')?.open;
   area.dataset.turnId=a.turn_id;area.dataset.activityKey=key;area.replaceChildren();area.setAttribute('aria-live','off');
   const titles={context:'Reading notes and game files',validating:'Checking the proposed code',proposal:'Preparing the fix for review',awaiting_review:'Fix ready for review'};
-  const status=EmberUI.status(area,{phase:fix?'fix_'+a.phase:a.phase,state:a.state,title:fix?(titles[a.phase]||a.title):a.title,context:fix?'Playtest bug fix':task?'Current task · '+task.title:null});
+  const status=EmberUI.status(area,{phase:fix?'fix_'+a.phase:a.phase,state:a.state,title:issues?'Verification found issues':fix?(titles[a.phase]||a.title):a.title,context:fix?'Playtest bug fix':task?'Current task · '+task.title:null});
   status.setAttribute('role','status');
-  if(planBuild){const notice=el('p',a.state==='active'?'Plan approved · Building mode':review?'Build ready for review':'Build stopped',area);notice.id='plan-build-notice';notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
+  if(planBuild){const notice=el('p',a.state==='active'?'Plan approved · Building mode':issues?'Build needs changes':review?'Build ready for review':'Build stopped',area);notice.id='plan-build-notice';notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
     el('p','Task: '+(a.plan_start?.title||task?.title||'First playable build'),area);}
   if(a.detail){const explanation=el('p',a.detail,area);explanation.className='agent-step-detail'}
+  if(a.state==='active'&&a.read_files?.length)el('p','Reading source: '+a.read_files.join(', '),area);
+  if(a.phase?.startsWith('image_')&&a.generating_asset)el('p',(a.phase==='image_generating'?'Generating artwork: ':'Preparing artwork preview: ')+a.generating_asset,area);
+  const edited=a.proposed_files?.length?a.proposed_files:proposal?Object.keys(proposal.payload.body.build.manifest).filter(name=>proposal.payload.body.build.manifest[name]!==proposal.payload.body.build.before_manifest?.[name]):[];
+  if(edited.length)el('p',(applied?'Updated files: ':a.phase==='applying'?'Applying approved files: ':'Proposed files: ')+edited.join(', '),area);
   if(a.events?.length){
     const recent=el('section',undefined,area);recent.className='agent-recent';recent.setAttribute('aria-label','Recent request activity');
     el('p','Latest steps',recent).className='section-label';
@@ -1226,9 +1258,8 @@ function renderAgentActivity(s){
     const index=a.phase==='diagnosed'?2:['validating','proposal'].includes(a.phase)?2:phases.indexOf(a.phase);
     const steps=el('ol',undefined,area);steps.className='fix-steps';steps.setAttribute('aria-label','Bug fix progress');
     ['Read your notes & game','Investigate the cause','Prepare & check proposed code','Review proposed fix','Apply approved files'].forEach((text,i)=>{const step=el('li',text,steps);step.dataset.state=i<index?'done':i===index?'current':'waiting';if(i===index)step.setAttribute('aria-current','step')});
-    if(a.diagnosis){const diagnosis=el('div',undefined,area);diagnosis.className='fix-evidence';el('p',a.diagnosis.summary,diagnosis);el('p','Suspected cause: '+a.diagnosis.cause,diagnosis);el('p','Repair plan: '+a.diagnosis.plan,diagnosis);if(a.diagnosis.files.length)el('p','Investigated files: '+a.diagnosis.files.join(', '),diagnosis);el('small','AI source review. This is a diagnosis, not proof the bug was reproduced or fixed.',diagnosis)}
-    if(proposal){const build=proposal.payload.body.build,names=Object.keys(build.manifest).filter(name=>build.manifest[name]!==build.before_manifest?.[name]);el('p',(applied?'Updated files: ':a.phase==='applying'?'Applying approved files: ':'Proposed files: ')+names.join(', '),area)}
-    if(review)el('p','Code checks are complete. Gameplay is not verified yet. Try the proposed changes before applying them.',area);
+    if(a.diagnosis){const diagnosis=el('details',undefined,area);diagnosis.className='fix-evidence';el('summary','Investigation and repair plan',diagnosis);el('p',a.diagnosis.summary,diagnosis);el('p','Suspected cause: '+a.diagnosis.cause,diagnosis);el('p','Repair plan: '+a.diagnosis.plan,diagnosis);if(a.diagnosis.files.length)el('p','Investigated files: '+a.diagnosis.files.join(', '),diagnosis);el('small','AI source review. This is a diagnosis, not proof the bug was reproduced or fixed.',diagnosis)}
+    if(review)el('p',issues?'Verification found issues. Review the findings and request changes.':'Review the verification results and try the proposed changes before applying them.',area);
     if(applied)el('p','Your approved files are saved. Play the updated game and report anything that still feels wrong.',area);
   }
   if(a.state==='active'){

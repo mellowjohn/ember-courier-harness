@@ -101,9 +101,10 @@ const { chromium } = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright'
     await page.locator('#agent-progress .ember-status-title').getByText('Preparing the fix', { exact: false }).waitFor();
     await page.getByRole('button', { name: 'Approve & play', exact: true }).waitFor();
     assert.equal(await page.locator('.build-version').textContent(), 'Version 2 · Approved and ready to play');
+    await page.getByText('Investigation and repair plan',{exact:true}).click();
     assert((await page.locator('#agent-progress').textContent()).includes('Suspected cause:'));
     assert((await page.locator('#agent-progress').textContent()).includes('Proposed files: app.js'));
-    assert((await page.locator('#agent-progress').textContent()).includes('Gameplay is not verified yet'));
+    assert((await page.locator('#agent-progress').textContent()).toLowerCase().includes('verification'));
     assert.equal(await page.locator('#finding-reviews .panel').count(), 0);
     assert.deepEqual(unexpected, []);
     await page.locator('#agent-progress').screenshot({ path: path.join(process.env.EMBER_BROWSER_OUTPUT, 'notes-fix-review.png') });

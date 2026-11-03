@@ -105,6 +105,8 @@ def activity(folder):
                 started_at=progress.get('started_at', user['created_at']),
                 updated_at=progress.get('updated_at', user['created_at']),
                 response_chars=progress.get('response_chars', 0),
+                read_files=progress.get('read_files',[]), proposed_files=progress.get('proposed_files',[]),
+                generating_asset=progress.get('generating_asset'),
                 execution=progress.get('execution'), call_elapsed_seconds=progress.get('elapsed_seconds'),
                 events=user.get('activity', []), error=user.get('error'),
                 kind='playtest_fix' if user.get('playtest_report') else 'plan_build' if user.get('plan_start') else 'chat',
@@ -160,9 +162,13 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                                     response_chars=metadata.get('response_chars', 0 if phase == 'saved' else prior.get('response_chars', 0)),
                                     execution=metadata.get('execution', prior.get('execution')),
                                     elapsed_seconds=metadata.get('elapsed_seconds', prior.get('elapsed_seconds')))
+            for key,default in (('read_files',[]),('proposed_files',[]),('generating_asset',None)):
+                user['progress'][key]=metadata.get(key,default if phase=='saved' else prior.get(key,default))
             if phase != prior.get('phase') or phase == 'saved' or user['progress']['detail'] != prior.get('detail'):
                 user.setdefault('activity', []).append(dict(phase=phase, title=STAGES[phase],
-                    detail=user['progress']['detail'], at=now))
+                    detail=user['progress']['detail'], at=now,
+                    read_files=user['progress']['read_files'],proposed_files=user['progress']['proposed_files'],
+                    generating_asset=user['progress']['generating_asset']))
                 user['activity'] = user['activity'][-30:]
             atomic_json(folder / 'chat.json', messages)
 
@@ -181,6 +187,7 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                 user.setdefault('project_snapshot', project_snapshot)
                 if project_snapshot != user['project_snapshot']:
                     raise ValueError('Project changed since this request; ask for a fresh revision')
+                progress('context',read_files=[item['path'] for item in build_context['files'] if item['path'] not in chat_build.PROTECTED_FILES])
                 user.setdefault('project_plan_snapshot', project_plan.context(root, folder))
                 frozen_plan = user['project_plan_snapshot']
                 # Discussion and amendments remain available for inactive scopes.
@@ -484,7 +491,7 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                 selected_asset = result.get('asset')
                 if batch_specs is not None:
                     image_batch = muse_image.generate_batch(root, folder, turn_id, batch_requests,
-                                                           budget=fix_budget, progress=progress)
+                        budget=fix_budget, progress=progress,item_progress=lambda phase,name:progress(phase,generating_asset=name))
                     reply += '\n\n' + str(image_batch['completed']) + ' of ' + str(image_batch['total']) + (
                         ' artwork requests generated. Review each asset before accepting it. '
                         'Your current game is unchanged.')
@@ -497,7 +504,7 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                     atomic_json(request_path, image_request)
                     try:
                         image_generation = muse_image.generate(root, folder, turn_id, image_request,
-                                                              budget=fix_budget, progress=progress)
+                            budget=fix_budget, progress=lambda phase:progress(phase,generating_asset=image_request['specification']['display_name']))
                         ref = image_generation['asset_ref']
                         asset_snapshot = {**(asset_snapshot or {}), 'assets': [
                             *(asset_snapshot or {}).get('assets', []), asset_library.summary(root, ref)]}
@@ -564,7 +571,8 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                     from .game_audio import prepare_build
                     build = prepare_build(build, protected_basis)
                     project_plan.check_binding(root, folder, frozen_plan['binding'] if frozen_plan else None)
-                    progress('proposal')
+                    progress('proposal',generating_asset=None,proposed_files=sorted(item['path'] for item in build['files']
+                        if item['content']!=protected_basis.get(item['path'])))
                     if selected_asset and selected_asset['intent']=='use':
                         manifest={item['path']:sha256(item['content'].encode('utf-8')).hexdigest() for item in build['files']}
                         for existing in chat_build.list_requests(folder):
@@ -637,7 +645,10 @@ def generate_saved_image(root, folder, turn_id):
         def progress(phase, **metadata):
             now = datetime.now(timezone.utc).isoformat()
             detail = metadata.get('detail', STAGE_DETAILS.get(phase, ''))
+            prior=user.get('progress',{})
             user['progress'] = dict(phase=phase, detail=detail, started_at=now, updated_at=now, response_chars=0)
+            for key,default in (('read_files',[]),('proposed_files',[]),('generating_asset',None)):
+                user['progress'][key]=metadata.get(key,prior.get(key,default))
             user.setdefault('activity', []).append(dict(phase=phase, title=STAGES[phase], detail=detail, at=now))
             atomic_json(folder / 'chat.json', messages)
 
@@ -645,14 +656,16 @@ def generate_saved_image(root, folder, turn_id):
             if message.get('image_batch'):
                 batch = message['image_batch']
                 message['image_batch'] = muse_image.generate_batch(root, folder, turn_id,
-                    [item['request'] for item in batch['items']], budget=message.get('image_batch_budget'), progress=progress)
+                    [item['request'] for item in batch['items']], budget=message.get('image_batch_budget'), progress=progress,
+                    item_progress=lambda phase,name:progress(phase,generating_asset=name))
                 batch = message['image_batch']
                 message['text'] = (str(batch['completed']) + ' of ' + str(batch['total']) +
                     ' artwork requests generated. Review each asset before accepting it. Your current game is unchanged.')
                 user['status'] = 'complete'
                 progress('complete')
                 return dict(messages=messages)
-            generated = muse_image.generate(root, folder, turn_id, message['image_request'], progress=progress)
+            generated = muse_image.generate(root, folder, turn_id, message['image_request'],
+                progress=lambda phase:progress(phase,generating_asset=message['image_request']['specification']['display_name']))
             message.update(image_generation=generated, asset_ref=generated['asset_ref'], asset_intent='discuss')
             message['text'] = 'Muse Image generated the artwork. Review the actual asset before accepting it.'
             # An empty project gets a playable review of the actual atlas. Existing

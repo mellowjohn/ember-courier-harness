@@ -460,6 +460,9 @@ def propose_build(root, folder, turn_id, intent, build, *, expected_before=None,
     if sprite_project.ASSETS_FILE in files:
         body['build']['sprite_assets']=sprite_project.asset_rows(files)
         body['build']['sprite_plan']=sprite_project.unpack_plan(files[sprite_project.PLAN_FILE])
+        old_plan=sprite_project.unpack_plan(old_files[sprite_project.PLAN_FILE]) if sprite_project.PLAN_FILE in old_files else {'entities':[]}
+        prior={entity['id']:entity for entity in old_plan['entities']}
+        body['build']['sprite_changes']=[entity['id'] for entity in body['build']['sprite_plan']['entities'] if prior.get(entity['id'])!=entity]
         body['build']['checks'].append('Entity roles, required clips, state graphs and exact draw replacements checked; '+str(len(asset_actions))+' changed assets require individual acceptance receipts')
     if asset_source is not None:
         body['build']['asset_source']=deepcopy(asset_source)
@@ -490,7 +493,9 @@ def _target(root, folder, payload):
 
 
 def respond(root, folder, ref, choice, quote):
-    with exclusive(Path(folder) / 'build.lock'):
+    # A review packet exists before inference and verification finish. It must
+    # not be applied or discarded while either operation still owns it.
+    with exclusive(Path(folder) / 'chat.lock'), exclusive(Path(folder) / 'quality.lock'), exclusive(Path(folder) / 'build.lock'):
         h = harness(folder)
         payload = load_request(h, ref)
         _target(root, folder, payload)

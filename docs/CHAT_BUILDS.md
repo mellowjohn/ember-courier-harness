@@ -130,6 +130,18 @@ for a new review. See [proposal gameplay comparisons](GAMEPLAY_CHECKS.md#check-p
 
 ## Preview and revision
 
+While a candidate is being tested or visually reviewed, its card says
+**Checking proposed changes** and holds back approval actions. The server also
+rejects decisions while that work is running. A completed review distinguishes
+**Ready for your review**, **Changes need attention** and incomplete checks.
+
+Revision reviews focus on the diff: changed source opens by default, changed
+artwork/entities are shown individually, and unchanged artwork is summarized
+as a retained count. Investigation details stay collapsed. Live progress names
+the source files in context, the files with proposed edits and the artwork being
+generated or prepared. Proposed edits become saved file changes only after
+exact approval.
+
 After approval and completion, **Open prototype preview** renders the verified
 `index.html` in an iframe with scripts allowed, an opaque origin, and a restrictive
 content policy blocking network access and external resources. Previewing does
