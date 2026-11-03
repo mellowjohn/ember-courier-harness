@@ -119,6 +119,29 @@ class ChatBuildTests(unittest.TestCase):
             self.assertEqual(snapshot['files'][name].encode('utf-8'), before[name])
         self.assertIn(' + 2;', snapshot['files']['app.js'])
 
+    def test_swapped_page_and_script_are_repaired_in_the_reviewed_candidate(self):
+        first=self.propose_project()
+        self.app.respond(first,'approve','SYNTHETIC original project')
+        page='<!doctype html><html><body><button id="counter">0</button><script src="game.js"></script></body></html>'
+        script=PROJECT['app.js']
+        ref=self.propose_project({'index.html':script,'game.js':page},'swapped-page-script-12345678')
+        candidate=chat_build.proposal_snapshot(self.root,self.folder,ref)['files']
+        self.assertEqual(candidate['index.html'],page)
+        self.assertEqual(candidate['game.js'],script)
+        self.assertEqual(candidate['app.js'],PROJECT['app.js'])
+        self.assertEqual(self.target.read_text(encoding='utf-8'),PROJECT['index.html'])
+        self.assertIsNone(chat_build.list_requests(self.folder)[-1]['decision'])
+
+    def test_malformed_or_ambiguous_page_sources_are_not_guessed(self):
+        def page(name):return '<html><body><script src="'+name+'"></script></body></html>'
+        for files in ({'index.html':'const x=1;','game.js':page('game.js'),'other.js':page('other.js')},
+                      {'index.html':'<div>Incomplete page</div>','game.js':page('game.js')},
+                      {'index.html':'const x=1;','game.js':'const y=2;'}):
+            result=chat_build.materialize_build(dict(title='Invalid page',summary='Do not invent a document',
+                files=[dict(path=k,content=v) for k,v in files.items()]),{})
+            with self.assertRaisesRegex(ValueError,'complete HTML document'):
+                chat_build.validate_files({row['path']:row['content'] for row in result['files']})
+
     def test_full_file_reply_retains_omitted_files_and_reviews_only_actual_changes(self):
         first = self.propose_project()
         self.app.respond(first, 'approve', 'SYNTHETIC initial project')

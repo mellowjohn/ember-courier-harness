@@ -40,6 +40,8 @@ def update_from_chat(folder, updates, revision, turn_id):
         return saved
     result = dict(revision=revision + 1, updated_at=datetime.now(timezone.utc).isoformat(),
                   fields=fields, source_turn_id=turn_id)
+    if saved.get('purpose') and fields['goal']==saved['fields']['goal']:
+        result['purpose']=saved['purpose']
     atomic_json(Path(folder) / 'project-brief.json', result)
     return result
 
@@ -56,7 +58,7 @@ def load(folder):
     return data
 
 
-def save(folder, fields, revision):
+def save(folder, fields, revision, *, purpose=None):
     if (not isinstance(fields, dict) or set(fields) != set(FIELDS)
             or any(not isinstance(v, str) or len(v) > 2000 for v in fields.values())):
         raise ValueError('Use the four project brief fields, with at most 2000 characters each')
@@ -64,9 +66,12 @@ def save(folder, fields, revision):
         raise ValueError('A valid project brief revision is required')
     # Share the chat lock so a running request keeps one stable brief.
     with exclusive(Path(folder) / 'chat.lock'):
-        if load(folder)['revision'] != revision:
+        current=load(folder)
+        if current['revision'] != revision:
             raise ValueError('This brief changed in another window. Reopen the session before saving')
         result = dict(revision=revision + 1, updated_at=datetime.now(timezone.utc).isoformat(),
                       fields={key: fields[key].strip() for key in FIELDS})
+        retained=purpose or (current.get('purpose') if result['fields']['goal']==current['fields']['goal'] else None)
+        if retained: result['purpose']=retained
         atomic_json(Path(folder) / 'project-brief.json', result)
         return result

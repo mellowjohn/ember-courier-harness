@@ -385,6 +385,14 @@ the documented Muse Image connection; arbitrary engine imports remain separate.
 
 ## Entity artwork and state machines
 
+Artwork requested for a game stays in its game plan and complete first playable.
+Ember reuses compatible generated assets, prepares any needed scope review, then
+integrates the artwork with gameplay. Existing generated batches offer **Use
+these assets in the game plan**; individual results offer **Add artwork to game
+plan** when a game design exists. Explicit standalone artwork requests still use
+the asset library/workshop flow. Chat receives exact package acceptance receipts
+so it can acknowledge previously accepted artwork without inventing approval.
+
 When the game brief calls for authored sprite art, chat now receives a structured
 inventory and instructions to plan the relevant characters, props, backgrounds,
 tiles, interface art and effects. Movement, airborne and combat terms supply

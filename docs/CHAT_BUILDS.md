@@ -152,6 +152,9 @@ First builds and requested or necessary rewrites can still return complete files
 Existing files omitted from these replies are retained unchanged, including when
 a new entry script replaces the one referenced by the page. This applies before
 artwork integration and file-count checks, so the complete candidate is reviewed.
+If a reply unambiguously swaps `index.html` with its linked JavaScript file, the
+host corrects their contents in the candidate before review. Ambiguous swaps and
+incomplete HTML still fail validation.
 Muse is instructed to explain necessary broader changes in the proposal summary;
 this remains model guidance, not a semantic guarantee. File deletion is not supported.
 Retries retain their original project snapshot and stop if the project changes.

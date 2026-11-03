@@ -115,6 +115,25 @@ module.exports = async function checkLibrary(page, view) {
   await require('./task_review_ui_check')(page,view);
   resumePolling();await page.unrouteAll({behavior:'wait'});
   await page.evaluate(() => renderAgentActivity(lastState));
+  // Previously generated batches advance the game plan together, rather than
+  // selecting one atlas for a standalone workshop.
+  let artworkPlanText;
+  await page.route('**/api/chat',async route=>{artworkPlanText=route.request().postDataJSON().text;await route.fulfill({json:{}})});
+  await page.evaluate(()=>{
+    const original=renderArtworkPreview;renderArtworkPreview=()=>{};
+    try{
+      const refs=['a'.repeat(64),'b'.repeat(64)];
+      const message={id:'synthetic-existing-art',role:'assistant',text:'SYNTHETIC already generated artwork',created_at:new Date().toISOString(),
+        image_batch:{completed:2,total:2,items:refs.map((ref,i)=>({request:{specification:{id:'art-'+i,display_name:'Original art '+i}},generation:{status:'generated',asset_ref:ref}}))}};
+      renderChat({...lastState,project_brief:{...lastState.project_brief,fields:{...lastState.project_brief.fields,goal:'A turn-based snowball duel'}},messages:[message]});
+    }finally{renderArtworkPreview=original;}
+  });
+  await page.getByRole('button',{name:'Use these assets in the game plan',exact:true}).click();
+  await page.locator('#chat-send:not([disabled])').waitFor();
+  assert(artworkPlanText.includes('a'.repeat(64))&&artworkPlanText.includes('b'.repeat(64)));
+  assert(artworkPlanText.includes('complete first playable game'));
+  assert(artworkPlanText.includes('Prepare the plan for approval before implementation'));
+  await page.unroute('**/api/chat');
   for (const width of [390, 768, 1500]) {
     await page.setViewportSize({width, height: 1000});
     for (const id of ['assets', 'library', 'chat']) {

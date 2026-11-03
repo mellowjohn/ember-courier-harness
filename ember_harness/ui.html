@@ -1262,6 +1262,13 @@ function renderImageCredits(s,parent){
     save.disabled=true;try{await api('image-credits',{session_id:s.session.id,balance_usd:balance.value,no_paid_fallback:confirm.checked});chatKey='';await refresh()}
     catch(error){note.textContent=error.message;save.disabled=false}};
 }
+function hasGameDesign(s){return !!(s.project_plan?.managed||s.project_brief?.fields.goal&&s.project_brief?.purpose!=='asset_preview')}
+function planWithArtwork(s,refs){
+  return sendMessage('Update my game plan to reuse these generated artwork assets: '+refs.join(', ')+'. '+
+    'Make the first task a complete first playable game with its core loop, controls, feedback, win/lose and restart, '+
+    'including artwork integration. Preserve the agreed design and include any other compatible generated game assets. '+
+    'Prepare the plan for approval before implementation; do not create a standalone asset workshop.',crypto.randomUUID());
+}
 function renderImageRequest(request,message,s,parent){
   const sid=s.session.id,generated=message.image_generation;
   const card=el('section',undefined,parent);card.className='panel';card.setAttribute('aria-label','Artwork request');
@@ -1271,8 +1278,8 @@ function renderImageRequest(request,message,s,parent){
   if(generated?.status==='generated'){
     el('p','Generated directly by Muse Image · $0.01 recorded in the shared Muse budget. Review the prepared artwork and animation before accepting it.',card);
     renderArtworkPreview(generated.asset_ref,request.specification.display_name,s,card);
-    if(!message.proposal_ref){const use=el('button','Use this artwork in the game',actions);use.className='button primary';use.disabled=busy||sending;
-      use.onclick=()=>sendMessage('Use the generated '+request.specification.display_name+' asset ('+request.specification.id+') in my game. Preserve unrelated controls, systems and visuals.',crypto.randomUUID())}
+    if(!message.proposal_ref){const use=el('button',hasGameDesign(s)?'Add artwork to game plan':'Use this artwork in the game',actions);use.className='button primary';use.disabled=busy||sending;
+      use.onclick=()=>hasGameDesign(s)?planWithArtwork(s,[generated.asset_ref]):sendMessage('Use the generated '+request.specification.display_name+' asset ('+request.specification.id+') in my game. Preserve unrelated controls, systems and visuals.',crypto.randomUUID())}
     detail('Artwork preparation',generated.preparation,card);
   }else{
     el('p',s.image_generation?.ready&&generated?.reason?.startsWith('Verify active Model API free credits')?
@@ -1330,6 +1337,9 @@ function renderChat(s){
       if(m.image_request)renderImageRequest(m.image_request,m,s,bubble);
       if(m.image_batch){
         el('p',`${m.image_batch.completed} of ${m.image_batch.total} artwork requests generated`,bubble);
+        const ready=m.image_batch.items.filter(item=>item.generation?.status==='generated').map(item=>item.generation.asset_ref);
+        if(ready.length&&hasGameDesign(s)){const plan=el('button','Use these assets in the game plan',bubble);plan.className='button primary';plan.disabled=busy||sending;
+          plan.onclick=()=>planWithArtwork(s,ready);}
         for(const item of m.image_batch.items)renderImageRequest(item.request,{...m,image_generation:item.generation},s,bubble);
       }
       if(m.sprite_project){renderSpritePlan(m.sprite_project.plan,bubble,s,m.sprite_project.generated||[]);if(m.sprite_project.status==='blocked')el('p','Artwork preparation is waiting: '+m.sprite_project.reason,bubble)}
@@ -1337,7 +1347,7 @@ function renderChat(s){
       if(m.status==='pending'||m.status==='failed'){
         const active=inFlight&&(s.chat_activity?.turn_id===m.id||localRequest?.turn_id===m.id);
         el('small',m.status==='failed'?'Reply failed: '+m.error:active?'Request in progress':'Reply interrupted; retry when ready.',bubble).className='message-status';
-        if(!active){const fresh=m.status==='failed'&&(m.error?.includes('Send a new message to try again')||m.error?.includes('Include every existing project file; file deletion is not supported')||/Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
+        if(!active){const fresh=m.status==='failed'&&(m.error?.includes('Send a new message to try again')||m.error?.includes('A complete HTML document with html and body elements is required')||m.error?.includes('Include every existing project file; file deletion is not supported')||/Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
           const retry=el('button',fresh?'Try a new reply':'Retry reply',bubble);retry.className='button';retry.disabled=inFlight;
           retry.onclick=()=>sendMessage(m.text,fresh?crypto.randomUUID():m.id)}
       }

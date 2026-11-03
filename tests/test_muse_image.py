@@ -59,6 +59,44 @@ class MuseImageTests(unittest.TestCase):
         second.update(id='second-burst', display_name='Second original burst')
         return [self.spec, second]
 
+    def test_game_artwork_request_prepares_a_playable_plan_instead_of_detached_images(self):
+        from ember_harness import project_plan
+        app=App(self.root);app.start('SYNTHETIC snowball game',chat_only=True)
+        sid=app.session['id'];folder=app.sessions_dir/sid
+        app.save_brief(sid,dict(goal='A turn-based snowball duel',controls='Click to throw',
+            visual_direction='Magical winter',constraints='One player versus a snowman'),0)
+        document=project_plan.starter(folder)
+        document['scope']['features']=['First playable duel with generated artwork, turns, throws, win/lose and restart']
+        detached=dict(message='SYNTHETIC detached artwork',build=None,image_requests=self.batch_specs())
+        planned=dict(message='SYNTHETIC integrated game plan',build=None,plan=document)
+        with patch('ember_harness.session_chat.run_muse',side_effect=[dict(response=json.dumps(detached)),dict(response=json.dumps(planned))]) as spark,patch('ember_harness.muse_image.generate_batch') as images,redirect_stdout(StringIO()):
+            app.chat('Love it, will you generate the art assets for this?','game-artwork-route-12345678')
+        self.assertEqual(spark.call_count,2);images.assert_not_called()
+        self.assertNotEqual(spark.call_args_list[0].args[3],spark.call_args_list[1].args[3])
+        state=project_plan.status(self.root,folder)
+        self.assertIsNotNone(state['pending']);self.assertFalse(state['active'])
+        self.assertEqual(state['pending']['payload']['body']['project_plan']['document'],document)
+        self.assertEqual(chat_build.context(self.root,folder)['manifest'],{})
+        self.assertEqual(chat_build.list_requests(folder),[])
+
+    def test_game_artwork_route_stops_after_one_failed_correction_without_generating(self):
+        app=App(self.root);app.start('SYNTHETIC game design',chat_only=True)
+        app.save_brief(app.session['id'],dict(goal='A snowball duel',controls='',visual_direction='',constraints=''),0)
+        detached=dict(message='SYNTHETIC still detached',build=None,image_requests=self.batch_specs())
+        with patch('ember_harness.session_chat.run_muse',return_value=dict(response=json.dumps(detached))) as spark,patch('ember_harness.muse_image.generate_batch') as images:
+            with self.assertRaisesRegex(ValueError,'needs its project plan'):
+                app.chat('Generate the game art','game-artwork-stopped-12345678')
+        self.assertEqual(spark.call_count,2);images.assert_not_called()
+
+    def test_explicit_standalone_artwork_remains_available_with_a_game_brief(self):
+        self.cover();app=App(self.root);app.start('SYNTHETIC standalone art',chat_only=True)
+        app.save_brief(app.session['id'],dict(goal='A snowball duel',controls='',visual_direction='',constraints=''),0)
+        reply=dict(message='SYNTHETIC standalone effects',build=None,image_requests=self.batch_specs())
+        with patch('ember_harness.muse_image.build_opener',return_value=self.opener),patch('ember_harness.session_chat.run_muse',return_value=dict(response=json.dumps(reply))) as spark:
+            app.chat('Generate only two artwork assets for my library','game-standalone-art-12345678')
+        self.assertEqual(spark.call_count,1)
+        self.assertEqual(app.snapshot()['messages'][-1]['image_batch']['completed'],2)
+
     def test_bulk_artwork_chat_previews_each_result_without_applying_or_accepting(self):
         from ember_harness.muse_chat import structured_schema
         structured_schema(chat_build.CHAT_SCHEMA)

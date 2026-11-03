@@ -152,10 +152,13 @@ class HTMLCheck(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.html = self.body = False
+        self.scripts = []
 
     def handle_starttag(self, tag, attrs):
         self.html |= tag == 'html'
         self.body |= tag == 'body'
+        if tag == 'script':
+            self.scripts.extend(value for key, value in attrs if key == 'src' and value is not None)
 
 
 def validate_html(content):
@@ -204,6 +207,19 @@ def materialize_build(build, base):
         names = [item['path'] for item in result['files']]
         if len(set(names)) != len(names):
             raise ValueError('Duplicate file paths in browser project')
+        # Recover an unambiguous transport mix-up: a complete page that loads
+        # game.js was returned under game.js, with its JS under index.html.
+        entry = next((item for item in result['files'] if item['path'] == 'index.html'), None)
+        if entry and not entry['content'].lstrip().startswith('<'):
+            pages = []
+            for item in result['files']:
+                if not item['path'].endswith('.js') or not re.match(r'\s*(?:<!doctype\s+html|<html\b)', item['content'], re.I):
+                    continue
+                page = HTMLCheck(); page.feed(item['content']); page.close()
+                if page.html and page.body and item['path'] in page.scripts:
+                    pages.append(item)
+            if len(pages) == 1:
+                entry['content'], pages[0]['content'] = pages[0]['content'], entry['content']
         # A file list describes replacements/additions, never implicit deletion.
         result['files'].extend(dict(path=name, content=content) for name, content in base.items() if name not in names)
         return result

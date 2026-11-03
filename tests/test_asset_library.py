@@ -71,6 +71,17 @@ class AssetLibraryTests(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             return self.app.review_asset_update(self.folder.name,asset_ref,current_ref)
 
+    def test_chat_context_reports_exact_asset_acceptance_from_this_session(self):
+        self.discuss()
+        initial=asset_library.context(self.root,self.folder)
+        gate=next(row for row in initial['assets'] if row['id']=='courier-waygate')
+        self.assertFalse(gate['accepted_in_session'])
+        used=self.use_focused()
+        self.app.respond(used['proposal_ref'],'approve','SYNTHETIC exact asset acceptance')
+        current=asset_library.context(self.root,self.folder)
+        self.assertTrue(next(row for row in current['assets'] if row['ref']==gate['ref'])['accepted_in_session'])
+        self.assertFalse(next(row for row in current['assets'] if row['id']!=gate['id'])['accepted_in_session'])
+
     def test_updated_export_preserves_scene_plan_and_requires_separate_acceptance(self):
         asset_ref,current_ref=self.approved_gate()
         # Keep a real scene refinement when the geometry is re-exported.

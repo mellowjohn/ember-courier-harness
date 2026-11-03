@@ -178,8 +178,11 @@ def context(root, folder, messages=(), *, refresh=False, project_files=None):
     pending_hash = None
     current_source = pending_source = None
     requests=chat_build.list_requests(folder)
+    entries=chat_build.harness(folder)._entries() if requests else []
+    accepted={e['action']['args']['sha256'] for e in entries if e['kind']=='decision' and e.get('decision')=='allow'
+        and e.get('action',{}).get('tool')=='asset.accept'}
     if requests:
-        completed=[e for e in chat_build.harness(folder)._entries() if e['kind']=='chat_build_completed']
+        completed=[e for e in entries if e['kind']=='chat_build_completed']
         if project_files is None and completed:
             package_hash=completed[-1].get('manifest',{}).get('asset.js')
             for request in reversed(requests):
@@ -220,6 +223,9 @@ def context(root, folder, messages=(), *, refresh=False, project_files=None):
         for entity in unpack_plan(project_files['sprite-plan.js'])['entities']:
             if entity['asset_ref'] and all(v['ref']!=entity['asset_ref'] for v in rows):
                 rows.append(summary(root,entity['asset_ref']))
+    for row in rows:
+        row['accepted_in_session']=row['package_sha256'] in accepted
+        row['acceptance_basis']='Exact package asset.accept decision in this session' if row['accepted_in_session'] else 'No acceptance receipt for these package bytes in this session'
     return dict(assets=rows, focus_ref=focus if remembered else (pending or current or {}).get('ref'),
                 current_ref=current['ref'] if current else None, pending_ref=pending['ref'] if pending else None,
                 note='References select existing snapshots only. Source locations and discussion never approve changes.')

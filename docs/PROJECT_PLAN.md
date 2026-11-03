@@ -11,6 +11,10 @@ It saves explicit user decisions in the project brief; suggested defaults stay
 proposals. No project-plan form is required.
 When ready, ask Ember to prepare the plan for approval or implement the draft.
 Conversational drafts do not open a pending approval review by themselves.
+For a new game, the first task should deliver a complete first playable with its
+artwork, core loop, controls, feedback and end/restart flow. Later tasks extend
+or polish it. An artwork request for that game prepares or updates the game plan
+before implementation; it does not require a separate single-asset workshop.
 The model returns a structured design proposal; the host validates it and uses
 the existing scope compiler. Features become ordered task cards. Artwork counts are planning estimates,
 not enforced limits; exceeding an estimate does not require an amendment. The existing local planning API remains available.

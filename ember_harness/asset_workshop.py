@@ -99,7 +99,7 @@ def seed_guidance(folder, spec):
         project_brief.save(folder, dict(goal='Approach '+name+', open and close it, then reset.',
             controls='WASD/arrows; Space to open/close; R to reset; touch buttons; drag to orbit.',
             visual_direction=spec['art_direction'],
-            constraints='Preserve GLB source identity, collision proxy, hinge, socket, offline operation and gameplay selectors.'), 0)
+            constraints='Preserve GLB source identity, collision proxy, hinge, socket, offline operation and gameplay selectors.'), 0, purpose='asset_preview')
 
 
 def review_updated_export(root, folder, asset_ref, current_ref):
