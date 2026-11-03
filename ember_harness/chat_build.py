@@ -57,6 +57,7 @@ REVISION_INSTRUCTION = (
     'To add new files with edits, include files:[{path,content}] containing only new files. '
     'Do not edit engine.js, asset.js, sprite-player.js, sprite-assets.js, sprite-plan.js or ember-audio.js; the host retains these. '
     'Use complete files only for a first build or when a requested or necessary rewrite needs them. '
+    'Existing files omitted from a full-file reply are retained unchanged; file deletion is not supported. '
 )
 GAME_UI_INSTRUCTION = (
     'For new or requested game UI, design the interface as part of the playable game view. '
@@ -199,7 +200,13 @@ def materialize_build(build, base):
     """Resolve exact edits in memory; approvals still bind the complete resulting files."""
     Draft202012Validator(PROPOSAL_SCHEMA).validate(build)
     if 'edits' not in build:
-        return deepcopy(build)  # Existing full-file proposals and saved replies remain valid.
+        result = deepcopy(build)
+        names = [item['path'] for item in result['files']]
+        if len(set(names)) != len(names):
+            raise ValueError('Duplicate file paths in browser project')
+        # A file list describes replacements/additions, never implicit deletion.
+        result['files'].extend(dict(path=name, content=content) for name, content in base.items() if name not in names)
+        return result
     if not base:
         raise ValueError('Targeted edits require an existing project')
     files = dict(base)

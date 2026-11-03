@@ -119,6 +119,30 @@ class ChatBuildTests(unittest.TestCase):
             self.assertEqual(snapshot['files'][name].encode('utf-8'), before[name])
         self.assertIn(' + 2;', snapshot['files']['app.js'])
 
+    def test_full_file_reply_retains_omitted_files_and_reviews_only_actual_changes(self):
+        first = self.propose_project()
+        self.app.respond(first, 'approve', 'SYNTHETIC initial project')
+        changed = PROJECT['app.js'].replace('+ 1', '+ 2')
+        second = self.propose_project({'app.js': changed}, 'full-file-partial-revision')
+        packet = chat_build.list_requests(self.folder)[-1]['payload']['body']['build']
+        self.assertEqual([row['name'] for row in packet['files']], ['app.js'])
+        candidate = chat_build.proposal_snapshot(self.root, self.folder, second)['files']
+        self.assertEqual(candidate, {**PROJECT, 'app.js': changed})
+        self.assertEqual((self.target.parent / 'app.js').read_text(encoding='utf-8'), PROJECT['app.js'])
+        self.app.respond(second, 'approve', 'SYNTHETIC exact partial revision')
+        self.assertEqual(chat_build.context(self.root, self.folder)['manifest'], packet['manifest'])
+
+    def test_full_file_reply_can_add_a_new_entry_script_without_dropping_old_source(self):
+        first = self.propose_project()
+        self.app.respond(first, 'approve', 'SYNTHETIC initial project')
+        supplied = {'index.html': PROJECT['index.html'].replace('app.js', 'game.js'), 'game.js': PROJECT['app.js']}
+        ref = self.propose_project(supplied, 'full-file-new-entry-script')
+        candidate = chat_build.proposal_snapshot(self.root, self.folder, ref)['files']
+        self.assertEqual(candidate, {**PROJECT, **supplied})
+        with self.assertRaisesRegex(ValueError, 'Duplicate'):
+            chat_build.materialize_build(dict(title='Invalid', summary='Duplicate paths', files=[
+                dict(path='app.js', content='one'), dict(path='app.js', content='two')]), PROJECT)
+
     def test_targeted_edits_reject_ambiguous_missing_overlapping_and_protected_changes(self):
         base = {**PROJECT, 'app.js': 'aaaa; first(); second();', 'engine.js': 'prepared runtime'}
         invalid = [
@@ -296,7 +320,10 @@ class ChatBuildTests(unittest.TestCase):
         ref = self.propose_project()
         self.app.respond(ref, 'approve', 'SYNTHETIC TEST: initial project')
         with self.assertRaisesRegex(ValueError, 'deletion'):
-            self.propose_project({'index.html': HTML}, 'b' * 24)
+            chat_build.propose_build(self.root, self.folder, 'b' * 24, 'SYNTHETIC raw incomplete packet',
+                dict(title='Invalid deletion', summary='Raw packets still need complete manifests',
+                     files=[dict(path='index.html', content=HTML)]),
+                expected_before=chat_build.context(self.root, self.folder)['sha256'])
         (self.target.parent / 'unexpected.js').write_text('unexpected', encoding='utf-8')
         with self.assertRaisesRegex(ValueError, 'changed'):
             self.app.verify()

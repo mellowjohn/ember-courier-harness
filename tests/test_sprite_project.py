@@ -145,6 +145,24 @@ class SpriteProjectTests(unittest.TestCase):
         self.assertEqual({r['path']:r['content'] for r in chat_build.context(self.root,self.folder)['files']},original)
         self.assertEqual(len(chat_build.list_requests(self.folder)),1)
 
+    def test_full_file_artwork_reply_retains_an_omitted_previous_entry_script(self):
+        before=self.baseline()
+        expanded=chat_build.materialize_build(integration_edits(),before)
+        files={row['path']:row['content'] for row in expanded['files']}
+        supplied={'index.html':files['index.html'].replace('game.js','app.js'), 'app.js':files['game.js']}
+        document=plan(self.hero,self.impact)
+        for entity in document['entities']:
+            entity['binding']=dict(file='app.js',replace='')
+        build=dict(title='New artwork entry script',summary='Keep the prior source while integrating artwork',
+            files=[dict(path=k,content=v) for k,v in supplied.items()])
+        self.send(document,build,turn='sprite-new-entry-script-12345678')
+        request=chat_build.list_requests(self.folder)[-1]
+        candidate=chat_build.proposal_snapshot(self.root,self.folder,request['ref'])['files']
+        self.assertEqual(candidate['game.js'],before['game.js'])
+        self.assertEqual(candidate['app.js'],supplied['app.js'])
+        sprite_project.validate_files(candidate,before)
+        self.assertIsNone(request['decision'])
+
     def test_missing_bindings_get_one_correction_before_generation_and_exact_review(self):
         before=self.baseline();good=plan(self.hero,self.impact);bad=deepcopy(good)
         for entity in bad['entities']: entity['binding']=None

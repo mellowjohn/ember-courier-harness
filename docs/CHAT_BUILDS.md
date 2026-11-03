@@ -149,6 +149,9 @@ targeted edits. These checks preserve bytes outside edits; they do not prove tha
 the edited behavior is correct or that an edit is necessary.
 
 First builds and requested or necessary rewrites can still return complete files.
+Existing files omitted from these replies are retained unchanged, including when
+a new entry script replaces the one referenced by the page. This applies before
+artwork integration and file-count checks, so the complete candidate is reviewed.
 Muse is instructed to explain necessary broader changes in the proposal summary;
 this remains model guidance, not a semantic guarantee. File deletion is not supported.
 Retries retain their original project snapshot and stop if the project changes.

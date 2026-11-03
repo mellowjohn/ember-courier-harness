@@ -1337,7 +1337,7 @@ function renderChat(s){
       if(m.status==='pending'||m.status==='failed'){
         const active=inFlight&&(s.chat_activity?.turn_id===m.id||localRequest?.turn_id===m.id);
         el('small',m.status==='failed'?'Reply failed: '+m.error:active?'Request in progress':'Reply interrupted; retry when ready.',bubble).className='message-status';
-        if(!active){const fresh=m.status==='failed'&&(m.error?.includes('Send a new message to try again')||/Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
+        if(!active){const fresh=m.status==='failed'&&(m.error?.includes('Send a new message to try again')||m.error?.includes('Include every existing project file; file deletion is not supported')||/Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
           const retry=el('button',fresh?'Try a new reply':'Retry reply',bubble);retry.className='button';retry.disabled=inFlight;
           retry.onclick=()=>sendMessage(m.text,fresh?crypto.randomUUID():m.id)}
       }
