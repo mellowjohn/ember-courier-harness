@@ -77,7 +77,7 @@ window.EmberUI = (() => {
     node.append(document.createTextNode(text));
     return node;
   }
-  function status(parent, {phase, state = 'active', title, context} = {}) {
+  function status(parent, {phase, state = 'active', title, context, dots = true} = {}) {
     const row = document.createElement('div'); row.className = 'ember-status';
     const stopped = state === 'failed' || state === 'interrupted';
     row.dataset.tone = stopped ? 'danger' : state === 'active' ? 'working' : 'success';
@@ -87,7 +87,7 @@ window.EmberUI = (() => {
     const heading = document.createElement('span'); heading.className = 'ember-status-title';
     heading.textContent = stopped ? (state === 'interrupted' ? 'Request interrupted' : 'Request stopped') : title || stage[1];
     copy.append(heading);
-    if (state === 'active') {
+    if (state === 'active' && dots) {
       const dots = document.createElement('span'); dots.className = 'ember-dots'; dots.setAttribute('aria-hidden', 'true');
       for (let i = 0; i < 3; i++) { const dot = document.createElement('span'); dot.textContent = '.'; dots.append(dot); }
       heading.append(dots);

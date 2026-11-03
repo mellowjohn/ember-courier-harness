@@ -252,7 +252,7 @@ const {chromium} = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright');
     const buildGate=new Promise(resolve=>{releaseBuild=resolve});
     await page.route('**/api/plan-build',async route=>{buildStarts++;await buildGate;await route.continue()});
     await page.getByRole('button',{name:'Approve project plan',exact:true}).click();
-    await page.getByText('Plan approved · Building mode',{exact:true}).waitFor();
+    await page.locator('#plan-build-notice').getByText('Plan approved',{exact:true}).waitFor();
     assert.equal(await page.locator('#workspace-tools').evaluate(node=>node.open),false);
     assert.equal(await page.locator('#status').textContent(),'Building');
     assert.equal(buildStarts,1);

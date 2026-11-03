@@ -141,6 +141,10 @@ as a retained count. Investigation details stay collapsed. Live progress names
 the source files in context, the files with proposed edits and the artwork being
 generated or prepared. Proposed edits become saved file changes only after
 exact approval.
+The progress card shows one shortened task title, stage indicators, file chips
+and an elapsed timer. Asset reference IDs are omitted from that display. Expand
+**Activity & details** for the full task description, model, execution limit and
+timestamped history; polling preserves the expanded view.
 
 After approval and completion, **Open prototype preview** renders the verified
 `index.html` in an iframe with scripts allowed, an opaque origin, and a restrictive

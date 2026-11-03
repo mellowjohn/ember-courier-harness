@@ -103,8 +103,8 @@ const { chromium } = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright'
     assert.equal(await page.locator('.build-version').textContent(), 'Version 2 · Approved and ready to play');
     await page.getByText('Investigation and repair plan',{exact:true}).click();
     assert((await page.locator('#agent-progress').textContent()).includes('Suspected cause:'));
-    assert((await page.locator('#agent-progress').textContent()).includes('Proposed files: app.js'));
-    assert((await page.locator('#agent-progress').textContent()).toLowerCase().includes('verification'));
+    assert.deepEqual(await page.locator('#agent-progress [data-kind="edits"] .agent-file').allTextContents(),['app.js']);
+    assert.equal(await page.locator('#agent-progress .agent-stages [aria-current="step"]').textContent(),'Review');
     assert.equal(await page.locator('#finding-reviews .panel').count(), 0);
     assert.deepEqual(unexpected, []);
     await page.locator('#agent-progress').screenshot({ path: path.join(process.env.EMBER_BROWSER_OUTPUT, 'notes-fix-review.png') });
@@ -121,7 +121,7 @@ const { chromium } = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright'
     await page.locator('#agent-progress').getByText('Applying approved fix', { exact: false }).waitFor();
     await page.getByText('Version 3 · Approved and ready to play', { exact: true }).waitFor();
     await page.locator('#agent-progress .ember-status-title').getByText('Fix applied', { exact: true }).waitFor();
-    assert((await page.locator('#agent-progress').textContent()).includes('Updated files: app.js'));
+    assert.deepEqual(await page.locator('#agent-progress [data-kind="edits"] .agent-file').allTextContents(),['app.js']);
     await page.reload();
     await page.locator('#agent-progress .ember-status-title').getByText('Fix applied', { exact: true }).waitFor();
     const retry = await page.evaluate(async ({ session_id, report_id, token }) => {

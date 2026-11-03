@@ -23,9 +23,10 @@ Read the inline review's complete design, art direction and
 scope permissions, then choose **Approve project plan** or discard it. The plan
 is an actual root scope in the existing contract store, not an approval flag in
 the brief. Approval saves authority for up to 24 hours and immediately asks Muse
-to prepare the selected task's build, keeping you in chat. A **Plan approved ·
-Building mode** notice names the task, and the header shows **Building** while
-the request runs. The notice changes when the build needs review or stops.
+to prepare the selected task's build, keeping you in chat. A compact **Plan
+approved** badge accompanies the shortened task title, stage strip and file
+activity. The header shows **Building** while the request runs. The card changes
+when the build needs review or stops; full activity is available on demand.
 The automatic request is bound to that session and exact plan; retries reuse
 the saved turn. You still review exact file changes, accept assets and accept
 task outcomes separately.

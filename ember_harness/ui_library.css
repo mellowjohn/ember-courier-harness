@@ -270,7 +270,40 @@ input[type=checkbox], input[type=radio] { width: auto; }
 fieldset { border-color: var(--line-strong); }
 summary { color: #dcc3b3; }
 pre { background: #100e11; color: #d4c7bd; border: 1px solid #342c31; }
-#agent-progress { border-color: #8c573b; background: linear-gradient(115deg, #3b261e, #211b20); }
+#agent-progress { padding: 18px; border-color: #624333; background: linear-gradient(135deg, #29201e, #1c1b20 70%); border-radius: 12px; }
+#agent-progress[data-state="attention"], #agent-progress[data-state="failed"] { border-color: #755044; }
+.agent-progress-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; }
+.agent-progress-head .ember-status { align-items: center; min-width: 0; gap: 10px; }
+.agent-progress-head .ember-status-title { font-size: 14px; line-height: 1.4; }
+#agent-elapsed { color: var(--ink-muted); font: 11px/1.5 var(--font-code); white-space: nowrap; border: 1px solid var(--line-strong); border-radius: 5px; padding: 2px 6px; }
+.agent-live-dot { width: 7px; height: 7px; flex: none; background: var(--accent); border-radius: 50%; box-shadow: 0 0 0 4px #ff8a4c13; animation: agent-breathe 2s ease-in-out infinite; }
+@keyframes agent-breathe { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.agent-mode { grid-column: 1 / -1; justify-self: start; padding: 2px 7px; border: 1px solid #476048; border-radius: 5px; color: var(--success); background: #24352855; font-size: 10px; line-height: 1.5; }
+#agent-progress .agent-task { margin: 11px 0 0; color: #ddd3cb; font-size: 13px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
+.agent-stages { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; list-style: none; padding: 0; margin: 16px 0; }
+.agent-stages:has(li:nth-child(5)) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.agent-stages li { color: #79757a; font-size: 10px; line-height: 1.3; font-weight: 600; letter-spacing: .02em; overflow-wrap: anywhere; }
+.agent-stages li::before { content: ''; display: block; height: 2px; margin-bottom: 7px; background: var(--line-strong); border-radius: 2px; }
+.agent-stages li[data-state="current"] { color: var(--accent-soft); }
+.agent-stages li[data-state="current"]::before { background: var(--accent); }
+.agent-stages li[data-state="done"] { color: var(--success); }
+.agent-stages li[data-state="done"]::before { background: #73947a; }
+.agent-work-list { display: grid; gap: 9px; margin: 14px 0; }
+.agent-work-row { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 9px; align-items: start; }
+.agent-work-label { padding-top: 3px; color: var(--ink-muted); font-size: 11px; line-height: 1.5; }
+.agent-file-list { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; }
+.agent-file { display: inline-block; max-width: 100%; border: 1px solid #423a3a; border-radius: 5px; padding: 2px 6px; background: #14131670; color: #d5c9bf; font: 11px/1.5 var(--font-code); overflow-wrap: anywhere; }
+#agent-progress #agent-waiting { color: #b7a99d; font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
+#agent-progress .agent-history { border-top: 1px solid #49372e; padding-top: 11px; margin-top: 14px; }
+.agent-history > summary { color: #b6a294; font-size: 11px; }
+.agent-history > p, .agent-task-detail { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.agent-history h4 { font-size: 12px; margin: 14px 0 5px; }
+.agent-history .agent-model { color: var(--accent-soft); }
+.agent-history .agent-timeline { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.agent-history .agent-timeline li { grid-template-columns: 82px minmax(0, 1fr); gap: 10px; }
+#agent-progress .agent-error { color: var(--danger); }
+#agent-progress .fix-evidence { padding-top: 10px; border-top: 1px solid var(--line); }
+@media (prefers-reduced-motion: reduce) { .agent-live-dot { animation: none; opacity: 1; } }
 .ember-status > .ember-icon { color: var(--accent); }
 .ember-status[data-tone=success] > .ember-icon { color: var(--success); }
 .ember-status[data-tone=danger] > .ember-icon { color: var(--danger); }

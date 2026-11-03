@@ -254,8 +254,9 @@ Brief updates remain guidance; they cannot approve builds or amend approved scop
 Discuss plan changes in chat to revise the draft. Ask to prepare the plan for
 approval, or to implement it, to open the existing inline project-plan review.
 Approving that plan keeps chat open and starts preparing its selected task.
-The **Plan approved · Building mode** notice names the task, with **Building**
-in the header and progress below. Finished builds still need exact review.
+The progress card shows **Plan approved**, one shortened task title, stage and
+file activity, with **Building** in the header. Expand **Activity & details** for
+the full task and history. Finished builds still need exact review.
 
 On wide screens chat and **Play & refine** appear side by side. Smaller screens
 stack the preview below chat. The latest completed build opens automatically after

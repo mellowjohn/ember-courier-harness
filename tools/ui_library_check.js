@@ -44,7 +44,7 @@ module.exports = async function checkLibrary(page, view) {
   assert.equal(calls, 0);
   await input.fill('SYNTHETIC keyboard-only submission'); await input.press('Enter');
   await page.waitForFunction(() => document.querySelector('#chat-send').disabled);
-  await page.locator('#agent-progress .ember-dots').waitFor();
+  await page.locator('#agent-progress .agent-live-dot').waitFor();
   assert.equal(await page.locator('#status').textContent(), 'Working');
   await requestSeen;
   await input.press('Enter');
@@ -60,7 +60,7 @@ module.exports = async function checkLibrary(page, view) {
     const activity = {turn_id: 'synthetic-status', state: 'active', phase: 'muse_working', title: 'Muse is working on your request', started_at: now, updated_at: now, events: []};
     renderAgentActivity({...lastState, project_plan: {selected_task: 'test-task', tasks: [{id: 'test-task', title: 'Courier delivery route'}]}, chat_activity: activity});
   });
-  assert((await page.locator('#agent-progress').textContent()).includes('Current task · Courier delivery route'));
+  assert.equal(await page.locator('#agent-progress .agent-task').textContent(),'Courier delivery route');
   await page.evaluate(() => { const node=document.querySelector('#agent-progress .ember-status');node.dataset.retained='yes'; });
   await page.evaluate(() => renderAgentActivity({...lastState, project_plan: {selected_task: 'test-task', tasks: [{id: 'test-task', title: 'Courier delivery route'}]}, chat_activity: {turn_id: 'synthetic-status', state: 'active', phase: 'muse_working', title: 'Muse is working on your request', started_at: new Date(Date.now()-30000).toISOString(), updated_at: new Date(Date.now()-25000).toISOString(), response_chars: 42, events: []}}));
   assert.equal(await page.locator('#agent-progress .ember-status').getAttribute('data-retained'), 'yes');
@@ -83,6 +83,36 @@ module.exports = async function checkLibrary(page, view) {
   let resumePolling;
   const pollingGate=new Promise(resolve=>{resumePolling=resolve});
   await page.route('**/api/state', async route => { await pollingGate; await route.continue(); });
+  // A real-length task with asset references stays compact on desktop/mobile.
+  await page.evaluate(()=>{
+    const title='Complete first playable SNOWBALL SHOWDOWN duel in one snowy town square dusk arena reusing '+
+      ['kid-thrower','frosty-rival','snowball-fx','backdrop'].map((name,i)=>name+' '+String(i+1).repeat(64)).join(', ')+
+      ': sequential alternating turns, Throw/Big Throw/Dodge/Scoop, HP and ammo HUD, win/lose/restart, keyboard and touch controls';
+    const now=new Date().toISOString();
+    window.longTaskActivity={turn_id:'synthetic-long-task',kind:'plan_build',plan_start:{title},state:'active',phase:'muse_working',
+      title:'Muse is working on your request',started_at:new Date(Date.now()-32000).toISOString(),updated_at:now,
+      read_files:['app.js','game.js','index.html'],events:[],execution:{label:'Implementation',reason:'Creating or changing game code',timeout_seconds:900}};
+    renderAgentActivity({...lastState,chat_activity:longTaskActivity});
+  });
+  assert.equal(await page.locator('#agent-progress .ember-status-context').count(),0);
+  assert.equal(await page.locator('#agent-progress .agent-task').count(),1);
+  assert((await page.locator('#agent-progress .agent-task').textContent()).length<=97);
+  assert(!/[a-f0-9]{64}/i.test(await page.locator('#agent-progress').textContent()));
+  assert.equal(await page.locator('#agent-progress .ember-dots').count(),0);
+  assert.equal(await page.locator('#plan-build-notice').textContent(),'Plan approved');
+  assert.equal(await page.locator('#agent-progress .agent-history').evaluate(n=>n.open),false);
+  assert.deepEqual(await page.locator('#agent-progress [data-kind="source"] .agent-file').allTextContents(),['app.js','game.js','index.html']);
+  for(const width of [390,1500]){
+    await page.setViewportSize({width,height:1000});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    assert((await page.locator('#agent-progress').boundingBox()).height<480);
+    await page.locator('#agent-progress').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(process.env.EMBER_BROWSER_OUTPUT,'compact-progress-'+width+'.png')});
+    await page.locator('#agent-progress').screenshot({path:path.join(process.env.EMBER_BROWSER_OUTPUT,'progress-card-'+width+'.png')});
+  }
+  await page.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await page.locator('.agent-live-dot').evaluate(n=>getComputedStyle(n).animationName),'none');
+  await page.emulateMedia({reducedMotion:'no-preference'});
   await page.evaluate(() => {
     const phases=['saved','context','muse_working','validating','testing_before','testing_candidate','visual_review'];
     const titles=['Message saved','Reading your game','Muse is working on your request','Checking the response','Testing the current game for comparison','Trying the proposed game on desktop and mobile','Muse is inspecting the actual game screenshots'];
@@ -92,25 +122,26 @@ module.exports = async function checkLibrary(page, view) {
       events:phases.map((phase,i)=>({phase,title:titles[i],at:new Date(Date.now()-(phases.length-i)*25000).toISOString()}))};
     renderAgentActivity({...lastState,chat_activity:window.syntheticActivity});
   });
-  assert((await page.locator('#agent-progress .ember-status-title').textContent()).startsWith('Muse is inspecting the actual game screenshots'));
-  assert(await page.locator('.agent-step-detail').isVisible());
-  assert.equal(await page.locator('.agent-timeline li').count(),5);
+  assert.equal(await page.locator('#agent-progress .ember-status-title').textContent(),'Reviewing screenshots');
+  assert(await page.locator('.agent-step-detail').isHidden());
+  assert.equal(await page.locator('.agent-timeline li').count(),7);
   assert.equal(await page.locator('.agent-timeline [aria-current="step"]').count(),1);
   assert.equal(await page.locator('#agent-progress details').evaluate(n=>n.open),false);
-  assert((await page.locator('#agent-waiting').textContent()).includes('screenshot review'));
+  assert((await page.locator('#agent-waiting').textContent()).includes('screenshots'));
   for(const width of [390,1500]){
     await page.setViewportSize({width,height:1000});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
     await page.locator('#agent-progress').scrollIntoViewIfNeeded();
     await page.screenshot({path:path.join(process.env.EMBER_BROWSER_OUTPUT,'request-steps-'+width+'.png')});
   }
-  await page.locator('#agent-progress summary').click();
+  await page.locator('#agent-progress .agent-history > summary').click();
   await page.evaluate(()=>renderAgentActivity({...lastState,chat_activity:{...window.syntheticActivity,detail:'Checking the captured movement poses against the request.'}}));
   assert.equal(await page.locator('#agent-progress details').evaluate(n=>n.open),true);
   assert((await page.locator('.agent-step-detail').textContent()).includes('movement poses'));
   await page.evaluate(() => renderAgentActivity({...lastState, chat_activity: {turn_id: 'synthetic-status', state: 'interrupted', phase: 'muse_working', started_at: new Date().toISOString(), updated_at: new Date().toISOString(), events: []}}));
   assert.equal(await page.locator('#agent-progress .ember-dots').count(), 0);
-  assert((await page.locator('#agent-progress').textContent()).includes('Request stopped') || (await page.locator('#agent-progress').textContent()).includes('worker stopped'));
+  assert((await page.locator('#agent-progress').textContent()).includes('Request interrupted'));
+  assert.equal(await page.locator('#agent-progress .agent-live-dot').count(),0);
   assert.equal(await page.locator('.agent-timeline [aria-current="step"]').count(),0);
   await require('./task_review_ui_check')(page,view);
   // Polling must never turn an unfinished candidate into a ready review, and
@@ -133,8 +164,8 @@ module.exports = async function checkLibrary(page, view) {
   assert.equal(await page.locator('#review .brand').textContent(),'CHECKING PROPOSED CHANGES');
   assert.equal(await page.locator('#review .decision').count(),0);
   assert.equal(await page.locator('#review .artwork-preview').count(),0);
-  assert((await page.locator('#agent-progress').textContent()).includes('Reading source: index.html, game.js'));
-  assert((await page.locator('#agent-progress').textContent()).includes('Proposed files: game.js'));
+  assert.deepEqual(await page.locator('#agent-progress [data-kind="source"] .agent-file').allTextContents(),['index.html','game.js']);
+  assert.deepEqual(await page.locator('#agent-progress [data-kind="edits"] .agent-file').allTextContents(),['game.js']);
   await page.evaluate(()=>{
     diffReviewState.chat_activity={...diffReviewState.chat_activity,state:'complete',phase:'awaiting_review'};
     diffReviewState.build.quality_check={...diffReviewState.build.quality_check,status:'needs_changes',issues:['Facing fix is not proven.']};
@@ -147,7 +178,7 @@ module.exports = async function checkLibrary(page, view) {
   await page.evaluate(()=>{
     renderAgentActivity({...diffReviewState,chat_activity:{...diffReviewState.chat_activity,state:'active',phase:'image_generating',generating_asset:'Snowy backdrop',proposed_files:[]}});
   });
-  assert((await page.locator('#agent-progress').textContent()).includes('Generating artwork: Snowy backdrop'));
+  assert.deepEqual(await page.locator('#agent-progress [data-kind="artwork"] .agent-file').allTextContents(),['Snowy backdrop']);
   await page.evaluate(()=>{current='';renderReview(lastState);renderAgentActivity(lastState);delete window.diffReviewState;});
   resumePolling();await page.unrouteAll({behavior:'wait'});
   await page.evaluate(() => renderAgentActivity(lastState));
