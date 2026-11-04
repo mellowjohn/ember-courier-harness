@@ -1,5 +1,45 @@
+/* Shared by the local app and its Chromium inspection tools. */
+(() => {
+  const policy = "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; " +
+    "img-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; " +
+    "base-uri 'none'; form-action 'none'";
+
+  function blockPeerConnections() {
+    // connect-src does not control WebRTC. Run this before any project scripts.
+    for (const name of ['RTCPeerConnection', 'webkitRTCPeerConnection', 'mozRTCPeerConnection']) {
+      Object.defineProperty(window, name, { value: undefined, writable: false, configurable: false });
+    }
+  }
+
+  function previewDocument(html) {
+    return '<meta http-equiv="Content-Security-Policy" content="' + policy + '">' +
+      '<script>(' + blockPeerConnections.toString() + ')();</script>' + html;
+  }
+
+  function inspectionBrowserOptions(executablePath) {
+    // WebRTC can bypass HTTP interception, including from nested srcdoc frames.
+    return {
+      headless: true,
+      chromiumSandbox: true,
+      executablePath,
+      args: [
+        '--proxy-server=http://ember-offline.invalid:9',
+        '--proxy-bypass-list=<-loopback>',
+        '--host-resolver-rules=MAP * ~NOTFOUND',
+        '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
+      ],
+    };
+  }
+
+  if (typeof module === 'object' && module.exports) {
+    module.exports = { previewDocument, blockPeerConnections, inspectionBrowserOptions };
+  } else {
+    globalThis.previewDocument = previewDocument;
+  }
+})();
+
 /* Shared typography specimens, original 24px SVG icon set, and observed status copy. */
-window.EmberUI = (() => {
+if (typeof window !== 'undefined') window.EmberUI = (() => {
   'use strict';
   const paths = Object.freeze({
     ember: ['M12 3c1 5-4 6-4 10a4 4 0 0 0 8 0c0-2-1-3-1-3s5 3 5 7a8 8 0 0 1-16 0C4 10 10 9 12 3Z'],

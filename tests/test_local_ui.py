@@ -27,8 +27,7 @@ class LocalUITest(unittest.TestCase):
             worker.start()
             base = f'http://127.0.0.1:{http.server_port}'
             try:
-                for route, mime in (('/ui-library.css', 'text/css'), ('/ui-library.js', 'text/javascript'),
-                                    ('/voice-input.js', 'text/javascript'), ('/preview-document.js', 'text/javascript')):
+                for route, mime in (('/ui-library.css', 'text/css'), ('/ui-library.js', 'text/javascript'), ('/voice-input.js', 'text/javascript')):
                     with urlopen(base + route) as response:
                         self.assertEqual(response.headers.get_content_type(), mime)
                         self.assertGreater(len(response.read()), 0)

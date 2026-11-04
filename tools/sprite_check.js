@@ -1,6 +1,6 @@
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
 const {chromium} = require(process.env.EMBER_PLAYWRIGHT_MODULE);
-const {previewDocument,blockPeerConnections,inspectionBrowserOptions} = require('../ember_harness/preview_document.js');
+const {previewDocument,blockPeerConnections,inspectionBrowserOptions} = require('../ember_harness/ui_library.js');
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')), output = process.argv[3];
 (async () => {
   const browser = await chromium.launch(inspectionBrowserOptions(process.env.EMBER_BROWSER_EXECUTABLE));

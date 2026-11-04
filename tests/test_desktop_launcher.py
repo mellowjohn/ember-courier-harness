@@ -24,7 +24,8 @@ class DesktopLauncherTests(unittest.TestCase):
         subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(cls.environment)], check=True,
                        capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
 
-    def launch(self, name, *, project_environment=False, active_environment=False, bootstrap=False, no_browser=False):
+    def launch(self, name, *, project_environment=False, active_environment=False, bootstrap=False,
+               no_browser=False, pillow_version='13.0.0'):
         root = self.folder / name
         root.mkdir()
         shutil.copyfile(ROOT / 'Start Ember.cmd', root / 'Start Ember.cmd')
@@ -34,6 +35,9 @@ class DesktopLauncherTests(unittest.TestCase):
         # Dependency discovery must work without installing anything in these fake environments.
         (root / 'jsonschema.py').touch()
         (root / 'PIL.py').touch()
+        pillow_metadata = root / 'Pillow-fixture.dist-info'
+        pillow_metadata.mkdir()
+        (pillow_metadata / 'METADATA').write_text(f'Name: Pillow\nVersion: {pillow_version}\n', encoding='utf-8')
         (package / 'local_ui.py').write_text(
             'import json, sys\nprint("LAUNCH_PROBE="+json.dumps(dict(prefix=sys.prefix,args=sys.argv[1:])))\n'
             'raise SystemExit(7)\n', encoding='utf-8')
@@ -41,8 +45,12 @@ class DesktopLauncherTests(unittest.TestCase):
             subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(root / '.venv')],
                            check=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
         if bootstrap:
+            (root / 'patched-pillow-metadata.txt').write_text('Name: Pillow\nVersion: 13.0.0\n', encoding='utf-8')
             (root / 'Setup Ember.cmd').write_text(
-                '@echo off\n"' + sys.executable + '" -m venv --without-pip "%~dp0.venv"\nexit /b %errorlevel%\n',
+                '@echo off\n"' + sys.executable + '" -m venv --without-pip "%~dp0.venv"\n'
+                'if errorlevel 1 exit /b %errorlevel%\n'
+                'copy /y "%~dp0patched-pillow-metadata.txt" "%~dp0Pillow-fixture.dist-info\\METADATA" >nul\n'
+                'exit /b %errorlevel%\n',
                 encoding='utf-8')
         env = dict(os.environ, EMBER_NO_PAUSE='1')
         env.pop('EMBER_NO_BROWSER', None)
@@ -78,6 +86,12 @@ class DesktopLauncherTests(unittest.TestCase):
     def test_first_launch_runs_setup_then_uses_project_environment(self):
         root, prefix = self.launch('first launch', bootstrap=True)
         self.assertEqual(prefix, (root / '.venv').resolve())
+
+    def test_older_pillow_triggers_setup_before_launch(self):
+        root, prefix = self.launch('security upgrade', project_environment=True, bootstrap=True,
+                                   pillow_version='12.1.1')
+        self.assertEqual(prefix, (root / '.venv').resolve())
+        self.assertIn('Version: 13.0.0', (root / 'Pillow-fixture.dist-info/METADATA').read_text(encoding='utf-8'))
 
     def test_scripted_launch_can_keep_browser_closed(self):
         self.launch('no browser', project_environment=True, no_browser=True)

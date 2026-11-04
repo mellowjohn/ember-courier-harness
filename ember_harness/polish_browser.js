@@ -1,7 +1,7 @@
 // Fixed host runner. Generated source executes only in an opaque, network-blocked frame.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE);
-const {previewDocument,blockPeerConnections,inspectionBrowserOptions}=require('./preview_document.js');
+const {previewDocument,blockPeerConnections,inspectionBrowserOptions}=require('./ui_library.js');
 const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),output=process.argv[3];
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function observePlayers(players){

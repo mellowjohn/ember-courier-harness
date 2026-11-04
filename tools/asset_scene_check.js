@@ -1,7 +1,7 @@
 // Inspect the actual scene passed to Three.js while operating a sandboxed proposal.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE);
-const {previewDocument,blockPeerConnections,inspectionBrowserOptions}=require('../ember_harness/preview_document.js');
+const {previewDocument,blockPeerConnections,inspectionBrowserOptions}=require('../ember_harness/ui_library.js');
 const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),output=process.argv[3];
 const config=input.interaction||{pivot_node:'LidPivot',axis:'x',open_angle_rad:-1.85,collision_node:'COLLISION_Chest',passage:false};
 const observe=`<script>(()=>{const T=Ember3D.THREE;class ObservedRenderer extends T.WebGLRenderer{constructor(options){super(options);const original=this.render;this.render=function(scene,camera){globalThis.__observedScene=scene;return original.call(this,scene,camera);};}}globalThis.Ember3D={...Ember3D,THREE:{...T,WebGLRenderer:ObservedRenderer}};})();</script>`;
