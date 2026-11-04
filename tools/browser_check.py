@@ -33,9 +33,10 @@ FILES = {
 
 @contextmanager
 def synthetic_provider_guard():
-    """Fail before any unstubbed provider can reserve credits or dispatch."""
-    with patch('ember_harness.muse_chat.CreditLedger.reserve',
-               side_effect=AssertionError('Synthetic rehearsal attempted an unstubbed live provider request')):
+    """Fail before an unstubbed provider can check usage, reserve credits or dispatch."""
+    error = 'Synthetic rehearsal attempted an unstubbed live provider request'
+    with patch('ember_harness.muse_settings.request_environment', side_effect=AssertionError(error)), \
+            patch('ember_harness.muse_chat.CreditLedger.reserve', side_effect=AssertionError(error)):
         yield
 
 
