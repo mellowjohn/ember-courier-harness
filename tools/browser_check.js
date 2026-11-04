@@ -16,7 +16,7 @@ const {chromium} = require(process.env.EMBER_PLAYWRIGHT_MODULE || 'playwright');
     // An old running backend can serve the new HTML without gameplay state.
     await page.route('**/api/state',async route=>{await new Promise(resolve=>setTimeout(resolve,600));const response=await route.fetch(),data=await response.json();delete data.gameplay_plan;await route.fulfill({response,json:data})});
     await page.goto(process.env.EMBER_BROWSER_URL+'#'+process.env.EMBER_BROWSER_TOKEN,{waitUntil:'domcontentloaded'});
-    assert(await page.getByRole('button',{name:'Tester agent',exact:true}).isDisabled());
+    assert(await page.locator('#tester-agent-open').isHidden());
     await view('playtest');
     await page.getByText('Restart Ember to load gameplay checks, then reopen this page.',{exact:true}).waitFor();
     assert(await page.getByRole('button',{name:'Tester agent',exact:true}).isEnabled());
