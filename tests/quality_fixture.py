@@ -21,6 +21,9 @@ def aspect_captures(request, output, report):
     """Synthetic protocol evidence for unit tests, never a visual quality claim."""
     from PIL import Image
     from ember_harness.polish_runtime import file_digest
+    if request.get('players'):
+        for view in report['viewports']:
+            view['players'] = [dict(id=player['id'], visible=True) for player in request['players']]
     ratios = []
     for profile in request.get('aspect_ratios', []):
         filename = 'aspect-' + profile['name'] + '.png'

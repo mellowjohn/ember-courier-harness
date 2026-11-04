@@ -56,7 +56,25 @@ class SpriteProjectTests(unittest.TestCase):
         return provider
 
     def approve(self,ref):
-        with redirect_stdout(StringIO()):self.app.respond(ref,'approve','SYNTHETIC TEST: individually accept the listed exact fixture atlases')
+        with patch('ember_harness.proposal_quality.require_visible_players'), redirect_stdout(StringIO()):
+            self.app.respond(ref,'approve','SYNTHETIC TEST: individually accept the listed exact fixture atlases')
+
+    def test_offscreen_player_blocks_approval_before_files_or_decisions_change(self):
+        self.baseline();self.send()
+        ref=chat_build.list_requests(self.folder)[-1]['ref']
+        before=chat_build.context(self.root,self.folder)
+        observed=dict(viewports=[dict(name=name,players=[dict(id='hero',visible=name=='desktop')])
+                                 for name in ('desktop','mobile')])
+        with patch('ember_harness.polish_runtime.discover',return_value={}), \
+                patch('ember_harness.polish_runtime.inspect',return_value=observed) as inspect:
+            with self.assertRaisesRegex(ValueError,"mobile: player 'hero' did not draw visible artwork"):
+                self.app.respond(ref,'approve','SYNTHETIC TEST: mobile player is missing')
+            inspect.assert_called_once()
+            self.assertEqual(chat_build.context(self.root,self.folder),before)
+            self.assertIsNone(chat_build.list_requests(self.folder)[-1]['decision'])
+            observed['viewports'][1]['players'][0]['visible']=True
+            self.app.respond(ref,'approve','SYNTHETIC TEST: player visible on both screens')
+        self.assertTrue(chat_build.verify(self.root,self.folder)['passed'])
 
     def test_graph_validation_catches_missing_clips_bad_signals_and_terminal_errors(self):
         sprite_project.validate_machine(machine(),self.spec)

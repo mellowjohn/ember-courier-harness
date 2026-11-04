@@ -17,6 +17,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 from ember_harness import asset_2d,asset_library,chat_build,polish_runtime,project_versions,sprite_project
 from ember_harness.local_ui import App,server
+from ember_harness.recovery import atomic_json
 from tools.sprite_check import fixture,html
 
 
@@ -92,8 +93,65 @@ document.querySelector('#state').textContent=hero.state;}'''),
         dict(path='game.js',before='requestAnimationFrame(tick);\n})();',after="EmberSprites.createScene(EMBER_SPRITE_PLAN,EMBER_SPRITE_ASSETS).then(loaded=>{scene=loaded;hero=scene.createEntity('hero');document.querySelector('#load-state').textContent='Asset ready';requestAnimationFrame(tick);}).catch(error=>{document.querySelector('#error').textContent=error.message;});\n})();")])
 
 
+def startup_regressions(app, root, folder, exported, output, runtime):
+    """Exercise the production player check across real Start clicks and taps."""
+    draw = "hero?.draw(ctx,x,y,{scale:1,flipX:keys.has('ArrowLeft')||moving<0});"
+    assert exported['game.js'].count(draw) == 1
+    start = '''<button id="start-btn">Start</button><p id="run-status">Waiting to start</p>
+<div id="title-screen" style="position:fixed;inset:0;z-index:9;background:#fff;display:grid;place-items:center">
+<button id="play-run">Start run</button></div>
+<script>document.querySelector('#play-run').onclick=()=>{
+  document.body.dataset.runStarted='yes';document.querySelector('#title-screen').remove();
+  document.querySelector('#run-status').textContent='Run active';
+};</script>'''
+    document = exported['index.html'].replace('</body>', start + '</body>')
+    cases = {
+        'startup-visible': draw,
+        'startup-undrawn': '',
+        'startup-offscreen': draw.replace('ctx,x,y', 'ctx,document.body.dataset.runStarted ? canvas.width+2000 : x,y'),
+        'startup-erased': draw + 'if(document.body.dataset.runStarted)ctx.clearRect(0,0,canvas.width,canvas.height);',
+    }
+    checks = []
+    for name, replacement in cases.items():
+        candidate = {**exported, 'index.html': document, 'game.js': exported['game.js'].replace(draw, replacement)}
+        area = output/name
+        area.mkdir()
+        request_input = area/'input.json'
+        atomic_json(request_input, dict(html=html(candidate), players=polish_runtime.player_targets(candidate)))
+        observed = polish_runtime.inspect(runtime, request_input, area/'output', check=lambda: None)
+        visible = name == 'startup-visible'
+        for view in observed['viewports']:
+            assert 'Waiting to start' in view['before']['text'] and 'Run active' in view['after']['text'], (name, view)
+            assert view['steps'][0] == ('Tapped start button' if view['name'] == 'mobile' else 'Clicked start button')
+            assert view['players'] == [dict(id='hero', visible=visible)], (name, view['players'])
+            missing = view['sprites']['missingEntities']
+            assert ('hero' in missing) == (name == 'startup-undrawn')
+            assert 'impact' not in missing, 'On-demand effects are not required at startup'
+        assert bool(polish_runtime.player_failures(observed)) == (not visible)
+        check = dict(name=name, visible=visible)
+        if name == 'startup-offscreen':
+            before = chat_build.context(root, folder)
+            with redirect_stdout(StringIO()):
+                ref = chat_build.propose_build(root, folder, 'startup-offscreen', 'Synthetic off-screen player',
+                    dict(title='Off-screen hero', summary='Synthetic startup regression',
+                         files=[dict(path=k, content=v) for k, v in candidate.items()]), expected_before=before['sha256'])
+            try:
+                with patch('ember_harness.polish_runtime.discover', return_value=runtime):
+                    app.respond(ref, 'approve', 'SYNTHETIC TEST: reject off-screen hero before applying')
+            except ValueError as error:
+                assert "desktop: player 'hero' did not draw visible artwork" in str(error), error
+                assert "mobile: player 'hero' did not draw visible artwork" in str(error), error
+            else:
+                raise AssertionError('An off-screen hero passed the actual approval guard')
+            assert chat_build.context(root, folder) == before
+            assert chat_build.list_requests(folder)[-1]['decision'] is None
+            check['approval_blocked'] = True
+        checks.append(check)
+    return checks
+
+
 def main():
-    runtime=polish_runtime.discover(ROOT,fingerprints=False)
+    runtime=polish_runtime.discover(ROOT)
     output=ROOT/'.harness/sprite-scene-checks'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:6]);output.mkdir(parents=True)
     root=output/'fixture';(root/'examples').mkdir(parents=True);(root/'examples/product_demo.py').touch()
     char,raw=character();effect=asset_2d.effect_spec();effect_raw=asset_2d.render_effect(effect)
@@ -125,7 +183,7 @@ def main():
     http=server(app);worker=threading.Thread(target=http.serve_forever,daemon=True);worker.start()
     try:
         review_env=dict(env,EMBER_BROWSER_URL=f'http://127.0.0.1:{http.server_port}/',EMBER_BROWSER_TOKEN=app.token)
-        with (output/'review-browser.log').open('wb') as log,redirect_stdout(StringIO()),patch('ember_harness.session_chat.run_muse',side_effect=prepare_from_saved_plan),patch('ember_harness.proposal_quality.run',return_value=dict(status='unavailable',issues=['SYNTHETIC: verification tested separately'])):
+        with (output/'review-browser.log').open('wb') as log,redirect_stdout(StringIO()),patch('ember_harness.session_chat.run_muse',side_effect=prepare_from_saved_plan),patch('ember_harness.proposal_quality.run',return_value=dict(status='unavailable',issues=['SYNTHETIC: verification tested separately'])),patch('ember_harness.polish_runtime.discover',return_value=runtime):
             result=subprocess.run([runtime['node'],str(ROOT/'tools/sprite_check.js'),str(review),str(output)],env=review_env,stdout=log,stderr=log,timeout=75)
         if result.returncode:print(str(output/'review-browser.log'));return result.returncode
         (output/'report.json').rename(output/'review-report.json')
@@ -144,24 +202,9 @@ def main():
         result=subprocess.run([runtime['node'],str(ROOT/'tools/sprite_check.js'),str(source),str(output)],env=env,stdout=log,stderr=log,timeout=100)
     if result.returncode==0:
         report=json.loads((output/'report.json').read_text())
-        checks=[]
-        for name,broken in [('startup-visible',False),('startup-missing',True)]:
-            area=output/name;area.mkdir();candidate=deepcopy(exported)
-            if broken:
-                draw="hero?.draw(ctx,x,y,{scale:1,flipX:keys.has('ArrowLeft')||moving<0});"
-                assert draw in candidate['game.js'];candidate['game.js']=candidate['game.js'].replace(draw,'')
-            request_input=area/'input.json';request_input.write_text(json.dumps(dict(html=html(candidate))),encoding='utf-8')
-            with (area/'driver.log').open('wb') as log:
-                observed=subprocess.run([runtime['node'],runtime['driver'],str(request_input),str(area/'output')],env=env,stdout=log,stderr=log,timeout=60)
-            if observed.returncode:print(str(area/'driver.log'));return 1
-            observed_report=json.loads((area/'output/report.json').read_text())
-            for viewport in observed_report['viewports']:
-                missing=viewport['sprites']['missingEntities']
-                assert ('hero' in missing)==broken
-                assert 'impact' not in missing,'An effect that activates on demand must not be required at startup'
-            checks.append(dict(name=name,detectedCorrectly=True))
-        report.update(startup_binding_checks=checks,separate_acceptance_receipts=2,
-            basis='Synthetic model replies and original fixture artwork. Real desktop/touch input in sandboxed proposal and exported game, UI per-asset choices and separate acceptance receipts, plus production browser-driver detection of an intentionally undrawn entity. No live provider calls.')
+        report.update(startup_binding_checks=startup_regressions(app,root,folder,exported,output,runtime),
+            separate_acceptance_receipts=2,
+            basis='Synthetic model replies and original fixture artwork. Real desktop and touch inputs, separate asset acceptance, production player visibility checks, and a blocked approval for the off-screen hero. No live provider calls.')
         (output/'report.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     print(str(output/('report.json' if result.returncode==0 else 'browser.log')))
     return result.returncode

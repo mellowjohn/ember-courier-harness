@@ -54,6 +54,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--local-agent-binary')
     parser.add_argument('--local-agent-model', default='qwen2.5-coder:7b')
+    parser.add_argument('--browser', action='store_true', help='Require the real Chromium sprite and startup-player regression checks')
     options = parser.parse_args(argv)
     output = ROOT / '.harness' / 'release-checks' / (
         datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
@@ -65,6 +66,8 @@ def main(argv=None):
     checks[-1][1].append('--fixture-approvals')
     if options.local_agent_binary:
         checks[-1][1].extend(['--local-agent-binary', options.local_agent_binary, '--local-agent-model', options.local_agent_model])
+    if options.browser:
+        checks.append(('sprite-browser', [sys.executable, str(ROOT / 'tools/sprite_scene_check.py')]))
     rows = []
     for name, args in checks:
         print('Running ' + name, flush=True)
@@ -76,6 +79,7 @@ def main(argv=None):
     passed = all(row['passed'] for row in rows) and before == after
     report = dict(passed=passed, completed_at=datetime.now(timezone.utc).isoformat(),
                   coverage='Fixture owner approvals and deterministic review. Includes manual PNG ingest and the integrated workflow. '
+                           + ('Includes Chromium sprite and startup-player regressions. ' if options.browser else '')
                            + ('Product fix uses real local model inference; ' if options.local_agent_binary else 'No model inference; ')
                            + 'no engine, broader asset production pipeline or submission validation.',
                   python=sys.version, source_unchanged=before == after,

@@ -577,6 +577,9 @@ their own gameplay checks and human asset acceptance.
 The entity rehearsal also checks per-sheet acceptance in the real UI, replaces
 the intended drawing in an existing fixture game, preserves its movement and
 score, and exercises jump/fall, locked attacks, one damage event, hurt interruption,
-terminal death, respawn and a separate impact atlas on desktop and touch. It tests
-the real production browser driver against both a visible startup entity and an
-intentionally undrawn one. Reports stay under `.harness/sprite-scene-checks/`.
+terminal death, respawn and a separate impact atlas on desktop and touch. It
+clicks or taps Start in Chromium and checks four player cases on both viewports:
+visible, undrawn, drawn off-screen after Start, and drawn then erased. The
+off-screen fixture also checks that approval leaves the project and decision
+history untouched. Reports stay under `.harness/sprite-scene-checks/`. Run
+`py -3.12 tools/release_check.py --browser` to require this rehearsal in a release check.

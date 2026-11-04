@@ -540,6 +540,9 @@ def respond(root, folder, ref, choice, quote):
             raise ValueError('Project changed since this proposal; ask Muse for a fresh proposal')
         if choice != 'decline':
             check_project_names(project(root, folder), before)
+        if choice == 'approve':
+            from .proposal_quality import require_visible_players
+            require_visible_players(root, folder, ref, build)
         result = decide(h, ref, choice, quote)
         if choice == 'approve':
             return {**result, 'build': apply(root, folder, ref)}

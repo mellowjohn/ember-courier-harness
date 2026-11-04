@@ -35,6 +35,16 @@ scenario are skipped; other scenarios still run. Duplicate, missing or hidden
 targets fail actions and text checks. **Hidden or absent** deliberately accepts
 a missing target.
 
+## Player visibility at launch
+
+For games with a packaged startup player sprite, Ember opens the exact proposal
+in Chromium on desktop and mobile. It activates the Start button when present,
+then checks that the bound sprite paints visible pixels inside the playfield.
+An off-screen spawn, a transparent draw, or a sprite that is immediately erased
+fails this check even when the animation reports successful draw calls.
+**Approve & play** requires passing evidence for both viewports. This check uses
+no Muse credits and is separate from saved gameplay scenarios.
+
 ## Review interaction coverage
 
 In the scenario editor, optionally label the purpose of a check: discovering how

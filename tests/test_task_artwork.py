@@ -96,7 +96,8 @@ class ArtworkTaskTests(unittest.TestCase):
         review = chat_build.list_requests(self.folder)[-1]['payload']['body']
         self.assertEqual(len(review['asset_actions']),2)
         self.assertIsNone(project_plan.status(self.root,self.folder)['tasks'][0]['acceptance'])
-        self.app.respond(ref,'approve','SYNTHETIC accept each reviewed sheet and game')
+        with patch('ember_harness.proposal_quality.require_visible_players'):
+            self.app.respond(ref,'approve','SYNTHETIC accept each reviewed sheet and game')
         accepted = self.app.plan_control(self.folder.name,'accept',plan_ref=plan['project_plan']['binding']['ref'],task_id='task-1',build_ref=ref)
         self.assertIsNone(accepted['next_task_id'])
         self.assertEqual(project_plan.status(self.root,self.folder)['continuation']['status'],'complete')

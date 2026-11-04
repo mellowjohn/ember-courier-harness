@@ -366,6 +366,9 @@ class Worker:
             data['review_sheets'] = True
         if self.plan.get('comparison'):
             data['review_sheets'] = True
+        players = polish_runtime.player_targets(files)
+        if players and (not source.exists() or read_json(source).get('players')):
+            data['players'] = players
         saved_plan = self.plan.get('gameplay_plan')
         if saved_plan and saved_plan['plan']['scenarios']:
             data.update(gameplay_plan=saved_plan['plan'], gameplay_plan_sha256=saved_plan['sha256'])
@@ -533,7 +536,7 @@ def rejection_feedback(candidate, best):
 
 def failures(candidate):
     result = candidate['observations']
-    return (len(polish_runtime.aspect_failures(result)) +
+    return (len(polish_runtime.aspect_failures(result)) + len(polish_runtime.player_failures(result)) +
             sum(len(row['observations']) + int(row['after']['overflow']) for row in result['viewports']) +
             int(result.get('gameplay', {}).get('outcome', 'passed') != 'passed') +
             int(result.get('mechanics', {}).get('outcome', 'passed') != 'passed') +

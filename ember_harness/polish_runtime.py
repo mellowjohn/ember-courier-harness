@@ -33,6 +33,20 @@ def aspect_failures(observed):
     return issues
 
 
+def player_targets(files):
+    from . import sprite_project
+    if sprite_project.PLAN_FILE not in files:
+        return []
+    plan = sprite_project.unpack_plan(files[sprite_project.PLAN_FILE])
+    return [dict(id=entity['id'], asset_ref=entity['asset_ref']) for entity in plan['entities']
+            if entity['role'] == 'player' and entity['activation'] == 'startup']
+
+
+def player_failures(observed):
+    return [f"{view['name']}: player '{row['id']}' did not draw visible artwork after starting the game"
+            for view in observed.get('viewports', []) for row in view.get('players', []) if not row['visible']]
+
+
 def file_digest(path):
     return sha256(Path(path).read_bytes()).hexdigest()
 
@@ -146,6 +160,13 @@ def verified_report(source, output):
             if row['panel_screenshot'] != name or target.is_symlink() or file_digest(target) != row.get('panel_sha256'):
                 raise ValueError('Browser panel capture changed')
     request = read_json(source)
+    player_ids = [target['id'] for target in request.get('players', [])]
+    for row in data['viewports']:
+        players = row.get('players', [])
+        if (not isinstance(players, list) or any(not isinstance(player, dict) or set(player) != {'id', 'visible'} or
+                type(player['visible']) is not bool for player in players) or
+                [player['id'] for player in players] != player_ids):
+            raise ValueError('Browser player observations do not match the reviewed sprite plan')
     ratios = request.get('aspect_ratios', [])
     if ratios and ratios != ASPECT_RATIOS:
         raise ValueError('Unsupported aspect-ratio capture protocol')

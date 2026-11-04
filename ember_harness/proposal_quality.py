@@ -4,6 +4,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 import re
+from tempfile import TemporaryDirectory
 import time
 
 from jsonschema import Draft202012Validator
@@ -54,6 +55,31 @@ def current(root, folder, report, *, allow_declined=False):
             gameplay.load(folder) != report['saved_checks']):
         raise ValueError('Verification belongs to different files or gameplay checks')
     return snapshot
+
+
+def require_visible_players(root, folder, ref, build):
+    """Require model-free post-start evidence before accepting a packaged player."""
+    if not any(entity['role'] == 'player' and entity['activation'] == 'startup'
+               for entity in build.get('sprite_plan', {}).get('entities', [])):
+        return
+    report = load(folder, ref)
+    observed = report.get('observations', {}).get('candidate') if report and report['manifest'] == build['manifest'] else None
+    if not observed or not all(view.get('players') for view in observed['viewports']):
+        files = chat_build.proposal_snapshot(root, folder, ref)['files']
+        try:
+            runtime = polish_runtime.discover(root)
+            parser = chat_build.ResourcePreview(files)
+            parser.feed(files['index.html']); parser.close()
+            with TemporaryDirectory(prefix='player-check-', dir=folder) as path:
+                area = Path(path)
+                source = area / 'input.json'
+                atomic_json(source, dict(html=''.join(parser.output), players=polish_runtime.player_targets(files)))
+                observed = polish_runtime.inspect(runtime, source, area / 'output', check=lambda: None)
+        except (OSError, ValueError) as error:
+            raise ValueError(f'Cannot approve & play until the player is checked in Chromium. {error}') from error
+    issues = polish_runtime.player_failures(observed)
+    if issues:
+        raise ValueError('Cannot approve & play. ' + '; '.join(issues) + '. Request changes and try the proposed game again.')
 
 
 def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None, progress=lambda *a, **k: None):
@@ -114,6 +140,10 @@ def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None
                     report_sha256=polish_runtime.file_digest(work/label/'output/report.json'))
                 current(root, folder, report)
             observed = report['observations']['candidate']
+            player_issues = polish_runtime.player_failures(observed)
+            if player_issues:
+                report['issues'].extend(player_issues)
+                report['status'] = 'needs_changes'
             files = {k:v for k,v in snapshot['files'].items() if k not in chat_build.PROTECTED_FILES}
             pictures = polish_runtime.review_images(work/'candidate/output')
             progress('visual_review')

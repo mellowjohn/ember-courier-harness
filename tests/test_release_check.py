@@ -12,6 +12,19 @@ from tools.release_check import run_check
 
 
 class ReleaseCheckTests(unittest.TestCase):
+    def test_requested_browser_regression_is_required_for_release(self):
+        from tools import release_check
+        with tempfile.TemporaryDirectory() as directory:
+            def checked(name, args, output, **kwargs):
+                if name == 'sprite-browser':
+                    self.assertEqual(Path(args[1]).name, 'sprite_scene_check.py')
+                return dict(name=name, passed=name != 'sprite-browser', seconds=0, log=str(output / (name + '.log')))
+            with patch.object(release_check, 'ROOT', Path(directory)), patch.object(release_check, 'source_manifest', return_value={}), patch.object(release_check, 'run_check', side_effect=checked), redirect_stdout(io.StringIO()):
+                self.assertEqual(release_check.main(['--browser']), 1)
+            report = json.loads(next(Path(directory).rglob('report.json')).read_text())
+            self.assertFalse(report['passed'])
+            self.assertEqual(report['checks'][-1]['name'], 'sprite-browser')
+
     def test_report_retains_live_mode_after_command_loop(self):
         from tools import release_check
         with tempfile.TemporaryDirectory() as directory:

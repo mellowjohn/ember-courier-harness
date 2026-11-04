@@ -4,6 +4,86 @@ const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE);
 const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),output=process.argv[3];
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const policy="default-src 'none';script-src 'unsafe-inline' data:;style-src 'unsafe-inline' data:;img-src data:;connect-src 'none';frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'";
+function observePlayers(players){
+  const expected=new Map(players.map(row=>[row.id,row.asset_ref]));
+  const seen=new Set(),lastSample=new Map();
+  let active=null,enabled=false,runtime;
+  globalThis.__emberPlayerProbe=Object.freeze({start(){enabled=true;},read(){return [...seen];}});
+  // Wrap the existing scene API in the inspection frame only. The approved game
+  // and its bundled sprite runtime still execute their exact source bytes.
+  Object.defineProperty(globalThis,'EmberSprites',{get:()=>runtime,set(api){
+    runtime=Object.create(api,{createScene:{value:async function(...args){
+      const scene=await api.createScene(...args);
+      return Object.create(scene,{createEntity:{value:function(id){
+        const entity=scene.createEntity(id);
+        if(entity.assetRef!==expected.get(id)||!expected.has(id))return entity;
+        return Object.create(entity,{draw:{value:function(...drawArgs){
+          const prior=active;active=id;
+          try{return entity.draw(...drawArgs);}finally{active=prior;}
+        }}});
+      }}});
+    }}});
+  }});
+  const draw=CanvasRenderingContext2D.prototype.drawImage;
+  CanvasRenderingContext2D.prototype.drawImage=function(image,...args){
+    const paint=()=>draw.call(this,image,...args);
+    const canvas=this.canvas,now=performance.now();
+    if(!enabled||!active||seen.has(active)||args.length!==8||!canvas.isConnected||
+       now-(lastSample.get(active)??-Infinity)<90)return paint();
+    lastSample.set(active,now);
+    const box=canvas.getBoundingClientRect();
+    if(!box.width||!box.height)return paint();
+    for(let el=canvas;el;el=el.parentElement){
+      const style=getComputedStyle(el);
+      if(style.visibility!=='visible'||Number(style.opacity)<0.05)return paint();
+    }
+    const [x,y,w,h]=args.slice(4),matrix=this.getTransform();
+    const points=[[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map(([x,y])=>matrix.transformPoint({x,y}));
+    const sx=canvas.width/box.width,sy=canvas.height/box.height;
+    const left=Math.ceil(Math.max(0,-box.left*sx,Math.min(...points.map(p=>p.x))));
+    const top=Math.ceil(Math.max(0,-box.top*sy,Math.min(...points.map(p=>p.y))));
+    const width=Math.floor(Math.min(canvas.width,(innerWidth-box.left)*sx,Math.max(...points.map(p=>p.x))))-left;
+    const height=Math.floor(Math.min(canvas.height,(innerHeight-box.top)*sy,Math.max(...points.map(p=>p.y))))-top;
+    if(width/sx<4||height/sy<4)return paint();
+    const sw=Math.min(width,128),sh=Math.min(height,128);
+    const sample=[left+Math.floor((width-sw)/2),top+Math.floor((height-sh)/2),sw,sh];
+    if(getComputedStyle(canvas).pointerEvents!=='none'&&![[.5,.5],[.25,.25],[.75,.75]].some(([x,y])=>
+      document.elementFromPoint(box.left+(sample[0]+sw*x)/sx,box.top+(sample[1]+sh*y)/sy)===canvas))return paint();
+    let before;
+    try{before=this.getImageData(...sample).data;}catch{return paint();}
+    const result=paint();
+    const id=active;
+    try{
+      const after=this.getImageData(...sample).data;
+      queueMicrotask(()=>{
+        try{
+          // Sample again after the game's synchronous paint finishes so a sprite
+          // immediately cleared or painted over does not count.
+          const final=this.getImageData(...sample).data;
+          let changed=0;
+          for(let i=0;i<after.length;i+=4){
+            if(after[i]===final[i]&&after[i+1]===final[i+1]&&after[i+2]===final[i+2]&&after[i+3]===final[i+3]&&
+               Math.abs(after[i]-before[i])+Math.abs(after[i+1]-before[i+1])+
+               Math.abs(after[i+2]-before[i+2])+Math.abs(after[i+3]-before[i+3])>=12&&++changed>=12){seen.add(id);break;}
+          }
+        }catch{/* The game may have released or resized the canvas. */}
+      });
+    }catch{/* The draw still completes when pixels cannot be inspected. */}
+    return result;
+  };
+}
+async function startControl(frame){
+  const marked=frame.locator('button[data-ember-play]:visible:enabled').first();
+  if(await marked.count())return marked;
+  const named=frame.getByRole('button',{name:/^(?:start|play)\b/i}).and(frame.locator('button:visible:enabled'));
+  const targets=[frame.locator('button#start-btn:visible:enabled'),...await named.all()];
+  for(const target of targets){
+    if(await target.count()&&await target.evaluate(node=>{
+      const r=node.getBoundingClientRect();return node.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));
+    }))return target;
+  }
+  return await named.count()?named.first():targets[0];
+}
 async function openGame(browser,name){
   const mobile=name==='mobile',context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:740},
     hasTouch:mobile,isMobile:mobile,serviceWorkers:'block',acceptDownloads:false});
@@ -14,7 +94,8 @@ async function openGame(browser,name){
   page.on('pageerror',error=>observe(error.message));
   page.on('console',message=>{if(message.type()==='error')observe(message.text())});
   await page.setContent('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><iframe title="polish candidate" sandbox="allow-scripts" referrerpolicy="no-referrer" style="width:100vw;height:100vh;border:0"></iframe></body></html>');
-  await page.locator('iframe').evaluate((frame,html)=>{frame.srcdoc=html},'<meta http-equiv="Content-Security-Policy" content="'+policy+'">'+input.html);
+  const probe=input.players?.length?'<script>('+observePlayers.toString()+')('+JSON.stringify(input.players)+');</script>':'';
+  await page.locator('iframe').evaluate((frame,html)=>{frame.srcdoc=html},'<meta http-equiv="Content-Security-Policy" content="'+policy+'">'+probe+input.html);
   const frame=page.frameLocator('iframe');await frame.locator('body').waitFor({state:'attached'});
   await page.waitForTimeout(500);
   return {context,page,frame,errors};
@@ -174,16 +255,24 @@ async function aspectCaptures(page,body,name){
       const initial=path.join(output,name+'-before.png');
       await page.screenshot({path:initial,animations:'disabled'});
       const steps=[];
-      const start=frame.locator('button[data-ember-play]:visible:enabled, button#start-btn:visible:enabled');
+      const start=await startControl(frame);
       const hasStart=await start.count()===1;
-      const button=hasStart?start:frame.locator('button:visible:enabled').first();
+      const button=hasStart?start:frame.locator(input.players?.length?'button[data-ember-play]:visible:enabled':'button:visible:enabled').first();
+      let started=!hasStart;
       if(await button.count()){
         try{
           if(hasStart&&name==='mobile')await button.tap({timeout:1500});
           else await button.click({timeout:1500});
+          started=true;
           steps.push(hasStart?(name==='mobile'?'Tapped start button':'Clicked start button'):'Clicked first visible enabled button');
         }catch{observations.push(hasStart?'Start button could not be activated':'First button could not be clicked')}
       }
+      if(input.players?.length&&started)await body.evaluate(()=>globalThis.__emberPlayerProbe.start());
+      if(input.players?.length&&started)await page.waitForTimeout(700);
+      const players=input.players?.length?await body.evaluate((_,expected)=>{
+        const visible=globalThis.__emberPlayerProbe.read();
+        return expected.map(({id})=>({id,visible:visible.includes(id)}));
+      },input.players):null;
       const action=path.join(output,name+'-action.png');
       for(const key of ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown','Space','a','d']){
         await page.locator('iframe').focus();await page.keyboard.down(key);await page.waitForTimeout(120);
@@ -223,6 +312,7 @@ async function aspectCaptures(page,body,name){
       }
       const reviewCapture=input.review_sheets?await reviewSheet(browser,name,[name+'.png',name+'-before.png',name+'-action.png',...(panelCapture.panel_screenshot?[panelCapture.panel_screenshot]:[]),...aspectViews.map(v=>v.screenshot)]):{};
       results.push({name,loaded:true,steps,observations:observations.slice(0,5),before,after,...(sprites?{sprites}:{}),...reviewCapture,
+                    ...(players?{players}:{}),
                     ...panelCapture,
                     screenshot:path.basename(screenshot),sha256:hash(fs.readFileSync(screenshot)),
                     action_screenshot:path.basename(action),action_sha256:hash(fs.readFileSync(action)),action_input:'ArrowRight held for 120ms',

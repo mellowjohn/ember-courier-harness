@@ -154,6 +154,9 @@ def _capture(files, saved, output, runtime, *, build_ref=None):
     # Freeze the matrix with the exact candidate; old retained reports keep their protocol.
     if not source.exists() or read_json(source).get('aspect_ratios'):
         data.update(aspect_ratios=polish_runtime.ASPECT_RATIOS, review_sheets=True)
+    players = polish_runtime.player_targets(files)
+    if players and (not source.exists() or read_json(source).get('players')):
+        data['players'] = players
     from .mechanic_workflow import capture_binding
     bound = capture_binding(files, build_ref or 'capture:' + str(output.name), saved)
     if bound is not None:
@@ -177,8 +180,8 @@ def mechanic_evidence(output, observed):
 
 
 def capture_outcome(observed):
-    from .polish_runtime import aspect_failures
-    return 'passed' if (not aspect_failures(observed) and observed['gameplay']['outcome'] == 'passed' and
+    from .polish_runtime import aspect_failures, player_failures
+    return 'passed' if (not aspect_failures(observed) and not player_failures(observed) and observed['gameplay']['outcome'] == 'passed' and
         observed.get('mechanics', {}).get('outcome', 'passed') == 'passed') else 'failed'
 
 
