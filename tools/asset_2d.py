@@ -30,6 +30,9 @@ def main(argv=None):
     terrain.add_argument('--style', required=True)
     terrain.add_argument('--tool', choices=['image_gen', 'muse_image'], default='muse_image')
     terrain.add_argument('--no-seamless', action='store_true', help='Allow non-repeating edge and transition artwork')
+    modes = terrain.add_mutually_exclusive_group()
+    modes.add_argument('--autotile', action='store_true', help='Draw trim on exposed edges of repeating material fills')
+    modes.add_argument('--blob', action='store_true', help='Build 47 connected terrain cells from one logical tile and texture')
     terrain.add_argument('--view', choices=['top-down', 'side-view'], help='Terrain camera view; side-view for platformers')
     terrain.add_argument('--output', type=Path, required=True)
     ingest = commands.add_parser('ingest', help='Check returned PNG against the saved image request')
@@ -44,10 +47,13 @@ def main(argv=None):
     prepare.add_argument('--source', type=Path, required=True)
     prepare.add_argument('--session')
     args = parser.parse_args(argv)
+    if args.command in ('tileset-request', 'tile-request') and (args.autotile or args.blob) and args.no_seamless:
+        parser.error('--autotile and --blob require seamless material fills')
     if args.command in ('request', 'tileset-request', 'tile-request'):
         spec = (json.loads(limited(args.spec, 16384)) if args.command == 'request' else
             asset_2d.tileset_spec(args.id, args.tile, style=args.style, tile_size=args.tile_size,
-                columns=args.columns, solid=args.solid, seamless=not args.no_seamless, tool=args.tool, view=args.view))
+                columns=args.columns, solid=args.solid, seamless=not args.no_seamless, tool=args.tool, view=args.view,
+                edge_mode=None if args.no_seamless else ('blob' if args.blob else 'autotile' if args.autotile else 'repeat')))
         payload = asset_2d.generation_request(spec)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open('x', encoding='utf-8') as stream:
@@ -59,7 +65,11 @@ def main(argv=None):
         # Exact canonical reconstruction rejects edited parameters or mismatched specs.
         if canonical(payload) != canonical(asset_2d.generation_request(spec)):
             raise ValueError('Generation request changed; prepare a new request')
-        result = write_source(args.output, limited(args.image, asset_2d.MAX_PNG), spec, payload)
+        if spec.get('tileset', {}).get('edge_mode'):
+            raw, _ = asset_2d.prepare_generated_png(limited(args.image, 12 * 1024 * 1024), spec)
+        else:
+            raw = limited(args.image, asset_2d.MAX_PNG)
+        result = write_source(args.output, raw, spec, payload)
     elif args.command == 'effect':
         spec = json.loads(limited(args.spec, 16384)) if args.spec else asset_2d.effect_spec(seed=args.seed)
         result = write_source(args.output, asset_2d.render_effect(spec), spec)

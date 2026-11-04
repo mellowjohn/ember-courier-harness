@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-global.Image=class{constructor(){this.naturalWidth=32;this.naturalHeight=32;}set src(value){queueMicrotask(()=>this.onload());}};
+global.Image=class{set src(value){[this.naturalWidth,this.naturalHeight]=value.endsWith('blob')?[128,96]:[32,32];queueMicrotask(()=>this.onload());}};
 require(process.argv[2] || '../ember_harness/asset_lab/sprite-player.js');
 const spec={profile:'sprite-atlas-v1',kind:'tileset',frame_size:[16,16],grid:[2,2],frames:4,fps:1,loop:false,
   pivot:[.5,1],blend:'source-over',sampling:'nearest',tileset:{seamless:true,tiles:{
@@ -27,6 +27,27 @@ const spec={profile:'sprite-atlas-v1',kind:'tileset',frame_size:[16,16],grid:[2,
     assert.throws(()=>atlas.drawTile(ctx,0,0,0,{scale}),RangeError);
   }
   assert.throws(()=>atlas.drawTile(ctx,'unknown',0,0),RangeError);
+  calls.length=0;
+  const variants={grass:{2:'wall',8:'path'}};
+  atlas.drawMap(ctx,[['grass',0]],0,0,{variants});
+  assert.deepEqual(calls.filter(c=>c[0]==='draw').map(c=>c.slice(1,3)),[[16,0],[16,16]]);
+  calls.length=0;
+  assert.throws(()=>atlas.drawMap(ctx,[['grass']],0,0,{variants:{grass:{256:'wall'}}}),/neighbor mask/);
+  assert.deepEqual(calls,[]);
+  const blob=await EmberSprites.load({spec:{...spec,frames:47,grid:[8,6],tileset:{seamless:true,
+    edge_mode:'blob',tiles:{ground:{frame:46,solid:true}}}},png_base64:'blob'});
+  const ground=[['ground','ground','ground'],['ground','ground','ground'],['ground','ground','ground']];
+  blob.drawMap(ctx,ground);
+  assert.deepEqual(calls.filter(c=>c[0]==='draw')[4].slice(1,3),[96,80],'A surrounded cell draws frame 46');
+  calls.length=0;
+  ground[0][2]=null;
+  blob.drawMap(ctx,ground);
+  assert.deepEqual(calls.filter(c=>c[0]==='draw')[3].slice(1,3),[80,80],'A missing diagonal selects a concave corner');
+  calls.length=0;
+  blob.drawMap(ctx,[['ground',null,'ground']]);
+  assert.deepEqual(calls.filter(c=>c[0]==='draw').map(c=>c.slice(1,3)),[[0,0],[0,0]]);
+  assert.equal(blob.solidAt(ground,2,0),false);
+  assert.equal(blob.solidAt(ground,1,1),true);
   ctx.drawImage=()=>{throw Error('failed');};assert.throws(()=>atlas.drawTile(ctx,0,0,0),/failed/);assert.deepEqual(calls.at(-1),['restore']);
   ctx.drawImage=()=>{};
   const legacy={...spec};delete legacy.tileset;

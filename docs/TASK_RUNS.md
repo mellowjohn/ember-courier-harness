@@ -191,7 +191,7 @@ py -3.12 tools/prepare_live_task.py
 This checks the existing Muse installation, browser tooling and shared credit
 availability, then creates a dedicated **Live Muse MVP rehearsal** session with
 one original courier-game task and saved keyboard/touch checks. Both scenarios
-fit the existing twenty-second action budget. Each checks pickup, three moves,
+fit the gameplay action budget. Each checks pickup, three moves,
 delivery and reset; game-reported state remains an observation, not independent
 proof of the rules.
 

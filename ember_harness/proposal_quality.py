@@ -9,7 +9,7 @@ import time
 
 from jsonschema import Draft202012Validator
 
-from . import asset_library, chat_build, gameplay, polish, polish_runtime, task_quality
+from . import asset_2d, asset_library, chat_build, gameplay, polish, polish_runtime, sprite_project, task_quality
 from .core import digest, canonical
 from .muse_chat import run as run_muse, execution_policy
 from .recovery import atomic_json, exclusive, read_json
@@ -82,6 +82,36 @@ def require_visible_players(root, folder, ref, build):
         raise ValueError('Cannot approve & play. ' + '; '.join(issues) + '. Request changes and try the proposed game again.')
 
 
+def sprite_coverage_issues(files, plan):
+    if sprite_project.PLAN_FILE not in files:
+        return []
+    sprites = sprite_project.unpack_plan(files[sprite_project.PLAN_FILE])
+    assets = sprite_project.unpack_assets(files[sprite_project.ASSETS_FILE])
+    steps = []
+    for scenario in plan['scenarios']:
+        interacted = False
+        for step in scenario['steps']:
+            interacted |= step['action'] in ('click', 'tap', 'press', 'hold')
+            if interacted and step['action'] == 'sprite_state':
+                steps.append(step)
+    issues = []
+    for entity in sprites['entities']:
+        name = entity['id']
+        states = entity['machine']['states'] if entity['machine'] else {clip: {'clip': clip} for clip in entity['required_clips']}
+        on_demand = entity['activation'] == 'on_demand'
+        character = entity['role'] in ('player', 'enemy', 'npc') and len(states) > 1
+        if not (on_demand or character):
+            continue
+        relevant = [step for step in steps if step['entity'] == name and step['value'] in states]
+        if len({step['value'] for step in relevant}) < (2 if character else 1):
+            issues.append(f'{name}: add gameplay checks for drawn sprite ' + ('state transitions.' if character else 'activation.'))
+        clips = asset_2d.animations(assets[entity['asset_ref']]['spec'])
+        animated = {state for state, settings in states.items() if len(set(clips[settings['clip']]['frames'])) > 1}
+        if animated and not any(step['value'] in animated and step['frames'] == 2 for step in relevant):
+            issues.append(f'{name}: no gameplay check verifies that distinct animation frames were drawn.')
+    return issues
+
+
 def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None, progress=lambda *a, **k: None):
     folder = Path(folder)
     work = workdir(folder, ref)
@@ -116,6 +146,7 @@ def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None
                 warnings.append('The additional checks exceed the bounded test allowance; saved checks were retained. Coverage is incomplete.')
         if not plan['scenarios']:
             warnings.append('No gameplay assertions were supplied. Functionality is unverified.')
+        warnings.extend(sprite_coverage_issues(snapshot['files'], plan))
         document = design['document'] if design else dict(scope=dict(core_loop=ask, out_of_scope=[],
             asset_budget={}, done_criteria=[ask]), art_direction=brief['fields'].get('visual_direction', 'Follow the user request'))
         quality = task_quality.prepare(dict(goal=original_ask+'\nCurrent request: '+ask, project_plan=dict(document=document), brief=brief,
@@ -149,12 +180,15 @@ def run(root, folder, ref, *, ask, brief, design, checks=None, original_ask=None
             progress('visual_review')
             prompt = ('Independently verify these exact proposed game changes against the user request, saved brief and approved design. '
                 'Inspect the attached actual desktop/mobile PNGs and any movement poses, not the coder narrative. '
+                'Compare the runner, scenery, effects and terrain together in the game view against the approved art direction. '
+                'Flag conflicting art styles, lighting, texture scale or placement even when each asset loads. '
                 'Do not accept placeholder shapes when authored artwork was requested. Check whether the functional assertions '
                 'exercise the requested mechanic and feedback; an unchanged label or successful page load is insufficient. '
                 'Report concrete mismatches and regressions. Return meets_task, preserves_scope, summary, issues and criteria. '
                 + task_quality.INSTRUCTION + '\n' + canonical(dict(ask=ask,original_ask=original_ask,brief=brief,approved_design=design,
                     **asset_library.prompt_files(snapshot['files']),checks=plan,quality=quality,observations=report['observations'],
-                    image_order=[p.name for p in pictures],coverage_warnings=warnings)).decode())
+                    image_order=[dict(ref=p.name, contains=next((v['review_sources'] for v in observed['viewports']
+                        if v.get('review_screenshot') == p.name), [p.name])) for p in pictures],coverage_warnings=warnings)).decode())
             schema = task_quality.schema(task_quality.VERDICT_SCHEMA)
             last_check = 0
             def check_running():

@@ -35,19 +35,23 @@ change the credit allowance.
 
 Ember uses **Muse Code** for AI chat. Follow Meta's official
 [Muse Code installation guide](https://dev.meta.ai/docs/muse-code) and
-[sign-in guide](https://dev.meta.ai/docs/muse-code/auth), then restart Ember.
+[sign-in guide](https://dev.meta.ai/docs/muse-code/auth). Sign in with the Meta
+account that holds your Muse Code subscription, then open **Muse settings →
+Check subscription** in Ember. **My Muse Code subscription** is the default
+connection. If the wrong account is active, switch accounts in Muse Code and
+run the check again. The check uses no model turn.
 The current integration detects its Windows version marker
 at `%LOCALAPPDATA%\Programs\muse\.muse-version` and the matching
 `muse-bin-<version>.exe` beside it. Other installation layouts are not currently
 auto-detected. Setup reports whether that executable is present; this does not
 verify your sign-in or billing access.
 
-**Ember does not include free AI credits.** The repository's $150 ceiling records
-Johnathan's authorized promotional allowance; it is not a grant of credits to
-other users. You need your own authorized access and must review
-[models and credits](MODELS_AND_CREDITS.md) before sending live requests. Setup
-does not enable paid fallback or top-ups. Without Muse, you can open the app,
-manage local sessions and inspect existing work, but new AI replies are unavailable.
+If you have your own promotional balance, set up the credential in Muse Code
+or provide `META_API_KEY` in the environment that launches Ember. Then select
+**My Model API promotional credits** and confirm your billing settings. Returning
+promotional-credit users choose this option once after upgrading. Ember preserves
+the existing ledger. See [models and credits](MODELS_AND_CREDITS.md). You can
+manage local sessions and inspect saved work before connecting either account.
 
 For a first game, save a **Project brief** with your goal, controls and visual
 direction. Describe the game in chat, choose **Try proposed changes**, then
@@ -112,7 +116,7 @@ does not reset actual credit usage. See [local project locations](LOCAL_UI.md).
 | Missing module or app import failure | Run **Setup Ember.cmd**, then `--check`. If it still fails, retain the displayed error for troubleshooting. |
 | Blank page or access denied after a restart | Use the complete new private link from the current launcher window. |
 | Muse is not detected | Install and sign in to Muse Code; check its supported Windows location above, then restart Ember. |
-| Muse sign-in or credit error | Check your Muse access and the [credit guide](MODELS_AND_CREDITS.md). Do not delete the ledger to bypass a limit or unresolved reservation. |
+| Muse sign-in or credit error | Open **Muse settings** and check your selected connection. See the [credit guide](MODELS_AND_CREDITS.md) for billing and usage limits. |
 | Automated checks need Chromium | Install Node.js LTS, reopen the terminal and run **Setup Ember.cmd --browser**. |
 | Address already in use with a custom port | Launch without `--port` to let Ember choose an available port. |
 

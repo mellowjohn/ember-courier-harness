@@ -16,7 +16,8 @@ from urllib.request import Request, urlopen
 import zipfile
 
 from jsonschema import Draft202012Validator,ValidationError
-from ember_harness import asset_2d,asset_library,asset_workshop,chat_build,muse_image,project_plan,project_versions,sprite_project,task_run
+from PIL import Image
+from ember_harness import asset_2d,asset_library,asset_workshop,chat_build,game_audio,muse_image,project_plan,project_versions,sprite_project,task_run
 from ember_harness.local_ui import App, server
 from ember_harness.muse_chat import decode_structured,structured_schema
 from tools.sprite_scene_check import character,machine,plan,game_files,integration_edits
@@ -171,7 +172,7 @@ class SpriteProjectTests(unittest.TestCase):
         supplied={'index.html':files['index.html'].replace('game.js','app.js'), 'app.js':files['game.js']}
         document=plan(self.hero,self.impact)
         for entity in document['entities']:
-            entity['binding']=dict(file='app.js',replace='')
+            entity['binding']=dict(file='app.js',replace=f'scene.createEntity("{entity["id"]}")')
         build=dict(title='New artwork entry script',summary='Keep the prior source while integrating artwork',
             files=[dict(path=k,content=v) for k,v in supplied.items()])
         self.send(document,build,turn='sprite-new-entry-script-12345678')
@@ -179,6 +180,8 @@ class SpriteProjectTests(unittest.TestCase):
         candidate=chat_build.proposal_snapshot(self.root,self.folder,request['ref'])['files']
         self.assertEqual(candidate['game.js'],before['game.js'])
         self.assertEqual(candidate['app.js'],supplied['app.js'])
+        self.assertEqual([e['binding'] for e in sprite_project.unpack_plan(candidate['sprite-plan.js'])['entities']],
+                         [dict(file='app.js',replace='')]*2)
         sprite_project.validate_files(candidate,before)
         self.assertIsNone(request['decision'])
 
@@ -274,6 +277,66 @@ class SpriteProjectTests(unittest.TestCase):
         self.assertEqual(request['payload']['body']['build']['project_scope']['ref'],ref)
         self.assertEqual(chat_build.context(self.root,self.folder)['manifest'],before)
 
+    def test_approved_first_playable_corrects_code_only_reply_and_generates_integrated_artwork(self):
+        direction = project_plan.starter(self.folder)
+        direction['scope'].update(features=['First playable courier game with a trail and impact bursts'],
+                                  asset_budget=dict(player=1, environment=1, effect=1))
+        entities = plan(self.hero, self.impact)
+        files = game_files()
+        code_only = dict(message='Synthetic code-only reply', build=dict(title='First playable', summary='Courier game',
+            files=[dict(path=name, content=source) for name, source in files.items()]))
+        build = chat_build.materialize_build(integration_edits(), files)
+        page = next(file for file in build['files'] if file['path'] == 'index.html')
+        page['content'] = page['content'].replace('<script src="game.js">',
+            '<script src="ember-audio.js"></script><script src="game.js">')
+        self.assertIn('src="ember-audio.js"', page['content'])
+        source = next(file for file in build['files'] if file['path'] == 'game.js')
+        source['content'] = ('const audio = EmberAudio.create();\n' + source['content'].replace('hero=null;', 'hero=null, scenery=null, gate=null;')
+            .replace("hero=scene.createEntity('hero');", "hero=scene.createEntity('hero');scenery=scene.createEntity('scenery');gate=scene.createEntity('gate');")
+            .replace('ctx.clearRect(0,0,700,280);', 'ctx.clearRect(0,0,700,280);scenery?.draw(ctx,350,140);gate?.draw(ctx,620,200);'))
+        scenery = dict(self.effect, id='courier-scenery', display_name='Courier scenery', kind='background',
+                       frame_size=[16,16], grid=[1,1], frames=1, blend='source-over', require_alpha=False)
+        raw = BytesIO()
+        Image.new('RGB', (16,16), '#284068').save(raw, format='PNG')
+        gate = dict(scenery, id='courier-gate', display_name='Courier gate', kind='sprite')
+        gate_pixels = BytesIO()
+        Image.new('RGB', (16,16), '#68cbd0').save(gate_pixels, format='PNG')
+        for entity_id, role, purpose in [('scenery', 'background', 'Courier scenery'), ('gate', 'prop', 'Finish gate')]:
+            entities['entities'].append(dict(id=entity_id, role=role, purpose=purpose, activation='startup',
+                required_clips=['default'], asset_ref=None, generation=None, binding=dict(file='game.js', replace=''), machine=None))
+        generated = {}
+        for entity, spec, pixels in zip(entities['entities'], (self.spec,self.effect,scenery,gate),
+                                        (self.raw,self.effect_raw,raw.getvalue(),gate_pixels.getvalue()), strict=True):
+            spec = dict(spec, production=dict(method='generated', tool='muse_image', prompt='Original ' + entity['purpose'], seed=None))
+            entity.update(asset_ref=None, generation=spec, binding=dict(file='game.js', replace=''))
+            generated[spec['id']] = self.source('first-' + entity['id'], spec, pixels)
+        corrected = dict(message='Review the first playable and its artwork.', build=build,
+                         sprite_project=dict(intent='implement', expected_revision=0, plan=entities))
+
+        def generate(root, folder, request_id, request, **kwargs):
+            return dict(status='generated', asset_ref=generated[request['specification']['id']])
+
+        with redirect_stdout(StringIO()):
+            ref = project_plan.prepare(self.root, self.folder, direction, None)['request_ref']
+            self.app.respond(ref, 'approve', 'SYNTHETIC TEST: first playable scope')
+            replies = [dict(response=json.dumps(reply)) for reply in (code_only,corrected)]
+            with patch('ember_harness.session_chat.run_muse', side_effect=replies) as model, \
+                    patch('ember_harness.muse_image.generate', side_effect=generate) as images:
+                first = self.app.start_plan_build(self.app.session['id'], ref)
+                self.assertEqual(self.app.start_plan_build(self.app.session['id'], ref), first)
+                self.assertEqual(model.call_count, 2)
+                self.assertEqual(images.call_count, 4)
+
+        request, = chat_build.list_requests(self.folder)
+        self.assertIsNone(request['decision'])
+        self.assertEqual(len(request['payload']['body']['asset_actions']), 4)
+        proposed = chat_build.proposal_snapshot(self.root, self.folder, request['ref'])['files']
+        self.assertEqual(proposed[game_audio.RUNTIME], game_audio.source())
+        self.assertEqual(proposed['index.html'].count('src="ember-audio.js"'), 1)
+        self.assertLess(proposed['index.html'].index('src="ember-audio.js"'), proposed['index.html'].index('src="game.js"'))
+        self.assertEqual(request['payload']['body']['build']['project_scope']['ref'], ref)
+        self.assertFalse(chat_build.project(self.root, self.folder).exists())
+
     def test_inactive_scope_still_stops_before_generation(self):
         self.baseline();document=plan(self.hero,self.impact)
         spec=deepcopy(self.spec);spec['production']=dict(method='generated',tool='muse_image',prompt='Original courier',seed=None)
@@ -315,6 +378,8 @@ class SpriteProjectTests(unittest.TestCase):
         inventory=fresh.snapshot()['sprite_project'];self.assertEqual(inventory['revision'],1)
         self.assertEqual(inventory['inventory'][0]['status'],'needs_artwork')
         self.assertEqual(sprite_project.requirements('Movement and jumping combat')[0]['clips'],['idle','walk'])
+        self.assertEqual(sprite_project.requirements('Jungle runner jumps pits')[0]['clips'],['idle','run'])
+        self.assertEqual(sprite_project.requirements('Walk and sprint')[0]['clips'],['idle','walk','run'])
 
     def test_known_artwork_preview_serves_exact_reused_png_without_changing_game(self):
         self.baseline(); self.send()

@@ -26,11 +26,15 @@ Available steps:
 | Hidden or absent | The target is hidden or absent. |
 | Text equals / Text contains | Check the visible target's trimmed text. |
 | Number at least | Check a visible, number-only score against a minimum. |
+| Sprite state and drawn frames | Check that the named sprite draws the expected state or clip. Require two distinct frames to check playback. |
 
 Every scenario needs an expectation. Plans allow at most four scenarios and
-sixteen steps per scenario. The whole plan has a twenty-second action budget:
-each action/assertion counts as one second, plus explicit waits. Assertions poll
-for up to 800 milliseconds. After a failed step, the remaining steps in that
+32 steps per scenario. The whole plan has a 90-second action budget:
+most actions and assertions count as one second, plus explicit waits. A
+two-frame sprite check counts as two seconds. Assertions poll for up to
+800 milliseconds, or 1800 milliseconds for two drawn frames. Place sprite
+checks immediately after the input or trigger to observe jump, impact, landing
+and restart during gameplay. After a failed step, the remaining steps in that
 scenario are skipped; other scenarios still run. Duplicate, missing or hidden
 targets fail actions and text checks. **Hidden or absent** deliberately accepts
 a missing target.
@@ -59,7 +63,7 @@ paths that have no declared check. Keyboard and touch paths are listed separatel
 only when their corresponding input action has a later observable expectation;
 this still does not prove that the input caused the reported state. Review which
 paths apply to the selected task and improve checks using this same editor.
-Suggestions stay within the existing four-scenario, sixteen-step and action-budget
+Suggestions stay within the four-scenario, 32-step and action-budget
 limits. Saving changed coverage labels changes the plan hash, just like editing
 its steps; previously frozen runs keep their reviewed plan.
 

@@ -4,18 +4,17 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
-import os
 from pathlib import Path
 import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, HTTPRedirectHandler, build_opener
 
-from . import asset_2d, asset_library
+from . import asset_2d, asset_library, muse_settings
 from .core import canonical, digest
 from .muse_chat import CreditLedger, IMAGE_MODEL, IMAGE_MICRO_USD
 from .recovery import atomic_json, exclusive, read_json
 
-ENDPOINT = 'https://api.meta.ai/v1/images/generations'
+ENDPOINT = muse_settings.API_BASE_URL + '/images/generations'
 MAX_RESPONSE = 18 * 1024 * 1024
 BILLING_URL = 'https://dev.meta.ai/billing'
 TERMS_URL = 'https://dev.meta.ai/legal/terms-of-service'
@@ -25,22 +24,15 @@ class ImageUnavailable(ValueError):
     pass
 
 
-def credential():
-    """Reuse Muse's credential in memory; never return it in app state or captures."""
-    key = os.environ.get('META_API_KEY') or os.environ.get('MODEL_API_KEY')
-    if not key:
-        path = Path.home() / '.config/muse/auth.json'
-        try:
-            data = json.loads(asset_library.limited(path, 1_048_576))
-            provider = data['providers']['meta']
-            if provider.get('api_base_url', 'https://api.meta.ai/v1').rstrip('/') != 'https://api.meta.ai/v1':
-                raise ImageUnavailable('Muse Image requires the official Meta API connection')
-            key = provider.get('api_key')
-        except (OSError, KeyError, TypeError, ValueError) as error:
-            raise ImageUnavailable('Sign in to Muse Code with a Meta Model API credential to use Muse Image') from error
-    if not isinstance(key, str) or not key or len(key) > 16384 or '\n' in key or '\r' in key:
-        raise ImageUnavailable('A valid Meta Model API credential is required')
-    return key
+def credential(root):
+    settings = muse_settings.load(root)
+    if settings['mode'] != muse_settings.API_CREDITS:
+        raise ImageUnavailable('Direct artwork generation requires Model API promotional credits. '
+                               'You can still use artwork from the library.')
+    try:
+        return muse_settings.authorized_api_credential(settings)
+    except ValueError as error:
+        raise ImageUnavailable(str(error)) from None
 
 
 def coverage_path(root):
@@ -56,7 +48,7 @@ def verify_coverage(root, balance_micro_usd, *, no_paid_fallback, source=BILLING
     now = datetime.now(timezone.utc)
     ledger = CreditLedger(root).read()
     baseline = sum(row.get('charged_micro_usd', row['reserved_micro_usd']) for row in ledger['requests'].values())
-    body = dict(version=1, credential_sha256=sha256(credential().encode()).hexdigest(),
+    body = dict(version=1, credential_sha256=sha256(credential(root).encode()).hexdigest(),
         balance_micro_usd=balance_micro_usd, ledger_baseline_micro_usd=baseline,
         no_paid_fallback=True, verified_at=now.isoformat(), valid_until=(now+timedelta(hours=24)).isoformat(),
         source=source, model=IMAGE_MODEL, price_micro_usd=IMAGE_MICRO_USD)
@@ -77,18 +69,18 @@ def use_shared_credit_budget(root, authorization):
     if ledger.summary()['blocked'] or ledger.summary()['available_usd'] < IMAGE_MICRO_USD/1_000_000:
         raise ImageUnavailable('The shared Muse credit budget cannot cover another image')
     body = dict(version=2, policy='shared-model-api-budget', model=IMAGE_MODEL,
-        credential_sha256=sha256(credential().encode()).hexdigest(), price_micro_usd=IMAGE_MICRO_USD,
+        credential_sha256=sha256(credential(root).encode()).hexdigest(), price_micro_usd=IMAGE_MICRO_USD,
         authorization=authorization.strip(), authorized_at=datetime.now(timezone.utc).isoformat(),
         source=TERMS_URL, billing_balance_verified=False)
     atomic_json(coverage_path(root), {**body, 'sha256': digest(body)})
     return status(root)
 
 
-def status(root):
+def status(root, *, key=None):
     result = dict(ready=False, model=IMAGE_MODEL, price_usd=IMAGE_MICRO_USD/1_000_000,
                   billing_url=BILLING_URL, reason='Verify active Model API free credits before generating artwork')
     try:
-        key_hash = sha256(credential().encode()).hexdigest()
+        key_hash = sha256((credential(root) if key is None else key).encode()).hexdigest()
         data = read_json(coverage_path(root))
         if data.get('version') == 2:
             if (data.get('sha256') != digest({k:v for k,v in data.items() if k != 'sha256'}) or
@@ -143,10 +135,10 @@ def parameters(request):
     spec = request['specification']
     if canonical(request) != canonical(asset_2d.generation_request(spec)):
         raise ValueError('Image request changed')
-    width, height = asset_2d.describe(spec)['dimensions_px']
+    (width, height), (columns, rows), frames = asset_2d.image_layout(spec)
     prompt = (spec['production']['prompt'] + '\nArt direction: ' + spec['art_direction'] +
-        f"\nOriginal game artwork in a uniform atlas: {spec['grid'][0]} columns and {spec['grid'][1]} rows. "
-        f"Fill the first {spec['frames']} cells in row-major order. Consistent scale, lighting and pivot {spec['pivot']}. " +
+        f"\nOriginal game artwork in a uniform atlas: {columns} columns and {rows} rows. "
+        f"Fill the first {frames} cells in row-major order. Consistent scale, lighting and pivot {spec['pivot']}. " +
         ('Fill terrain cells edge-to-edge. ' if 'tileset' in spec or spec['kind'] == 'tile' else
          'Keep each subject fully inside its cell, with generous empty margins. ') +
         'No labels, text, logos, borders or watermarks. ')
@@ -235,10 +227,10 @@ def generate(root, folder, turn_id, request, *, budget=None, progress=None):
             if sha256(raw).hexdigest() != saved['source_sha256']:
                 raise ValueError('Saved Muse Image pixels changed; no image was resent')
         else:
-            connection = status(root)
+            key = credential(root)
+            connection = status(root, key=key)
             if not connection['ready']:
                 raise ImageUnavailable(connection['reason'])
-            key = credential()
             ledger.reserve(ledger_id, budget=budget, model=IMAGE_MODEL,
                            verified_ceiling_micro_usd=connection['verified_ceiling_micro_usd'])
             pending = dict(version=1, status='dispatching', binding=binding, model=IMAGE_MODEL,

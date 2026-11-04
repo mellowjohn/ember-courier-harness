@@ -104,7 +104,10 @@ async function checkTiles({page,frame,stage,mobile,errors,requests}) {
   if(mobile)await frame.locator('#repeat').tap();else await frame.locator('#repeat').click();
   await frame.locator('#repeat-state').filter({hasText:'Single tile'}).waitFor();
   const api=await frame.locator('body').evaluate(async()=>{
-    const atlas=await EmberSprites.load(),canvas=document.createElement('canvas');canvas.width=canvas.height=80;
+    const connected=await EmberSprites.load(),canvas=document.createElement('canvas');canvas.width=canvas.height=80;
+    const legacySpec={...EMBER_ASSET.spec,tileset:{...EMBER_ASSET.spec.tileset}};
+    delete legacySpec.tileset.edge_mode;
+    const atlas=await EmberSprites.load({...EMBER_ASSET,spec:legacySpec});
     const ctx=canvas.getContext('2d'),rows=[['grass','wall'],['water',null]];
     ctx.imageSmoothingEnabled=true;ctx.globalCompositeOperation='xor';
     const drawn=atlas.drawMap(ctx,rows,4,5,{scale:2});
@@ -114,10 +117,39 @@ async function checkTiles({page,frame,stage,mobile,errors,requests}) {
     const actor=atlas.createPlayer();actor.update(100);
     const scene=await EmberSprites.createScene({version:1,entities:[{id:'terrain',asset_ref:'tiles',machine:null,required_clips:['default']}]},{tiles:EMBER_ASSET});
     const terrain=scene.createEntity('terrain');terrain.drawMap(ctx,rows);const entityDraws=scene.diagnostics()[0].draws;
+    ctx.clearRect(0,0,80,80);
+    const strip=[['grass',0,'grass']];
+    connected.drawMap(ctx,strip);
+    const stripColors=[[0,7],[15,7],[16,7],[31,7],[47,7],[15,0],[16,0],[16,15]].map(([x,y])=>color(x,y));
+    ctx.clearRect(0,0,80,80);
+    connected.drawMap(ctx,strip,0,0,{wrapX:true});
+    const wrapped=[color(0,7),color(47,7)];
+    ctx.clearRect(0,0,80,80);
+    connected.drawMap(ctx,[['grass',null],['grass','grass']]);
+    const corner=[color(15,16),color(14,16),color(16,1)];
+    ctx.clearRect(0,0,80,80);
+    connected.drawMap(ctx,strip,0.25,0.25,{scale:.9});
+    const scaledJoin=[color(14,6),color(29,6)];
+    ctx.clearRect(0,0,80,80);
+    const variants={grass:{6:'wall',38:'water'}};
+    atlas.drawMap(ctx,[['grass','grass'],['grass',null]],0,0,{variants});
+    atlas.drawMap(ctx,[['grass','grass'],['grass','grass']],32,0,{variants});
+    const authored=[color(0,0),color(32,0),color(16,0)];
     return {drawn,colors,restored,frame:actor.frame,solid:atlas.solidAt(rows,1,0),empty:atlas.solidAt(rows,1,1),entityDraws,
+      stripColors,wrapped,corner,scaledJoin,authored,
       previewColor:Array.from(document.querySelector('canvas').getContext('2d').getImageData(470,45,1,1).data)};
   });
-  assert.deepEqual(api,{drawn:3,colors:[[48,128,64,255],[128,96,80,255],[48,80,176,255],[0,0,0,0]],
+  const {stripColors,wrapped,corner,scaledJoin,authored,...legacy}=api;
+  const grass=[48,128,64,255], dark=stripColors[0];
+  assert(dark[0]<grass[0] && dark[3]===255);
+  assert.deepEqual(stripColors.slice(0,5),[dark,grass,grass,grass,dark]);
+  assert.deepEqual(stripColors[5],stripColors[6]);
+  assert(stripColors[5][0]>grass[0] && stripColors[7][0]<grass[0]);
+  assert.deepEqual(wrapped,[grass,grass]);
+  assert.deepEqual(corner,[dark,grass,[0,0,0,0]]);
+  assert.deepEqual(scaledJoin,[grass,grass]);
+  assert.deepEqual(authored,[[128,96,80,255],[48,80,176,255],grass]);
+  assert.deepEqual(legacy,{drawn:3,colors:[[48,128,64,255],[128,96,80,255],[48,80,176,255],[0,0,0,0]],
     restored:true,frame:0,solid:true,empty:false,entityDraws:3,previewColor:[128,96,80,255]});
   const viewport=mobile?'mobile':'desktop';
   await page.screenshot({path:path.join(output,stage+'-'+viewport+'.png')});

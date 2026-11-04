@@ -1,7 +1,7 @@
 """Named animation contracts and actual chat/retention boundaries; no live model calls."""
 from contextlib import redirect_stdout
 from copy import deepcopy
-from io import StringIO
+from io import BytesIO, StringIO
 import json
 from pathlib import Path
 import shutil
@@ -11,11 +11,13 @@ import unittest
 from unittest.mock import patch
 
 from jsonschema import Draft202012Validator
+from PIL import Image
 
 from ember_harness import asset_2d, asset_library, asset_workshop, chat_build, gameplay, muse_image, task_run
 from ember_harness.local_ui import App
 from ember_harness.muse_chat import decode_structured, structured_schema
 from test_muse_chat import wire_reply
+from tools.sprite_check import fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -73,6 +75,24 @@ class SpritePlayerTests(unittest.TestCase):
         runtime = Path(asset_2d.__file__).with_name('asset_lab') / 'sprite-player.js'
         result = subprocess.run([node, str(ROOT / 'tests/sprite_player_test.js'), str(runtime)], capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_directional_stride_requires_a_loop_and_actual_distinct_poses(self):
+        spec, raw = fixture()
+        spec['facing'] = 'right'
+        asset_2d.inspect_png(raw, spec)
+        spec['animations']['walk']['loop'] = False
+        with self.assertRaisesRegex(ValueError, 'require a loop'):
+            asset_2d.describe(spec)
+        spec['animations']['walk']['loop'] = True
+        image = Image.open(BytesIO(raw)).convert('RGBA')
+        w, h = spec['frame_size']
+        columns = spec['grid'][0]
+        for frame in spec['animations']['walk']['frames']:
+            image.paste(image.crop((0, 0, w, h)), (frame % columns * w, frame // columns * h))
+        stream = BytesIO()
+        image.save(stream, 'PNG')
+        with self.assertRaisesRegex(ValueError, 'distinct drawn poses'):
+            asset_2d.inspect_png(stream.getvalue(), spec)
 
     def test_named_clips_survive_native_model_schema_transport(self):
         spec = deepcopy(self.spec)

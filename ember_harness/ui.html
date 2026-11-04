@@ -29,6 +29,7 @@
 @media(max-width:999px){.layout{display:block}.sidebar{position:static;height:auto;display:grid;grid-template-columns:1fr 1fr;padding:14px 18px;gap:12px}.sidebar-footer,.session-heading{display:none}.session-scroll{grid-column:1/-1;max-height:78px}.session-scroll nav{display:flex;gap:8px;overflow:auto}.session-item{flex:0 0 170px;margin:0;padding:8px}.new-button{text-align:center;padding:8px}.content{padding:18px}.topbar{padding:10px 18px}#interactive-workbench{grid-template-columns:minmax(0,1fr)}.conversation-scroll{max-height:46vh}.composer{position:static}.mobile-preview-link{display:inline-block;font-size:12px}.heading{flex-wrap:wrap}.heading h1{font-size:22px}.heading .actions{flex-wrap:wrap}.preview-column{padding:16px}.preview-column iframe{height:440px!important}#workspace-tools{padding:18px}}
 @media(max-width:620px){.brief-grid{grid-template-columns:minmax(0,1fr)}.heading>div{max-width:100%}.heading .actions{margin-top:5px}.heading .button{font-size:11px}.conversation-scroll{padding:16px}.conversation-heading{padding:14px 16px}.preview-column iframe{height:360px!important}.composer select{max-width:140px}.game-toolbar .button{font-size:11px}.playtest-area .button{margin-right:0}#workspace-tools .button{max-width:100%;white-space:normal}.tool-heading .button{font-size:12px;padding:7px}}
 .voice-input{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.voice-input small{flex:1;min-width:160px;font-size:11px}.voice-input.listening .voice-button{border-color:var(--accent);color:var(--accent)}.fix-steps{list-style:none;padding:0;margin:18px 0;display:grid;gap:10px}.fix-steps li{display:flex;gap:10px;align-items:center;color:var(--ink-muted);font-size:12px}.fix-steps li::before{content:'';width:9px;height:9px;border-radius:50%;border:1px solid #69816f;flex:none}.fix-steps li[data-state=done]::before{background:#8cc59d;border-color:#8cc59d}.fix-steps li[data-state=current]{color:var(--accent-soft)}.fix-steps li[data-state=current]::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px #f4af7318}.fix-evidence{border-left:2px solid #668b70;padding-left:12px;font-size:12px}.fix-evidence p{margin:5px 0}
+.topbar-actions{display:flex;align-items:center;gap:10px}.topbar-actions .button{padding:5px 9px}.muse-confirm{display:flex;align-items:flex-start;gap:8px}.muse-confirm input{width:auto;margin-top:4px}
 </style><link rel="stylesheet" href="/ui-library.css"><script src="/ui-library.js"></script><script src="/voice-input.js"></script></head><body>
 <div class="layout"><aside class="sidebar" aria-label="Sessions">
 <div class="logo"><span class="mark" aria-hidden="true">◈</span><div><strong>Ember Harness</strong><small>GAME CREATION STUDIO</small></div></div>
@@ -37,7 +38,7 @@
 <div class="sidebar-forge" aria-hidden="true"><span class="section-label">A spark is all it takes</span><strong>Small idea.<br>Whole new world.</strong><span class="forge-line"></span></div>
 <div class="sidebar-footer"><strong><span class="dot" style="background:#8cc59d"></span> Local workspace</strong>Sessions and evidence saved on this computer.</div>
 </aside><div class="workspace">
-<header class="topbar"><span><button id="home-link" type="button" aria-current="page">Home</button><span id="session-crumb" hidden><span aria-hidden="true">/</span> <strong>Session</strong></span></span><span class="badge" id="status">Connecting</span></header>
+<header class="topbar"><span><button id="home-link" type="button" aria-current="page">Home</button><span id="session-crumb" hidden><span aria-hidden="true">/</span> <strong>Session</strong></span></span><div class="topbar-actions"><button id="muse-settings" class="button" type="button" disabled>Muse settings</button><span class="badge" id="status">Connecting</span></div></header>
 <main class="content">
 <p id="connection-error" role="alert" hidden></p><p id="error" role="alert"></p>
 <section id="home-screen" aria-labelledby="home-title">
@@ -60,10 +61,35 @@
 <div class="rename" id="rename-area" hidden><label>Session name<input id="rename-name" maxlength="120"></label><div class="actions"><button id="rename-confirm" class="button">Save changes</button><button id="rename-cancel" class="button">Cancel</button></div></div><p id="save-note" role="status"></p>
 <details class="session-details"><summary>Session details</summary><div class="metrics"><div class="metric"><span class="metric-label">Decisions recorded</span><strong id="decision-count">0</strong><small>Owner review history</small></div><div class="metric"><span class="metric-label">Pending reviews</span><strong id="pending-count">0</strong><small>Waiting for your response</small></div><div class="metric"><span class="metric-label">Session progress</span><strong id="progress">Ready</strong><small id="progress-detail">Start a workflow to begin</small></div></div>
 </details><div id="workspace-nav"></div>
-<details id="project-brief" class="brief" hidden><summary>Project brief <span id="brief-summary" class="muted"></span></summary><p class="subtitle">Ember remembers your answers as you chat. Tell it whenever you want to change direction.</p><div id="brief-answers"></div><button id="brief-chat" class="button" type="button">Continue planning in chat</button><p id="brief-status" class="brief-status" role="status"></p></details><section id="chat" role="tabpanel"><p id="recovery-note" class="recovery-notice" hidden></p><div class="workbench"><div class="chat-column"><div id="messages" class="chat-thread" role="log" aria-label="Conversation"></div><section id="agent-progress" class="panel" aria-label="Agent progress" aria-live="polite" hidden></section><section id="review" aria-label="Workflow review"></section><form id="chat-form" class="composer"><label for="chat-input" class="section-label">Message Ember</label><textarea id="chat-input" maxlength="8000" placeholder="What would you like to work on?" required></textarea><div class="actions"><label>Model <select id="chat-provider"><option value="muse">Muse · free credits</option></select></label><button id="chat-send" class="button primary" type="submit" disabled>Send message</button></div><p id="model-note" class="subtitle"></p></form></div><aside class="preview-column" aria-label="Game preview workspace"><h2>Play & refine</h2><p class="subtitle">Try your latest approved build while you chat.</p><section id="build-result" aria-label="Build result"></section></aside></div></section><section id="activity" role="tabpanel" hidden><h3>Agent activity</h3><pre id="chat-log">No messages yet.</pre><h3>Workflow execution log</h3><pre id="log"></pre><h3>Audit trail</h3><pre id="audit"></pre><p class="hash" id="store"></p></section><section id="report" role="tabpanel" hidden><button id="verify" class="button">Verify current evidence</button><pre id="verification" hidden></pre><pre id="result">Complete a workflow to see its report.</pre></section>
+<details id="project-brief" class="brief" hidden><summary>Project brief <span id="brief-summary" class="muted"></span></summary><p class="subtitle">Ember remembers your answers as you chat. Tell it whenever you want to change direction.</p><div id="brief-answers"></div><button id="brief-chat" class="button" type="button">Continue planning in chat</button><p id="brief-status" class="brief-status" role="status"></p></details><section id="chat" role="tabpanel"><p id="recovery-note" class="recovery-notice" hidden></p><div class="workbench"><div class="chat-column"><div id="messages" class="chat-thread" role="log" aria-label="Conversation"></div><section id="agent-progress" class="panel" aria-label="Agent progress" aria-live="polite" hidden></section><section id="review" aria-label="Workflow review"></section><form id="chat-form" class="composer"><label for="chat-input" class="section-label">Message Ember</label><textarea id="chat-input" maxlength="8000" placeholder="What would you like to work on?" required></textarea><div class="actions"><label>Model <select id="chat-provider"><option value="muse">Muse Spark 1.3</option></select></label><button id="chat-send" class="button primary" type="submit" disabled>Send message</button></div><p id="model-note" class="subtitle"></p></form></div><aside class="preview-column" aria-label="Game preview workspace"><h2>Play & refine</h2><p class="subtitle">Try your latest approved build while you chat.</p><section id="build-result" aria-label="Build result"></section></aside></div></section><section id="activity" role="tabpanel" hidden><h3>Agent activity</h3><pre id="chat-log">No messages yet.</pre><h3>Workflow execution log</h3><pre id="log"></pre><h3>Audit trail</h3><pre id="audit"></pre><p class="hash" id="store"></p></section><section id="report" role="tabpanel" hidden><button id="verify" class="button">Verify current evidence</button><pre id="verification" hidden></pre><pre id="result">Complete a workflow to see its report.</pre></section>
 <details><summary class="subtitle">Sample workflow and technical details</summary><button id="run-workflow" class="button" hidden>Start sample workflow</button><p class="notice">Ember Courier sample: scope → concept → asset acceptance → bug fix → verification. Each approval applies only to the packet you review. <span id="mode"></span> Background work continues when Ember closes. Interrupted workflows can resume from saved checkpoints. Uncertain partial writes require inspection.</p></details>
 </div></main></div></div>
-<dialog id="new-dialog" aria-labelledby="new-title"><form id="new-form"><h2 id="new-title">Create a new session</h2><p id="new-description">Name this conversation and choose where to save its project.</p><label>Session name<input id="session-name" maxlength="120" placeholder="e.g. Courier asset review" required autocomplete="off"></label><label style="margin-top:16px">Model<select id="new-provider"><option value="muse">Muse · up to $150 free credits</option></select></label><label style="margin-top:16px">Save projects in<input id="project-parent" maxlength="2048" required autocomplete="off" spellcheck="false"></label><div class="actions"><button id="project-browse" class="button" type="button">Choose folder…</button></div><p class="subtitle">Ember creates a separate project folder here and remembers this location for new sessions.</p><p class="dialog-error" id="new-error" role="alert"></p><div class="actions"><button id="start" class="button primary" type="submit">Create session</button><button id="cancel-new" class="button" type="button">Cancel</button></div><p class="subtitle">Your conversation is saved with this session. Workflows ask for approval before acting.</p></form></dialog>
+<dialog id="new-dialog" aria-labelledby="new-title"><form id="new-form"><h2 id="new-title">Create a new session</h2><p id="new-description">Name this conversation and choose where to save its project.</p><label>Session name<input id="session-name" maxlength="120" placeholder="e.g. Courier asset review" required autocomplete="off"></label><label style="margin-top:16px">Model<select id="new-provider"><option value="muse">Muse Spark 1.3</option></select></label><label style="margin-top:16px">Save projects in<input id="project-parent" maxlength="2048" required autocomplete="off" spellcheck="false"></label><div class="actions"><button id="project-browse" class="button" type="button">Choose folder…</button></div><p class="subtitle">Ember creates a separate project folder here and remembers this location for new sessions.</p><p class="dialog-error" id="new-error" role="alert"></p><div class="actions"><button id="start" class="button primary" type="submit">Create session</button><button id="cancel-new" class="button" type="button">Cancel</button></div><p class="subtitle">Your conversation is saved with this session. Workflows ask for approval before acting.</p></form></dialog>
+<dialog id="muse-dialog" aria-labelledby="muse-title">
+  <form id="muse-form">
+    <h2 id="muse-title">Muse settings</h2>
+    <p>Ember uses the Muse account on this computer for all sessions in this installation.</p>
+    <label>Connection<select id="muse-billing">
+      <option value="subscription">My Muse Code subscription</option>
+      <option value="api_credits">My Model API promotional credits</option>
+    </select></label>
+    <div id="muse-subscription-help">
+      <p>Install Muse Code and sign in there with the Meta account that holds your subscription. Ember checks your allowance before sending a model request.</p>
+      <a href="https://dev.meta.ai/docs/muse-code/subscriptions" target="_blank" rel="noopener noreferrer">Muse Code subscription setup</a>
+      <div class="actions"><button id="muse-check" class="button" type="button">Check subscription</button></div>
+      <p id="muse-check-note" class="subtitle" role="status"></p>
+    </div>
+    <div id="muse-api-help" hidden>
+      <p>Set up your own Meta Model API key in Muse Code. Check your promotional balance in Meta billing before enabling this connection.</p>
+      <label class="muse-confirm"><input id="muse-no-paid-fallback" type="checkbox"> My Model API account has active promotional credits and no payment method can be charged.</label>
+    </div>
+    <p id="muse-error" class="dialog-error" role="alert"></p>
+    <div class="actions">
+      <button id="muse-save" class="button primary" type="submit">Save connection</button>
+      <button id="muse-cancel" class="button" type="button">Cancel</button>
+    </div>
+  </form>
+</dialog>
 <script>
 
 const token=location.hash.slice(1)||sessionStorage.getItem('ember-token')||'';sessionStorage.setItem('ember-token',token);history.replaceState(null,'',location.pathname);
@@ -104,7 +130,7 @@ async function respond(ref,choice,label){
   const sid=activeSession?.id;let startBuild=null;
   busy=true;document.querySelectorAll('.decision').forEach(b=>b.disabled=true);
   const loading=isBuild&&choice==='approve'?beginBuildLoading(ref):null;
-  if(isBuild&&choice==='approve'&&lastState?.chat_activity?.kind==='playtest_fix'&&reviewed?.build?.turn_id===lastState.chat_activity.turn_id){fileApply={sid:activeSession.id,ref,state:'applying'};renderAgentActivity(lastState)}
+  if(isBuild&&choice==='approve'&&lastState?.chat_activity&&reviewed?.build?.turn_id===lastState.chat_activity.turn_id){fileApply={sid:activeSession.id,ref,state:'applying'};renderAgentActivity(lastState)}
   try{
     const result=await api('decide',{ref,choice,quote});
     if(isBuild&&choice==='approve'&&result.build?.status==='completed')autoPreviewRef=ref;
@@ -166,10 +192,11 @@ function renderReview(s){
     for(const [key,label] of [['features','Ordered build tasks'],['out_of_scope','Out of scope'],['done_criteria','Project completion criteria']]){
       el('h4',label,p);const list=el('ol',undefined,p);doc.scope[key].forEach(text=>el('li',text,list));
     }
-    el('p','Estimated artwork: '+Object.entries(doc.scope.asset_budget).map(([name,count])=>name+': '+count).join(' · ')+' (planning only)',p);
+    const estimates=Object.entries(doc.scope.asset_budget).map(([name,count])=>name+': '+count);
+    el('p',estimates.length?'Estimated artwork: '+estimates.join(' · ')+' (planning only)':'Artwork estimates were left unspecified.',p);
     detail('Art direction',doc.art_direction,p);
     el('p','Approval saves this project scope for up to 24 hours. Each build still needs its exact review, and every changed asset needs acceptance. Tasks are not marked complete by applying files.',p);
-    el('p','Approving starts Muse on the first selected task and keeps you in chat. A Building mode notice shows its progress; you review the resulting changes before applying them.',p).className='subtitle';
+    el('p','Approving starts Muse on the selected task. For a new visual game, Muse Image creates missing sprites, scenery and effects in the first playable. Review the artwork and build in chat before applying them.',p).className='subtitle';
     const amendment=body.project_plan.amendment,needsAck=!!amendment?.warnings.length;
     if(amendment){detail('Changes from the previous scope',amendment,p);if(needsAck)el('p','Review and acknowledge these scope changes separately before approving the amendment.',p)}
     const actions=el('div',undefined,p);actions.className='actions';
@@ -296,6 +323,18 @@ function renderQualityCheck(s){
   el('p',labels[report.status]||'Verification incomplete',area).setAttribute('role','status');
   const observed=report.observations?.candidate;
   el('p','Gameplay assertions: '+(observed?.gameplay?.outcome||'not run')+' · AI visual review: '+(report.verdict?'completed':'not completed'),area);
+  if(observed?.gameplay?.scenarios?.length){
+    const steps=el('details',undefined,area);el('summary','View gameplay steps and observations',steps);
+    observed.gameplay.scenarios.forEach((result,index)=>{
+      el('h5',result.name+' · '+result.viewport+' · '+result.outcome,steps);
+      const list=el('ol',undefined,steps);
+      result.steps.forEach(row=>{
+        const step=report.checks?.scenarios[index]?.steps[row.index];
+        const label=step?gameplayLabels[step.action]||step.action:'Check';
+        el('li',label+' · '+row.status+' · '+row.observed,list);
+      });
+    });
+  }
   if(report.verdict)el('p',report.verdict.summary,area);
   if(report.issues?.length){const list=el('ul',undefined,area);for(const issue of report.issues)el('li',issue,list);}
   if(report.status!=='stale'&&observed){
@@ -474,6 +513,43 @@ function renderScreen(){
     $('home-link').removeAttribute('aria-current');
   }
 }
+function updateMuseSettings(){
+  const usesCredits=$('muse-billing').value==='api_credits';
+  $('muse-api-help').hidden=!usesCredits;
+  $('muse-subscription-help').hidden=usesCredits;
+  $('muse-no-paid-fallback').required=usesCredits;
+}
+$('muse-settings').onclick=()=>{
+  $('muse-billing').value=lastState.models.billing_mode;
+  $('muse-no-paid-fallback').checked=false;
+  $('muse-error').textContent='';
+  $('muse-check-note').textContent='';
+  updateMuseSettings();
+  $('muse-dialog').showModal();
+};
+$('muse-billing').onchange=updateMuseSettings;
+$('muse-check').onclick=async()=>{
+  $('muse-check').disabled=true;
+  $('muse-check-note').textContent='Checking your Muse Code allowance…';
+  try{
+    await api('muse-settings/check',{});
+    $('muse-check-note').textContent='Your Muse Code subscription has available usage.';
+  }catch(error){$('muse-check-note').textContent=error.message}
+  finally{$('muse-check').disabled=false}
+};
+$('muse-cancel').onclick=()=>$('muse-dialog').close();
+$('muse-form').onsubmit=async event=>{
+  event.preventDefault();
+  $('muse-save').disabled=true;
+  $('muse-error').textContent='';
+  try{
+    await api('muse-settings',{mode:$('muse-billing').value,no_paid_fallback:$('muse-no-paid-fallback').checked});
+    $('muse-dialog').close();
+    chatKey='';
+    await refresh();
+  }catch(error){$('muse-error').textContent=error.message}
+  finally{$('muse-save').disabled=false}
+};
 $('home-link').onclick=()=>{
   if(!$('home-screen').hidden)return;
   homeSelected=true;
@@ -484,7 +560,7 @@ $('home-link').onclick=()=>{
 async function refresh(background=false){if(stateRefresh){await stateRefresh;if(background)return;}const request=refreshState();stateRefresh=request;try{return await request}finally{if(stateRefresh===request)stateRefresh=null}}
 async function refreshState(){try{const s=await api('state');lastState=s;activeSession=s.session;renderScreen();renderProjectLocation(s);renderBrief(s);renderChat(s);renderBuild(s);$('recover').hidden=!s.recovery_available;$('run-workflow').hidden=!s.session||s.session.workflow_started!==false;$('recovery-note').hidden=!s.recovery_available;$('recovery-note').textContent=s.recovery_error||'This workflow stopped. Resume it from the last saved checkpoint; recorded approvals remain in place.';$('save').disabled=!s.session;$('session-title').textContent=s.session?.name||'';$('saved').textContent=s.session?'Created '+new Date(s.session.created_at).toLocaleDateString()+' · Saved '+new Date(s.session.updated_at).toLocaleString():'';$('status').textContent=!$('home-screen').hidden?'Ready':(sending||s.chat_activity?.state==='active')?'Working':s.build?.requests.some(r=>!r.decision)?'Awaiting approval':s.status;$('mode').textContent='Model: Muse. Describe a browser prototype in chat, review its diff, and approve changes inline. Sample workflows remain separate.';$('decision-count').textContent=s.requests.filter(r=>r.decision).length;$('pending-count').textContent=s.requests.filter(r=>!r.decision).length;$('progress').textContent=({idle:'Ready',running:'In progress',completed:'Complete',stopped:'Stopped',interrupted:'Interrupted'})[s.status]||s.status;$('progress-detail').textContent=s.status==='running'?'Workflow active':s.status==='completed'?'Evidence ready to verify':s.status==='idle'?'Ready for your message':'Open Activity for details';$('log').textContent=s.log||'No sample workflow started.';$('chat-log').textContent=(s.chat_activity?.events||[]).map(event=>new Date(event.at).toLocaleTimeString()+' · '+event.title).join('\n')||'No recorded request activity yet.';$('audit').textContent=JSON.stringify({sample_workflow:s.audit,chat_builds:s.build?.audit||[]},null,2);$('store').textContent=s.store;$('verify').disabled=s.status!=='completed'&&!s.build?.completed.length;$('result').textContent=s.report||(s.build?.completed.length?'Browser build complete.\nProject: '+s.build.project+'\nSHA-256: '+s.build.completed[s.build.completed.length-1].sha256+'\nVerify current evidence to refresh file and approval checks.':'Approve a build in chat or complete a sample workflow to see results.');renderReview(s);
   $('connection-error').hidden=true;
-  $('new-session').disabled=$('home-create').disabled=false;
+  $('new-session').disabled=$('home-create').disabled=$('muse-settings').disabled=false;
 }catch(error){
   $('connection-error').textContent=error.message;
   $('connection-error').hidden=false;
@@ -1206,11 +1282,12 @@ function renderBrief(s){
 }
 
 const gameplayDrafts=new Map();let gameplayDraft=null,gameplayReportKey='';
-const gameplayLabels={click:'Click',tap:'Touch tap',press:'Press key',hold:'Hold key',wait:'Wait',visible:'Visible',hidden:'Hidden or absent',text:'Text equals',contains:'Text contains',number_at_least:'Number at least'};
+const gameplayLabels={click:'Click',tap:'Touch tap',press:'Press key',hold:'Hold key',wait:'Wait',visible:'Visible',hidden:'Hidden or absent',text:'Text equals',contains:'Text contains',number_at_least:'Number at least',sprite_state:'Sprite state and drawn frames'};
 function gameplayDefault(action,old={}){
   if(action==='press')return {action,key:'Space'};
   if(action==='hold')return {action,key:'ArrowRight',ms:400};
   if(action==='wait')return {action,ms:500};
+  if(action==='sprite_state')return {action,entity:old.entity||'hero',value:'idle',frames:1};
   return {action,selector:old.selector||'canvas',...(['text','contains'].includes(action)?{value:'0'}:action==='number_at_least'?{value:1}:{})};
 }
 function gameplayEditor(){
@@ -1244,6 +1321,12 @@ function gameplayEditor(){
         key.value=step.key;key.onchange=()=>{step.key=key.value;changed()};
         if(step.action==='hold')input(row,'Milliseconds',step.ms,value=>step.ms=Number(value)).type='number';
       }else if(step.action==='wait')input(row,'Milliseconds',step.ms,value=>step.ms=Number(value)).type='number';
+      else if(step.action==='sprite_state'){
+        input(row,'Sprite entity ID',step.entity,value=>step.entity=value).maxLength=32;
+        input(row,'Expected state',step.value,value=>step.value=value).maxLength=32;
+        const frames=input(row,'Distinct drawn frames',step.frames,value=>step.frames=Number(value));
+        frames.type='number';frames.min=1;frames.max=2;
+      }
       else {
         input(row,'Target',step.selector,value=>step.selector=value).placeholder='canvas, #score or [data-testid="start"]';
         if('value' in step){const value=input(row,step.action==='number_at_least'?'Minimum score':'Expected text',step.value,value=>step.value=step.action==='number_at_least'?Number(value):value);if(step.action==='number_at_least')value.type='number'}
@@ -1251,7 +1334,7 @@ function gameplayEditor(){
       const remove=el('button','Remove step '+(j+1),row);remove.type='button';remove.className='button';remove.onclick=()=>{scenario.steps.splice(j,1);changed();gameplayEditor()};
     }
     const actions=el('div',undefined,box);actions.className='actions';
-    const add=el('button','Add step',actions);add.type='button';add.className='button';add.disabled=scenario.steps.length>=16;add.onclick=()=>{scenario.steps.push(gameplayDefault('visible'));changed();gameplayEditor()};
+    const add=el('button','Add step',actions);add.type='button';add.className='button';add.disabled=scenario.steps.length>=32;add.onclick=()=>{scenario.steps.push(gameplayDefault('visible'));changed();gameplayEditor()};
     const remove=el('button','Remove scenario',actions);remove.type='button';remove.className='button';remove.onclick=()=>{d.plan.scenarios.splice(i,1);changed();gameplayEditor()};
   }
   const add=el('button','Add scenario',area);add.type='button';add.className='button';add.disabled=d.plan.scenarios.length>=4;
@@ -1269,7 +1352,7 @@ function renderGameplay(s){
   if(!$('gameplay-plan')){
     const area=workspacePanel('gameplay-plan','Gameplay checks','playtest-controls');
     if($('findings'))$('findings').after(area);else $('playtest-controls').prepend(area);el('p','Save the actions and outcomes your game must preserve. Each scenario starts a fresh game. Canvas-only scores need a visible score element to be checked.',area);
-    el('p','Choose targets by tag, #id or [data-testid="name"]. Include an expectation in every scenario. Limits: four scenarios, sixteen steps each, and twenty seconds of actions in total.',area).className='subtitle';
+    el('p','Choose targets by tag, #id or [data-testid="name"]. Include an expectation in every scenario. Use up to four scenarios, 32 steps each, and 90 seconds of actions in total.',area).className='subtitle';
     const edit=el('button','Edit gameplay checks',area);edit.id='gameplay-edit';edit.type='button';edit.className='button';
     const form=el('form',undefined,area);form.id='gameplay-form';form.hidden=true;edit.onclick=()=>{form.hidden=!form.hidden;edit.textContent=form.hidden?'Edit gameplay checks':'Close checks editor'};el('div',undefined,form).id='gameplay-editor';const actions=el('div',undefined,form);actions.className='actions';
     const save=el('button','Save gameplay plan',actions);save.id='gameplay-save';save.type='submit';save.className='button';
@@ -1327,19 +1410,23 @@ function activityTaskText(value){
 function renderAgentActivity(s){
   let a=s.chat_activity;
   if(localRequest&&localRequest.sid===s.session?.id&&a?.turn_id!==localRequest.turn_id)a=localRequest;
-  const fix=a?.kind==='playtest_fix',proposal=fix?s.build?.requests.find(r=>r.payload.body.build.turn_id===a.turn_id):null;
+  const fix=a?.kind==='playtest_fix',proposal=a?s.build?.requests.find(r=>r.payload.body.build.turn_id===a.turn_id):null;
   const applied=proposal&&s.build?.completed.some(r=>r.request_ref===proposal.ref);
-  if(fix&&applied)a={...a,phase:'applied',title:'Fix applied',state:'complete'};
-  if(fix&&fileApply?.sid===s.session?.id&&fileApply.ref===proposal?.ref)a={...a,phase:fileApply.state,title:fileApply.state==='applying'?'Applying approved fix':'File update stopped',state:fileApply.state==='applying'?'active':'failed',error:fileApply.error};
+  if(applied)a={...a,phase:'applied',title:fix?'Fix applied':'Changes applied',state:'complete'};
+  if(!applied&&proposal&&fileApply?.sid===s.session?.id&&fileApply?.ref===proposal.ref)a={...a,phase:fileApply.state,
+    title:fileApply.state==='applying'?(fix?'Applying approved fix':'Applying approved changes'):'File update stopped',
+    state:fileApply.state==='applying'?'active':'failed',error:fileApply.error};
   const area=$('agent-progress');
   const review=a?.phase==='awaiting_review'&&((s.build?.requests||[]).some(r=>!r.decision&&r.payload.body.build.turn_id===a.turn_id)||s.project_plan?.pending?.payload.body.project_plan.source_turn_id===a.turn_id);
-  area.hidden=!a||a.state==='complete'&&!review&&!fix;
+  area.hidden=!a||a.state==='complete'&&!review&&!fix&&!applied;
   if(area.hidden)return;
   const elapsed=Math.max(0,Math.floor((Date.now()-Date.parse(a.started_at))/1000));
   const task=s.project_plan?.tasks.find(t=>t.id===s.project_plan.selected_task),planBuild=a.kind==='plan_build';
   const taskText=activityTaskText(a.plan_start?.title||task?.title||(fix?'Your playtest notes':''));
   const quality=s.build?.quality_check,issues=review&&quality?.status==='needs_changes';
-  const key=JSON.stringify([a.turn_id,a.kind,a.plan_start,a.state,a.phase,a.title,a.detail,a.error,a.read_files,a.proposed_files,a.generating_asset,review,issues,taskText.full,a.events,a.diagnosis,a.execution]);
+  const changes=a.file_changes||[];
+  const key=JSON.stringify([a.turn_id,a.kind,a.plan_start,a.state,a.phase,a.title,a.detail,a.error,a.read_files,a.proposed_files,
+    changes,a.file_changes_exact,a.generating_asset,review,issues,taskText.full,a.events,a.diagnosis,a.execution]);
   const updateCounters=()=>{const timer=$('agent-elapsed');if(!timer)return;
     timer.textContent=(elapsed<60?elapsed+'s':Math.floor(elapsed/60)+'m '+elapsed%60+'s');
     timer.setAttribute('aria-label',elapsed+' seconds elapsed');
@@ -1353,6 +1440,9 @@ function renderAgentActivity(s){
   };
   if(area.dataset.activityKey===key){updateCounters();return;}
   const same=area.dataset.turnId===a.turn_id,expanded=same&&!!area.querySelector('.agent-history')?.open,diagnosisOpen=same&&!!area.querySelector('.fix-evidence')?.open;
+  const openDiffs=new Map(same?[...area.querySelectorAll('details[data-diff-path][open]')]
+    .map(detail=>[detail.dataset.diffPath,detail.querySelector('pre').scrollTop]):[]);
+  const focusedDiff=same&&area.contains(document.activeElement)?document.activeElement.closest('details[data-diff-path]')?.dataset.diffPath:null;
   area.dataset.turnId=a.turn_id;area.dataset.activityKey=key;area.dataset.state=issues?'attention':a.state;area.replaceChildren();area.setAttribute('aria-live','off');
   const titles={saved:'Starting your request',context:fix?'Reading notes and game files':'Reading your project',
     provider_starting:'Starting Muse',muse_working:planBuild?'Building your game':fix?'Preparing the fix':'Preparing a response',
@@ -1364,9 +1454,9 @@ function renderAgentActivity(s){
   status.setAttribute('role','status');if(issues)status.dataset.tone='danger';
   if(a.state==='active'){const pulse=el('span');pulse.className='agent-live-dot';pulse.setAttribute('aria-hidden','true');status.querySelector(':scope > .ember-icon')?.remove();status.prepend(pulse);el('span','',head).id='agent-elapsed';}
   if(taskText.short){const label=el('p',taskText.short,area);label.className='agent-task';label.setAttribute('aria-label','Current task');}
-  if(planBuild){const badge=el('span',a.state==='active'?'Plan approved':issues?'Needs changes':review?'Review ready':'Stopped',head);badge.id='plan-build-notice';badge.className='agent-mode';badge.setAttribute('role','status');badge.setAttribute('aria-live','polite');}
+  if(planBuild){const badge=el('span',applied?'Applied':a.state==='active'?'Plan approved':issues?'Needs changes':review?'Review ready':'Stopped',head);badge.id='plan-build-notice';badge.className='agent-mode';badge.setAttribute('role','status');badge.setAttribute('aria-live','polite');}
   const edited=a.proposed_files?.length?a.proposed_files:proposal?Object.keys(proposal.payload.body.build.manifest).filter(name=>proposal.payload.body.build.manifest[name]!==proposal.payload.body.build.before_manifest?.[name]):[];
-  if(fix||planBuild||edited.length){
+  if(fix||planBuild||edited.length||changes.length){
     const steps=fix?['Investigate','Prepare','Check','Review','Apply']:['Prepare','Build','Check','Review'];
     let stage=0;
     if(['provider_starting','muse_working','receiving','fixing','diagnosed'].includes(a.phase))stage=1;
@@ -1382,7 +1472,32 @@ function renderAgentActivity(s){
     el('span',label,item).className='agent-work-label';const chips=el('div',undefined,item);chips.className='agent-file-list';
     for(const value of values)el('span',value,chips).className='agent-file';};
   if(a.state==='active')row('Source files',a.read_files,'source');
-  row(applied?'Updated files':a.phase==='applying'?'Applying files':'Proposed edits',edited,'edits');
+  const editsLabel=applied?'Updated files':a.phase==='applying'?'Applying files':a.file_changes_exact?'Proposed file changes':'Draft file changes';
+  if(changes.length){
+    const diffs=el('section',undefined,work);diffs.dataset.kind='edits';diffs.className='agent-diff-list';diffs.setAttribute('aria-label',editsLabel);
+    el('div',editsLabel,diffs).className='agent-work-label';
+    for(const change of changes){
+      const item=el(change.lines.length?'details':'div',undefined,diffs);item.className='agent-diff';
+      const heading=el(change.lines.length?'summary':'div',undefined,item);
+      el('span',change.path,heading).className='agent-file';
+      el('span',change.new?'New':'Edited',heading).className='agent-diff-kind';
+      el('span','+'+change.added,heading).className='agent-diff-added';
+      el('span','-'+change.removed,heading).className='agent-diff-removed';
+      if(change.lines.length){
+        item.dataset.diffPath=change.path;item.open=openDiffs.has(change.path);
+        const code=el('pre',undefined,item);
+        for(const line of change.lines){
+          const part=el('span',line||' ',code);
+          if(line.startsWith('+'))part.className='agent-diff-added';
+          else if(line.startsWith('-'))part.className='agent-diff-removed';
+          else if(line.startsWith('@@'))part.className='agent-diff-range';
+        }
+        if(change.truncated)el('small',a.file_changes_exact?'Preview shortened. See View code changes for the full diff.':'Preview shortened. The full diff appears in the build review.',item);
+        if(item.open)code.scrollTop=openDiffs.get(change.path);
+        if(focusedDiff===change.path)heading.focus({preventScroll:true});
+      }
+    }
+  }else row(applied?'Updated files':a.phase==='applying'?'Applying files':'Proposed edits',edited,'edits');
   if(a.phase?.startsWith('image_')&&a.generating_asset)row(a.phase==='image_generating'?'Generating artwork':'Preparing artwork',[activityTaskText(a.generating_asset).full],'artwork');
   if(!work.childElementCount)work.remove();
   if(a.state==='active')el('p','',area).id='agent-waiting';
@@ -1408,6 +1523,10 @@ const imageLibraryURLs=[];
 function renderImageCredits(s,parent){
   const service=s.image_generation||{},box=el('details',undefined,parent);
   el('summary',service.ready?'Muse Image · connected':'Muse Image · connection & credits',box);
+  if(s.models.billing_mode==='subscription'){
+    el('p',service.reason,box);
+    return;
+  }
   el('p','One cent per returned image, shared with Ember’s $150 free-credit ceiling. '+(service.reason||''),box);
   const billing=el('a','Open Meta billing',box);billing.href=service.billing_url||'https://dev.meta.ai/billing';billing.target='_blank';billing.rel='noopener noreferrer';
   if(service.ready){el('p',service.policy==='shared-model-api-budget'?
@@ -1475,6 +1594,55 @@ function renderChatWelcome(s){
   }
   el('small','Or tell Ember exactly what you have in mind below.',empty).className='welcome-footnote';
 }
+function renderPlanDraft(text,bubble){
+  if(!text)return false;
+  const labels=/^(concept|game concept|core loop|turns?\s*(?:\/|and)\s*phases|controls(?:\s*(?:\/|and)\s*platform)?|visual direction|first playable|later scope|out of scope(?: for now)?|success criteria|success looks like|next step)(\s*(?:\[[^\]]+\]|\([^)]+\)))?\s*(?::\s*(.*))?$/i;
+  const sections=[],intro=[],closing=[];
+  let lines=intro;
+  for(const line of text.split(/\r?\n/)){
+    const candidate=line.trim().replace(/^#{1,6}\s+/,'').replace(/^\*\*([^*]+)\*\*/,'$1');
+    const match=candidate.match(labels);
+    if(match){
+      const [,title,note,body]=match;
+      lines=body?[body]:[];
+      sections.push({title,note:note?.trim(),lines});
+    }else{
+      if(sections.length&&lines.at(-1)?.trim()===''&&/^(?:This is (?:just )?a draft\b|When (?:you['’]re|you are) happy\b)/i.test(candidate))lines=closing;
+      lines.push(line);
+    }
+  }
+  const titles=sections.map(({title})=>title.toLowerCase());
+  if(sections.length<4||!titles.some(title=>title==='concept'||title==='game concept')||!titles.includes('core loop'))return false;
+
+  bubble.classList.add('plan-draft');
+  const heading=el('div',undefined,bubble);heading.className='draft-heading';
+  heading.append(EmberUI.icon('plan'));
+  el('h3','Game plan draft',heading);
+  if(intro.join('').trim())el('p',intro.join('\n').trim(),bubble).className='draft-intro';
+  const content=el('div',undefined,bubble);content.className='draft-sections';
+  for(const {title,note,lines} of sections){
+    const section=el('section',undefined,content);
+    el('h4',title[0].toUpperCase()+title.slice(1),section);
+    if(note)el('small',note,section).className='draft-note';
+    let list=null;
+    for(const line of lines){
+      const item=line.trim().match(/^(?:([-*•])|(\d+)[.)])\s+(.+)$/);
+      if(item){
+        const tag=item[2]?'OL':'UL';
+        if(list?.tagName!==tag){
+          list=el(tag.toLowerCase(),undefined,section);
+          if(item[2])list.start=Number(item[2]);
+        }
+        el('li',item[3],list);
+      }else{
+        list=null;
+        if(line.trim())el('p',line.trim(),section);
+      }
+    }
+  }
+  if(closing.length)el('p',closing.join('\n').trim(),bubble).className='draft-closing';
+  return true;
+}
 function renderChat(s){
   renderAgentActivity(s);
   const inFlight=sending||s.chat_activity?.state==='active';
@@ -1483,7 +1651,9 @@ function renderChat(s){
   if(localRequest&&localRequest.sid===s.session?.id&&!messages.some(m=>m.id===localRequest.turn_id))messages.push({id:localRequest.turn_id,role:'user',text:localRequest.text,status:'pending',created_at:localRequest.started_at});
   const key=JSON.stringify([s.session?.id,messages.map(({progress,activity,...message})=>message),s.requests.map(r=>r.decision),s.chat_activity?.state,s.project_brief,s.image_generation]);
   if(key!==chatKey){
-    const transcript=$('conversation-history'),follow=transcript.dataset.session!==(s.session?.id||'')||transcript.scrollHeight-transcript.clientHeight-transcript.scrollTop<100;
+    const transcript=$('conversation-history'),thread=$('messages');
+    const follow=transcript.dataset.session!==(s.session?.id||'')||transcript.scrollHeight-transcript.clientHeight-transcript.scrollTop<100;
+    const previousDraft=thread.lastElementChild?.dataset.draftId;
     transcript.dataset.session=s.session?.id||'';
     chatKey=key;imageChatURLs.splice(0).forEach(URL.revokeObjectURL);$('messages').replaceChildren();
     if(!messages.length)renderChatWelcome(s);
@@ -1491,7 +1661,11 @@ function renderChat(s){
     for(const m of timeline){
       const bubble=el('article',undefined,$('messages'));bubble.className='message '+m.role;
       el('span',m.role==='user'?'You':m.role==='owner_decision'?'You · build decision':'Ember · '+(m.model||m.provider),bubble).className='message-author';
-      el('span',m.role==='user'&&m.plan_start?'Plan approved. Start building: '+activityTaskText(m.plan_start.title).short:m.text,bubble);
+      if(m.role!=='assistant'||m.plan_ref||!renderPlanDraft(m.text,bubble)){
+        el('span',m.role==='user'&&m.plan_start?'Plan approved. Start building: '+activityTaskText(m.plan_start.title).short:m.text,bubble);
+      }else{
+        bubble.dataset.draftId=m.id;
+      }
       if(m.brief_updates){const names={goal:'game goal',controls:'controls',visual_direction:'visual direction',constraints:'keep & avoid'};el('small','Remembered: '+Object.keys(m.brief_updates).map(k=>names[k]).join(', '),bubble).className='message-status'}
       if(m.plan_ref)el('small','Project plan prepared · Review below to approve it',bubble).className='message-status';
       if(m.verification)el('small',({passed:'Host verification: checks passed; AI inspected actual screenshots.',needs_changes:'Host verification: issues found; review the checks below.',unavailable:'Host verification: incomplete; see the reason below.',stale:'Host verification: stale.'}[m.verification.status]||'Host verification: incomplete.'),bubble).className='message-status';
@@ -1508,16 +1682,44 @@ function renderChat(s){
       if(m.status==='pending'||m.status==='failed'){
         const active=inFlight&&(s.chat_activity?.turn_id===m.id||localRequest?.turn_id===m.id);
         el('small',m.status==='failed'?'Reply failed: '+m.error:active?'Request in progress':'Reply interrupted; retry when ready.',bubble).className='message-status';
-        if(!active){const fresh=m.status==='failed'&&(m.error?.includes('Send a new message to try again')||m.error?.includes('A complete HTML document with html and body elements is required')||m.error?.includes('Include every existing project file; file deletion is not supported')||/Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
-          const retry=el('button',fresh?'Try a new reply':'Retry reply',bubble);retry.className='button';retry.disabled=inFlight;
-          retry.onclick=()=>sendMessage(m.text,fresh?crypto.randomUUID():m.id)}
+        if(!active){const fresh=m.status==='failed'&&(
+          m.error?.includes('Send a new message to try again')||
+          m.error?.includes('Start a new request to try again')||
+          m.error?.includes('Use only fixed gameplay actions and their declared fields')||
+          /Gameplay plan exceeds its \d+-second action budget|Saved Muse request context changed/.test(m.error||'')||
+          /Artwork kind does not match entity role|Completion and terminal states require nonlooping clips/.test(m.error||'')||
+          m.error?.includes('A complete HTML document with html and body elements is required')||
+          m.error?.includes('Include every existing project file; file deletion is not supported')||
+          /Entity draw binding names a missing file|Entity .+ (?:has no draw binding|draw binding names a missing source file)|Entity must be created at its declared draw binding/.test(m.error||''));
+          const recover=m.error?.includes('invalid structured reply')&&m.error.includes("'asset_budget': {}");
+          const waiting=m.error?.includes('No finished Muse reply is saved yet');
+          const newReply=()=>{
+            const id=crypto.randomUUID();
+            return sendMessage(m.text,id,m.plan_start?{sid:s.session.id,planRef:m.plan_start.plan_ref,title:m.plan_start.title,retryId:id}:null);
+          };
+          const retry=el('button',recover?'Recover saved plan':fresh?'Try a new reply':waiting?'Check for saved reply':'Retry reply',bubble);
+          retry.className='button';retry.disabled=inFlight;
+          retry.onclick=fresh&&!recover?newReply:()=>sendMessage(m.text,m.id);
+          if(waiting){
+            const restart=el('button','Try a new reply',bubble);restart.className='button';restart.disabled=inFlight;
+            restart.onclick=newReply;
+          }}
       }
     }
-    if(follow)requestAnimationFrame(()=>{transcript.scrollTop=timeline.length?transcript.scrollHeight:0});
+    const latest=thread.lastElementChild;
+    if(follow)requestAnimationFrame(()=>{
+      if(latest?.dataset.draftId&&latest.dataset.draftId!==previousDraft&&latest.isConnected){
+        transcript.scrollTop+=latest.getBoundingClientRect().top-transcript.getBoundingClientRect().top;
+      }else{
+        transcript.scrollTop=timeline.length?transcript.scrollHeight:0;
+      }
+    });
   }
   if(document.activeElement!==$('chat-provider'))$('chat-provider').value=s.session?.provider||'muse';
   $('chat-provider').disabled=!s.session||inFlight;$('chat-send').disabled=!s.session||inFlight;EmberUI.label($('chat-send'),inFlight?'Working…':'Send message');$('chat-input').disabled=!s.session;
-  $('model-note').textContent=s.models.muse_reason+' Estimated Ember usage: $'+s.credit_budget.estimated_spent_usd.toFixed(4)+' · Reserved: $'+s.credit_budget.reserved_usd.toFixed(2);
+  const billing=s.models.billing_mode==='subscription'?'Your Muse Code subscription':'Your Model API promotional credits';
+  $('model-note').textContent=(s.models.muse?billing:'Install Muse Code to send messages')+
+    ' · Ember usage estimate: $'+s.credit_budget.estimated_spent_usd.toFixed(4)+' · Reserved: $'+s.credit_budget.reserved_usd.toFixed(2);
 }
 function beginChatRequest(text,id){
   fileApply=null;
@@ -1763,7 +1965,7 @@ async function sendMessage(text,id,planStart=null){
   if(planStart){localRequest.kind='plan_build';localRequest.plan_start={title:planStart.title};renderChat(lastState);$('agent-progress').scrollIntoView({block:'nearest'});}
   $('chat-send').disabled=true;$('chat-provider').disabled=true;
   try{
-    await api(planStart?'plan-build':'chat',planStart?{session_id:planStart.sid,plan_ref:planStart.planRef}:{text,id});
+    await api(planStart?'plan-build':'chat',planStart?{session_id:planStart.sid,plan_ref:planStart.planRef,retry_id:planStart.retryId}:{session_id:localRequest.sid,text,id});
     if($('chat-input').value.trim()===text)$('chat-input').value='';$('error').textContent='';
   }catch(e){$('error').textContent=e.message}
   finally{sending=false;localRequest=null;chatKey='';await refresh()}

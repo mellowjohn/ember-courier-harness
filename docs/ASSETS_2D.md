@@ -132,6 +132,37 @@ are authored collision hints; game code controls physics and collision response.
 With an entity plan, `scene.createEntity("terrain")` exposes `tiles`,
 `drawTile`, `drawMap` and `solidAt`, and map draws appear in entity diagnostics.
 
+Use `tileset.edge_mode:"blob"` for connected platform or map terrain. Muse
+paints one opaque, full-bleed material swatch. Ember assembles 47 distinct
+cells on an 8 × 6 grid, including caps, convex and concave corners, edges and
+center fill. Packaging checks pixel joins across every compatible edge. Use
+one logical tile at frame 46 and `null` for empty map cells. Choose
+`tileset.view` to match the game camera.
+
+```powershell
+py -3.12 tools/asset_2d.py tileset-request --id jungle-ground --tile mossy-earth --solid mossy-earth --view side-view --blob --style "Mossy earth texture with small warm stone flecks" --output .harness/jungle-ground-request.json
+```
+
+The CLI defaults to `repeat` for plain textures. Its `--autotile` mode uses
+repeating textures with procedural trim at exposed edges. In both modes, image
+preparation feathers opposite edges and packaging checks their pixels and opacity.
+The workshop shows a repeated fill and a sample map with ledges and corners.
+
+Pass `{wrapX: true}` for a map that repeats horizontally. When drawing a
+window into a larger map, include neighboring cells outside the viewport so
+edges follow the actual terrain boundary. Review several joined cells at
+gameplay scale for visible repetition and check that caps line up with collision.
+
+An authored atlas can provide its own art for specific joins through the
+`drawMap` option `variants`. For example, `{variants: {grass: {2: "left-cap",
+10: "middle", 8: "right-cap"}}}` selects art for a one-cell-high grass strip.
+The mask adds the bits for same-material neighbors. The four sides are N=1,
+E=2, S=4 and W=8. The corners are NE=16, SE=32, SW=64 and NW=128. A diagonal
+counts only when both of its adjoining sides connect. The runtime checks the
+full mask first and then the side-only mask. Unmapped shapes use the base tile
+and receive automatic trim if the atlas enables it. Collision queries use the
+material in the map, regardless of the artwork selected.
+
 Run `py -3.12 tools/offline_tests.py --pattern test_tiles.py` for contract,
 request, runtime and export checks, or `py -3.12 tools/sprite_check.py --tiles`
 for real desktop/mobile PNG rendering and controls in both preview and ZIP games.
@@ -255,6 +286,11 @@ existing request/ingest CLI remains available for manual workflows.
 
 ### Free credits and preparation
 
+Direct image generation uses a separate Model API credential. Select **My
+Model API promotional credits** in **Muse settings** and verify image coverage
+to enable it. With **My Muse Code subscription**, you can use existing library
+assets and import artwork.
+
 Muse Image costs **$0.01 per returned image**, verified against
 [Meta's pricing](https://dev.meta.ai/docs/pricing-rate-limits) on November 1, 2026.
 This shares the same crash-safe $150 ledger as Spark; no new balance, top-up or
@@ -364,10 +400,14 @@ draw operation and connect clips to its existing state; preserve unrelated mecha
 
 The workshop uses the same player as games. It exposes all clips, a clip-local
 scrubber, A/D and arrow movement, touch movement buttons and an action button.
-When supplied, idle/walk follow movement and the action button plays attack.
+When supplied, idle and walk or run follow movement and the action button plays attack.
 Its saved checks cover loading, pause and replay. Custom games keep their own
 gameplay plans; they never receive workshop or 3D prop selectors automatically.
 Inspect the actual game for correct input transitions, facing and foot alignment.
+Set `facing:"left"` or `"right"` to declare the direction painted into a side-view
+atlas. Pass the desired world-facing direction to `actor.draw(ctx,x,y,{facing})`.
+Directional walk/run clips require a loop and at least four distinct drawn
+poses. Check the full stride and its last-to-first transition while moving.
 
 Discovery uses the existing asset roots described in [the asset pipeline guide](ASSET_PIPELINE.md).
 After revising the recorded PNG and its specification, use **Known assets → Review

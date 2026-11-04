@@ -10,7 +10,9 @@ import time
 
 from .recovery import atomic_json, exclusive, read_json
 from .core import digest
+from . import muse_settings
 from jsonschema import Draft202012Validator, ValidationError
+from jsonschema.exceptions import best_match
 
 MODEL = 'muse-spark-1.3'
 BUDGET_MICRO_USD = 150_000_000
@@ -59,7 +61,7 @@ def validate_execution(execution):
 
 def provider_schema(schema):
     """Inline local refs before dispatch; callers retain full local validation."""
-    unsupported = {'uniqueItems', 'propertyNames', 'minProperties', 'maxProperties'}
+    unsupported = {'uniqueItems', 'propertyNames'}
     maps = {'properties', 'patternProperties', 'dependentSchemas'}
     children = {'items', 'additionalProperties', 'unevaluatedProperties', 'contains',
                 'not', 'if', 'then', 'else', 'unevaluatedItems', 'contentSchema'}
@@ -83,8 +85,9 @@ def provider_schema(schema):
             siblings = {key: value for key, value in node.items() if key != '$ref'}
             return {'allOf': [resolved, convert(siblings, trail)]} if siblings else resolved
         result = {}
+        dynamic_map = node.get('type') == 'object' and isinstance(node.get('additionalProperties'), dict)
         for key, value in node.items():
-            if key in unsupported or key in ('$defs', 'definitions'):
+            if key in unsupported or key in ('$defs', 'definitions') or (key in ('minProperties', 'maxProperties') and not dynamic_map):
                 continue
             if key in maps:
                 result[key] = {name: convert(child, trail) for name, child in value.items()}
@@ -140,13 +143,15 @@ def structured_schema(schema):
             if isinstance(extra, dict):
                 if properties:
                     raise ValueError('Muse response schema cannot mix named fields and dynamic map entries')
+                bounds = {target: node[source] for source, target in
+                          [('minProperties', 'minItems'), ('maxProperties', 'maxItems')] if source in node}
                 if flat_map_value(extra):
                     row = convert(extra)
                     row['properties'] = {'key': dict(type='string'), **row['properties']}
                     row['required'] = ['key', *row['required']]
-                    return dict(type='array', items=row)
+                    return dict(type='array', items=row, **bounds)
                 return dict(type='array', items=dict(type='object', additionalProperties=False,
-                    required=['key', 'value'], properties=dict(key=dict(type='string'), value=convert(extra))))
+                    required=['key', 'value'], properties=dict(key=dict(type='string'), value=convert(extra))), **bounds)
             if extra is not False:
                 raise ValueError('Muse response schema requires bounded object fields')
             required = node.get('required', [])
@@ -425,12 +430,78 @@ def completed_capture(capture, ledger=None):
     return capture
 
 
-def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, progress=None, images=None, budget=None, check=None, execution=None):
+def structured_reply_error(error):
+    if not isinstance(error, ValidationError):
+        return str(error)[:400]
+    issue = best_match([error])
+    field = '.'.join(map(str, issue.absolute_path)) or 'reply'
+    return f'The {field} field did not meet the {issue.validator} requirement.'
+
+
+def save_capture(path, metadata, events, code, prepared_schema, output_schema):
+    terminal = [e.get('payload', {}) for e in events if e.get('payload_type') == 'run.terminal.completed']
+    capture = dict(metadata, events=events, exit_code=code, response=None)
+    if len(terminal) == 1 and terminal[0].get('terminal') == 'completed':
+        capture['response'] = terminal[0].get('text')
+        if output_schema is not None:
+            try:
+                wire = json.loads(capture['response'])
+                Draft202012Validator(prepared_schema).validate(wire)
+                decoded = decode_structured(wire, output_schema)
+                Draft202012Validator(output_schema).validate(decoded)
+                capture['response'] = json.dumps(decoded, ensure_ascii=False)
+            except (TypeError, ValueError, ValidationError) as error:
+                capture['response'] = None
+                capture['response_error'] = 'Muse returned an invalid structured reply. ' + structured_reply_error(error)
+    capture['capture_sha256'] = digest(capture)
+    atomic_json(path, capture)
+    return capture
+
+
+def provider_events(path):
+    with path.open('rb') as stream:
+        raw = stream.read(MAX_CAPTURE + 1)
+    if len(raw) > MAX_CAPTURE:
+        raise ValueError('Muse response exceeded the capture limit; reservation remains held')
+    return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+
+def recover_capture(path, pending, ledger_id, binding, prepared_schema, output_schema):
+    metadata_path = pending.with_suffix('.json')
+    if not metadata_path.is_file():
+        raise ValueError('Muse has a credit reservation but no recoverable reply for this request. '
+                         'The previous credit reservation remains counted. Start a new request to try again.')
+    metadata = read_json(metadata_path)
+    if (metadata.get('ledger_request_id') != ledger_id or metadata.get('request_binding') != binding
+            or metadata.get('model') != MODEL):
+        raise ValueError('Saved Muse request context changed; no retry was sent')
+    try:
+        events = provider_events(pending)
+    except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+        events = []  # An orphaned provider may still be writing its final event.
+    terminals = [e['payload_type'] for e in events if e.get('payload_type') in
+                 ('run.terminal.completed', 'run.terminal.failed')]
+    if len(terminals) != 1:
+        raise ValueError('No finished Muse reply is saved yet. Check for the saved reply again. '
+                         'The previous credit reservation remains counted.')
+    return save_capture(path, metadata, events, 0 if terminals[0] == 'run.terminal.completed' else 1,
+                        prepared_schema, output_schema)
+
+
+def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, progress=None, images=None, budget=None,
+        check=None, execution=None, stream_preview=None):
+    captures = Path(folder) / 'muse-captures'
+    captures.mkdir(exist_ok=True)
+    with exclusive(captures / (request_id + '.lock')):
+        return run_request(root, folder, captures, prompt, request_id, binary=binary, output_schema=output_schema,
+                           progress=progress, images=images, budget=budget, check=check, execution=execution,
+                           stream_preview=stream_preview)
+
+
+def run_request(root, folder, captures, prompt, request_id, *, binary, output_schema, progress, images, budget,
+                check, execution, stream_preview):
     if execution is not None:
         validate_execution(execution)
-    binary = Path(binary) if binary else installed_binary()
-    if not binary or not binary.is_file():
-        raise ValueError('Muse Code is not installed. Install and sign in to Muse before sending a message.')
     prepared_schema = structured_schema(output_schema) if output_schema is not None else None
     ledger = CreditLedger(root)
     pictures = []
@@ -450,9 +521,9 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
     if execution is not None:
         request_context['execution'] = execution
     binding = digest(request_context)
-    captures = Path(folder) / 'muse-captures'
-    captures.mkdir(exist_ok=True)
     capture_path = captures / (request_id + '.json')
+    pending_path = captures / (request_id + '.pending.jsonl')
+    ledger_id = sha256((str(Path(folder).resolve()) + ':' + request_id).encode()).hexdigest()
     if capture_path.is_file():
         capture = read_json(capture_path)
         if capture.get('capture_sha256') != digest({k: v for k, v in capture.items() if k != 'capture_sha256'}):
@@ -460,12 +531,18 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
         if ((capture.get('request_binding') is not None or pictures or budget is not None or execution is not None) and
                 capture.get('request_binding') != binding):
             raise ValueError('Saved Muse request context changed; no retry was sent')
+    elif ledger_id in ledger.read()['requests']:
+        capture = recover_capture(capture_path, pending_path, ledger_id, binding, prepared_schema, output_schema)
+    else:
+        capture = None
+    if capture is not None:
         settle_capture(ledger, request_id, capture)
         if progress:
             progress('cached_reply')
         return completed_capture(capture, ledger)
-    ledger_id = sha256((str(Path(folder).resolve()) + ':' + request_id).encode()).hexdigest()
-    ledger.reserve(ledger_id, budget=budget)
+    binary = Path(binary) if binary else installed_binary()
+    if not binary or not binary.is_file():
+        raise ValueError('Muse Code is not installed. Install and sign in to Muse before sending a message.')
     with tempfile.TemporaryDirectory(dir=captures) as scratch:
         scratch = Path(scratch)
         prompt_path = scratch / 'prompt.txt'
@@ -480,6 +557,7 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
                 json.dumps(prepared_schema, ensure_ascii=False) + '\nRequest:\n' + prompt)
         prompt_path.write_text(transport_prompt, encoding='utf-8')
         args = [str(binary), 'exec', '--provider', 'meta', '--model', MODEL,
+                '--base-url', muse_settings.API_BASE_URL,
                 '--config', 'provider_retry.max_retries=0',
                 '--reasoning-effort', execution['reasoning_effort'] if execution else 'low',
                 '--contributor-mode', 'off', '--preset', 'empty',
@@ -494,13 +572,25 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
             image_path = scratch / ('screenshot-' + str(index) + '.png')
             image_path.write_bytes(raw)
             args += ['--image', str(image_path)]
-        with (scratch / 'stdout.jsonl').open('wb') as output, (scratch / 'stderr.log').open('wb') as errors:
-            process = subprocess.Popen(args, cwd=scratch, stdin=subprocess.DEVNULL, stdout=output, stderr=errors,
+        metadata = dict(model=MODEL, binary_sha256=sha256(binary.read_bytes()).hexdigest(), ledger_request_id=ledger_id,
+                        reservation_micro_usd=RESERVATION_MICRO_USD, request_binding=binding)
+        if execution is not None:
+            metadata['execution'] = execution
+        env = muse_settings.request_environment(root, binary, scratch)
+        if check:
+            check()
+        metadata_path = pending_path.with_suffix('.json')
+        atomic_json(metadata_path, metadata)
+        ledger.reserve(ledger_id, budget=budget)
+        with pending_path.open('wb') as output, (scratch / 'stderr.log').open('wb') as errors:
+            process = subprocess.Popen(args, cwd=scratch, env=env, stdin=subprocess.DEVNULL, stdout=output, stderr=errors,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
             timeout_seconds = execution['timeout_seconds'] if execution else 180
             started = time.monotonic()
             deadline, offset, pending = started + timeout_seconds, 0, b''
             phase, response_chars, last_report, reported_phase = 'provider_starting', 0, 0, None
+            deltas = []
+            previewed_chars = 0
             finished = False
             try:
                 while True:
@@ -511,7 +601,7 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
                         finished = True
                     except subprocess.TimeoutExpired:
                         pass
-                    path = scratch / 'stdout.jsonl'
+                    path = pending_path
                     if path.stat().st_size > MAX_CAPTURE:
                         raise ValueError('Muse response exceeded the capture limit; reservation remains held')
                     with path.open('rb') as live:
@@ -535,13 +625,19 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
                             value = event.get('payload', {}).get('text')
                             if isinstance(value, str):
                                 response_chars += len(value)
+                                if stream_preview:
+                                    deltas.append(value)
                                 phase = 'receiving'
                         elif kind == 'run.terminal.completed':
                             phase = 'provider_finished'
                     now = time.monotonic()
                     if progress and (phase != reported_phase or chunk and now - last_report >= 1 or now - last_report >= 5):
+                        preview = {}
+                        if stream_preview and response_chars != previewed_chars:
+                            preview['file_changes'] = stream_preview(''.join(deltas))
+                            previewed_chars = response_chars
                         progress(phase, response_chars=response_chars, elapsed_seconds=int(now - started),
-                                 execution=execution, timeout_seconds=timeout_seconds)
+                                 execution=execution, timeout_seconds=timeout_seconds, **preview)
                         last_report, reported_phase = now, phase
                     if finished:
                         break
@@ -552,29 +648,11 @@ def run(root, folder, prompt, request_id, *, binary=None, output_schema=None, pr
                 if not finished:
                     process.kill()
                     process.wait(timeout=10)
-        if (scratch / 'stdout.jsonl').stat().st_size > MAX_CAPTURE:
-            raise ValueError('Muse response exceeded the capture limit; reservation remains held')
-        raw = (scratch / 'stdout.jsonl').read_bytes()
-        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
-        terminal = [e.get('payload', {}) for e in events if e.get('payload_type') == 'run.terminal.completed']
-        capture = dict(model=MODEL, binary_sha256=sha256(binary.read_bytes()).hexdigest(), events=events,
-                       exit_code=code, response=None, ledger_request_id=ledger_id,
-                       reservation_micro_usd=RESERVATION_MICRO_USD, request_binding=binding)
+        events = provider_events(pending_path)
         if execution is not None:
-            capture.update(execution=execution, elapsed_seconds=round(time.monotonic() - started, 3))
-        if len(terminal) == 1 and terminal[0].get('terminal') == 'completed':
-            capture['response'] = terminal[0].get('text')
-            if output_schema is not None:
-                try:
-                    wire = json.loads(capture['response'])
-                    Draft202012Validator(prepared_schema).validate(wire)
-                    decoded = decode_structured(wire, output_schema)
-                    Draft202012Validator(output_schema).validate(decoded)
-                    capture['response'] = json.dumps(decoded, ensure_ascii=False)
-                except (TypeError, ValueError, ValidationError) as error:
-                    capture['response'] = None
-                    capture['response_error'] = 'Muse returned an invalid structured reply: ' + str(error)[:400]
-        capture['capture_sha256'] = digest(capture)
-        atomic_json(capture_path, capture)
+            metadata['elapsed_seconds'] = round(time.monotonic() - started, 3)
+        capture = save_capture(capture_path, metadata, events, code, prepared_schema, output_schema)
+        pending_path.unlink()
+        metadata_path.unlink()
         settle_capture(ledger, ledger_id, capture)
         return completed_capture(capture, ledger)

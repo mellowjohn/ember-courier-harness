@@ -50,7 +50,10 @@ class ProposalQualityTests(unittest.TestCase):
         self.calls.append((prompt,kwargs));data=json.loads(prompt.split('\n',1)[1])
         self.assertIn(chat_build.GAME_UI_REVIEW_INSTRUCTION, prompt)
         self.assertEqual(len(kwargs['images']),2)
-        self.assertEqual(data['image_order'],[p.name for p in kwargs['images']])
+        sheets = {v['review_screenshot']: v['review_sources'] for v in data['observations']['candidate']['viewports']
+                  if 'review_screenshot' in v}
+        self.assertEqual(data['image_order'],
+                         [dict(ref=p.name, contains=sheets.get(p.name, [p.name])) for p in kwargs['images']])
         for path in kwargs['images']:
             with Image.open(path) as image:self.assertEqual(image.getpixel((0,0)),(0,128,0))
         verdict=dict(meets_task=not self.visual,preserves_scope=True,summary='SYNTHETIC screenshot review',

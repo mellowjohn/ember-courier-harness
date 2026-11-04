@@ -305,7 +305,7 @@ def prepare(root, folder, *, asset_profile=None, finding=None, git_repair=False)
         for item in contracts:
             child = item['contract']
             child['inputs'] = [dict(name='baseline', path=baseline.as_posix(), sha256=polish_runtime.file_digest(baseline))]
-            for name in ('task_run.py', 'task_quality.py', 'task_coverage.py', 'gameplay.py', 'orchestration.py', 'chat_build.py', 'polish.py', 'polish_runtime.py', 'muse_chat.py', 'attempts.py', 'polish_browser.js', 'findings.py', 'game_audio.py', 'asset_lab/ember-audio.js'):
+            for name in ('task_run.py', 'task_quality.py', 'task_coverage.py', 'gameplay.py', 'orchestration.py', 'chat_build.py', 'polish.py', 'polish_runtime.py', 'muse_chat.py', 'muse_settings.py', 'attempts.py', 'polish_browser.js', 'findings.py', 'game_audio.py', 'asset_lab/ember-audio.js'):
                 source = Path(__file__).parent.joinpath(name).resolve()
                 child['inputs'].append(dict(name='host_' + name.replace('.', '_').replace('/', '_'), path=source.as_posix(), sha256=polish_runtime.file_digest(source)))
             if git_repair:

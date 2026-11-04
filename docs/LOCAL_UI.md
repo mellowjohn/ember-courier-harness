@@ -143,9 +143,11 @@ from the saved session. Chat can propose concrete browser builds with up to eigh
 inline approval before any file write. See [Build from chat](CHAT_BUILDS.md) for
 the supported target, preview, revisions and recovery.
 
-Muse uses the authorized hackathon billing credits, tracked against a shared
-$150 Ember ceiling. A missing Muse subscription allowance does not block this
-pay-as-you-go path. See [models and credits](MODELS_AND_CREDITS.md).
+Open **Muse settings** from Home or any session to choose how Ember connects.
+The default uses your own signed-in Muse Code subscription and requires available
+allowance before each new model call. If you have your own Model API promotional
+credits, choose that connection and confirm that a payment method cannot be
+charged. See [models and credits](MODELS_AND_CREDITS.md).
 
 Each prompt is saved before inference. Completed replies and the provider choice
 survive app restarts and reboots. A pending reply is never automatically resent;

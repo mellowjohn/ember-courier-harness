@@ -79,10 +79,37 @@ class GameplayTests(unittest.TestCase):
             self.save(plan)
         plan = deepcopy(PLAN); plan['scenarios'] *= 4
         for scenario in plan['scenarios']:
-            scenario['steps'] = [dict(action='wait', ms=2000)]*4+[dict(action='visible', selector='button')]
+            scenario['steps'] = [dict(action='wait', ms=2000)]*12+[dict(action='visible', selector='button')]
         with self.assertRaisesRegex(ValueError, 'budget'):
             self.save(plan)
         self.assertEqual(gameplay.load(self.folder)['revision'], 0)
+
+    def test_accepts_longer_desktop_and_touch_playthroughs(self):
+        from jsonschema import Draft202012Validator
+        plan = dict(title='Full loop', scenarios=[
+            dict(name='Keyboard loss and restart', viewport='desktop', steps=[
+                dict(action='press', key='Space'), *[dict(action='wait', ms=2000)]*7,
+                dict(action='visible', selector='#burst'), dict(action='click', selector='#restart'),
+                dict(action='visible', selector='#running')]),
+            dict(name='Touch finish', viewport='mobile', steps=[
+                *[step for _ in range(10) for step in (dict(action='tap', selector='canvas'), dict(action='wait', ms=2000))],
+                dict(action='visible', selector='#finish')]),
+        ])
+        self.assertGreater(gameplay.action_cost_ms(plan), 20_000)
+        Draft202012Validator(chat_build.CHECKS_SCHEMA).validate(plan)
+        self.assertEqual(self.save(plan)['plan'], plan)
+
+    def test_sprite_check_requires_a_named_state_and_bounds_frame_wait(self):
+        from jsonschema import Draft202012Validator
+        plan = deepcopy(PLAN)
+        step = dict(action='sprite_state', entity='hero', value='run', frames=2)
+        plan['scenarios'][0]['steps'] = [dict(action='press', key='Space'), step]
+        Draft202012Validator(chat_build.CHECKS_SCHEMA).validate(plan)
+        self.assertEqual(gameplay.action_cost_ms(gameplay.validate(plan)), 3000)
+        for key, value in [('entity', '#hero'), ('value', 'Run pose'), ('frames', 3), ('frames', True)]:
+            with self.subTest(key=key, value=value), self.assertRaisesRegex(ValueError, 'sprite entity'):
+                gameplay.validate({**plan, 'scenarios': [
+                    {**plan['scenarios'][0], 'steps': [{**step, key: value}]}]})
 
     def test_host_report_binding_idempotence_and_no_authority_changes(self):
         from test_polish import PolishTests

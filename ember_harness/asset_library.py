@@ -288,7 +288,7 @@ def build_from_reference(root, snapshot, ref, build, basis):
         if not is_2d: files['engine.js'] = engine
     if is_2d:
         from . import asset_2d
-        if spec['kind'] in ('tile', 'tileset'):
+        if spec['kind'] in ('tile', 'tileset') or 'facing' in spec:
             # Asset selection is reviewed with its runtime upgrade; ordinary revisions retain it.
             if 'sprite-player.js' in files and files['sprite-player.js'] not in (basis.get('sprite-player.js'), asset_2d.player_source()):
                 raise ValueError('Keep the prepared sprite player unchanged')

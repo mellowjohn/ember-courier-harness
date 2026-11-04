@@ -1,4 +1,18 @@
-# Muse and hackathon billing credits
+# Muse subscriptions and promotional credits
+
+Open **Muse settings** to choose the local connection for your installation.
+**My Muse Code subscription** is the default. Sign in through Muse Code with
+the Meta account that holds your plan. Ember checks `muse usage --json` before
+new model requests and omits environment API keys in this mode. If the allowance
+is unavailable or exhausted, the request stops before credit reservation or
+model dispatch. See [Meta's subscription guide](https://dev.meta.ai/docs/muse-code/subscriptions).
+
+Choose **My Model API promotional credits** to use your own promotional balance
+after confirming that a payment method cannot be charged. A separately created
+Model API key uses usage-based billing. Ember saves a fingerprint of your
+confirmed key in local settings. Changing the key requires fresh confirmation.
+Muse Code and your local environment supply credentials at runtime. Direct
+Muse Image calls require separately verified Model API promotional coverage.
 
 Johnathan authorized **up to $150 total in Muse free hackathon credits** on
 October 30, 2026. This supersedes the earlier blanket prohibition on credit use.
@@ -58,8 +72,8 @@ launch. Ember never changes the user's global Muse configuration.
 
 ## Credits are separate from subscriptions
 
-`muse usage --json` reports subscription allowance. Its `no_allowance` result does
-not establish whether billing credits are available. Meta documents pay-as-you-go
+`muse usage --json` reports subscription allowance. Check Meta billing for the
+promotional balance. Meta documents pay-as-you-go
 API credentials and subscriptions as separate billing paths. The existing stored
 Muse sign-in successfully completed a one-step `meta` request on October 30,
 returning “Muse is connected” and reporting one model call, despite a null
@@ -69,6 +83,9 @@ Ember does not copy them into the repository or session captures.
 ## Shared ledger
 
 `.harness/muse-credits.json` records reservations and estimated settled usage.
+The $150 limit is a shared Ember safety ceiling in both connection modes. The
+dollar estimates in subscription mode track the cost equivalent for this local
+limit. Meta's reported allowance governs actual subscription usage.
 Muse Image shares this ledger with Spark. Its pinned `muse-image-1.0` model
 reserves $0.01 for one requested image and settles by returned-image count, not
 token usage. Existing Spark reservations and historical entries retain their

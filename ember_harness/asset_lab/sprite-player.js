@@ -53,8 +53,13 @@
           }
           return events;
         },
-        draw(ctx, x, y, {scale = 1, flipX = false, flipY = false} = {}) {
+        draw(ctx, x, y, {scale = 1, flipX, flipY = false, facing} = {}) {
           if (![x, y, scale].every(Number.isFinite) || scale <= 0) throw new RangeError('Use finite sprite coordinates and a positive scale.');
+          if (facing !== undefined) {
+            if (!['left','right'].includes(facing) || !['left','right'].includes(s.facing) || flipX !== undefined)
+              throw new Error('Directional drawing needs source facing and a target direction. Use flipX separately for raw mirroring.');
+            flipX = facing !== s.facing;
+          }
           const index = player.frame;
           ctx.save();
           try {
@@ -71,6 +76,16 @@
     const tiles = terrain ? Object.freeze(Object.fromEntries(Object.entries(s.tileset?.tiles ||
       Object.fromEntries(Array.from({length:s.frames},(_,i)=>['tile-'+i,{frame:i,solid:false}])))
       .map(([name,tile])=>[name,Object.freeze({...tile})]))) : Object.freeze({});
+    const blob = s.tileset?.edge_mode === 'blob';
+    const blobCenter = blob ? Object.values(tiles)[0].frame : null;
+    const blobFrames = new Map();
+    if (blob) {
+      for (let mask=0; mask<256; mask++) {
+        const corners = [[16,3],[32,6],[64,12],[128,9]];
+        if (corners.every(([diagonal, sides])=>!(mask&diagonal)||(mask&sides)===sides))
+          blobFrames.set(mask,blobFrames.size);
+      }
+    }
     function tileIndex(tile) {
       if (!terrain) throw new Error('Tile drawing requires tile or tileset artwork.');
       const index = typeof tile === 'string' && Object.hasOwn(tiles,tile) ? tiles[tile].frame : tile;
@@ -95,14 +110,65 @@
           Array.from(rows).some(row=>!Array.isArray(row)||row.length!==rows[0].length))
         throw new RangeError('Use a rectangular tilemap of at most 256 rows/columns and 16384 cells.');
     }
-    function drawMap(ctx,rows,x=0,y=0,{scale=1}={}) {
+    function neighborMask(cells,c,r,wrapX) {
+      const tile=cells[r][c], columns=cells[0].length;
+      const joins=(dx,dy)=>cells[r+dy]?.[wrapX?(c+dx+columns)%columns:c+dx]===tile;
+      const top=joins(0,-1), right=joins(1,0), bottom=joins(0,1), left=joins(-1,0);
+      // Diagonal joins matter only where both adjacent sides connect.
+      return (top?1:0) | (right?2:0) | (bottom?4:0) | (left?8:0) |
+        (top&&right&&joins(1,-1)?16:0) | (bottom&&right&&joins(1,1)?32:0) |
+        (bottom&&left&&joins(-1,1)?64:0) | (top&&left&&joins(-1,-1)?128:0);
+    }
+    function drawTerrainEdges(ctx,mask,x,y,scale) {
+      if (mask===255) return;
+      const top=mask&1, right=mask&2, bottom=mask&4, left=mask&8;
+      const width=w*scale, height=h*scale;
+      const edge=Math.min(4,Math.max(1,Math.round(Math.min(w,h)/16)))*scale;
+      ctx.save();
+      try {
+        ctx.translate(x,y);
+        ctx.globalCompositeOperation='source-over';
+        if (!top) {
+          ctx.fillStyle='rgba(255,255,255,.24)';
+          ctx.fillRect(0,0,width,edge);
+        }
+        ctx.fillStyle='rgba(0,0,0,.32)';
+        if (!bottom) ctx.fillRect(0,height-edge,width,edge);
+        const sideY=top?0:edge, sideHeight=height-sideY-(bottom?0:edge);
+        if (!left) ctx.fillRect(0,sideY,edge,sideHeight);
+        if (!right) ctx.fillRect(width-edge,sideY,edge,sideHeight);
+        if (top&&left&&!(mask&128)) ctx.fillRect(0,0,edge,edge);
+        if (top&&right&&!(mask&16)) ctx.fillRect(width-edge,0,edge,edge);
+        if (bottom&&left&&!(mask&64)) ctx.fillRect(0,height-edge,edge,edge);
+        if (bottom&&right&&!(mask&32)) ctx.fillRect(width-edge,height-edge,edge,edge);
+      } finally {ctx.restore();}
+    }
+    function drawMap(ctx,rows,x=0,y=0,{scale=1,wrapX=false,variants}={}) {
       validateMap(rows);
       if (![x,y,scale,w*scale,h*scale,x+rows[0].length*w*scale,y+rows.length*h*scale].every(Number.isFinite)||scale<=0)
         throw new RangeError('Use finite tilemap coordinates and a positive scale.');
       // Validate before touching canvas so an invalid map cannot render a partial layer.
       const cells=rows.map(row=>Array.from(row,tile=>tile===null?null:tileIndex(tile)));
+      if (blob && (variants!==undefined || cells.some(row=>row.some(tile=>tile!==null && tile!==blobCenter))))
+        throw new RangeError('Use the logical terrain tile or null for blob maps.');
+      const authored=variants===undefined?null:new Map(Object.entries(variants).map(([material,frames])=>[
+        tileIndex(material), new Map(Object.entries(frames).map(([mask,frame])=>{
+          if (!/^(0|[1-9][0-9]{0,2})$/.test(mask)||Number(mask)>255) throw new RangeError('Invalid terrain neighbor mask: '+mask);
+          return [Number(mask),tileIndex(frame)];
+        }))
+      ]));
       let drawn=0;
-      cells.forEach((row,r)=>row.forEach((tile,c)=>{if(tile!==null){drawTile(ctx,tile,x+c*w*scale,y+r*h*scale,{scale});drawn++;}}));
+      const connected=s.tileset?.edge_mode==='autotile';
+      cells.forEach((row,r)=>row.forEach((tile,c)=>{
+        if (tile===null) return;
+        const cellX=x+c*w*scale, cellY=y+r*h*scale;
+        const rules=authored?.get(tile);
+        const mask=blob||connected||rules?neighborMask(cells,c,r,wrapX):0;
+        const variant=blob?blobFrames.get(mask):(rules?.get(mask)??rules?.get(mask&15));
+        drawTile(ctx,variant??tile,cellX,cellY,{scale});
+        if (connected&&variant===undefined) drawTerrainEdges(ctx,mask,cellX,cellY,scale);
+        drawn++;
+      }));
       return drawn;
     }
     function solidAt(rows,column,row) {

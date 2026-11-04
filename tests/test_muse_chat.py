@@ -45,6 +45,12 @@ def wire_reply(value, schema):
 
 
 class MuseChatTests(unittest.TestCase):
+    def setUp(self):
+        # These tests exercise the model subprocess with synthetic events.
+        allowance = patch('ember_harness.muse_settings.subscription_environment', return_value={})
+        allowance.start()
+        self.addCleanup(allowance.stop)
+
     def test_gameplay_steps_have_exact_provider_fields(self):
         from jsonschema import Draft202012Validator
         from ember_harness import chat_build, gameplay
@@ -225,9 +231,10 @@ class MuseChatTests(unittest.TestCase):
             root=Path(directory);session=root/'session';session.mkdir()
             binary=root/'synthetic.exe';binary.write_bytes(b'Never executed')
             process=Mock()
+            check=Mock(side_effect=[None, ValueError('SYNTHETIC cancellation')])
             with patch('ember_harness.muse_chat.subprocess.Popen',return_value=process):
                 with self.assertRaisesRegex(ValueError,'SYNTHETIC cancellation'):
-                    run(root,session,'Plan','quiet-call',binary=binary,check=Mock(side_effect=ValueError('SYNTHETIC cancellation')))
+                    run(root,session,'Plan','quiet-call',binary=binary,check=check)
             process.kill.assert_called_once()
             self.assertEqual(CreditLedger(root).summary()['reserved_usd'],5)
 
@@ -319,6 +326,31 @@ class MuseChatTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'changed'):
                 run(root, session, 'Hello', 'turn-one', binary=binary)
 
+    def test_retry_recovers_finished_output_left_by_an_interrupted_host(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / '.harness') as directory:
+            root = Path(directory)
+            session = root / 'session'
+            session.mkdir()
+            binary = root / 'muse-test.exe'
+            binary.write_bytes(b'test binary')
+            request = 'interrupted-request'
+            events = retry_capture()['events']
+            with patch('ember_harness.muse_chat.subprocess.Popen', side_effect=OSError('host stopped')) as process:
+                with self.assertRaisesRegex(OSError, 'host stopped'):
+                    run(root, session, 'Build', request, binary=binary)
+                pending = session / 'muse-captures' / (request + '.pending.jsonl')
+                pending.write_text(json.dumps(events[0]) + '\n{"unfinished":', encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'No finished Muse reply'):
+                    run(root, session, 'Build', request)
+                pending.write_text('\n'.join(map(json.dumps, events)), encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, 'context changed'):
+                    run(root, session, 'Different prompt', request)
+                recovered = run(root, session, 'Build', request)
+                self.assertEqual(recovered['response'], 'Saved reply')
+                self.assertEqual(run(root, session, 'Build', request), recovered)
+                self.assertEqual(process.call_count, 1)
+            self.assertEqual(CreditLedger(root).summary()['reserved_usd'], 5)
+
     def test_stream_reports_observed_phases_without_exposing_provider_text(self):
         import subprocess
         from unittest.mock import Mock
@@ -353,6 +385,53 @@ class MuseChatTests(unittest.TestCase):
             self.assertNotIn('PRIVATE', json.dumps(reports))
             self.assertEqual(capture['response'], 'Reply')
             self.assertEqual(CreditLedger(root).summary()['reserved_usd'], 5)
+
+    def test_stream_reports_complete_file_diffs_before_the_terminal_reply(self):
+        import subprocess
+        from unittest.mock import Mock
+        from ember_harness.chat_build import streamed_file_changes
+        scratch = ROOT / '.harness/test-temp'
+        scratch.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=scratch) as folder:
+            root = Path(folder)
+            session = root / 'session'
+            session.mkdir()
+            binary = root / 'muse-test.exe'
+            binary.write_bytes(b'synthetic binary')
+            reports = []
+            prefix = ('{"message":"PRIVATE narration","build":{"edits":['
+                      '{"path":"game.js","before":"old();","after":"next();"}],'
+                      '"files":[{"path":"style.css","content":"body {}"},'
+                      '{"path":"later.js","content":"unfinished')
+
+            def start(args, **kwargs):
+                events = iter([
+                    dict(payload_type='run.output.delta', payload=dict(text=prefix)),
+                    dict(payload_type='run.terminal.completed', payload=dict(terminal='completed', text='Reply')),
+                ])
+
+                def wait(timeout):
+                    event = next(events)
+                    kwargs['stdout'].write((json.dumps(event) + '\n').encode())
+                    kwargs['stdout'].flush()
+                    if event['payload_type'] == 'run.output.delta':
+                        raise subprocess.TimeoutExpired(args, timeout)
+                    return 0
+
+                return Mock(wait=wait)
+
+            with patch('ember_harness.muse_chat.subprocess.Popen', side_effect=start):
+                run(root, session, 'Build', 'progress-files', binary=binary,
+                    progress=lambda phase, **values: reports.append(dict(phase=phase, **values)),
+                    stream_preview=lambda text: streamed_file_changes(text, {'game.js': 'old();\n'}))
+            self.assertEqual(reports[0]['phase'], 'receiving')
+            edited, added = reports[0]['file_changes']
+            self.assertEqual((edited['path'], edited['new'], edited['added'], edited['removed']), ('game.js', False, 1, 1))
+            self.assertIn('-old();', edited['lines'])
+            self.assertIn('+next();', edited['lines'])
+            self.assertEqual((added['path'], added['new'], added['added'], added['removed']), ('style.css', True, 1, 0))
+            self.assertNotIn('PRIVATE', json.dumps(reports))
+            self.assertNotIn('unfinished', json.dumps(reports))
 
     def test_progress_failure_stops_cli_and_keeps_credit_reservation(self):
         import subprocess
@@ -550,6 +629,25 @@ class MuseChatTests(unittest.TestCase):
         decoded = decode_structured(wire, CHAT_SCHEMA)
         self.assertEqual(decoded['build'], reply['build'])
         Draft202012Validator(CHAT_SCHEMA).validate(decoded)
+
+    def test_plan_accepts_unspecified_or_zero_artwork_estimates(self):
+        from jsonschema import Draft202012Validator, ValidationError
+        from ember_harness.chat_build import CHAT_SCHEMA
+        from ember_harness.muse_chat import structured_reply_error
+        from ember_harness.project_plan import starter
+
+        plan = starter(ROOT)
+        validator = Draft202012Validator(structured_schema(CHAT_SCHEMA))
+        for estimates in ({}, {'generated_artwork': 0}):
+            plan['scope']['asset_budget'] = estimates
+            wire = wire_reply(dict(message='Review the plan.', build=None, plan=plan), CHAT_SCHEMA)
+            validator.validate(wire)
+            self.assertEqual(decode_structured(wire, CHAT_SCHEMA)['plan'], plan)
+
+        wire['plan']['scope']['asset_budget'][0]['value'] = -1
+        with self.assertRaises(ValidationError) as failure:
+            validator.validate(wire)
+        self.assertIn('plan.scope.asset_budget.0.value', structured_reply_error(failure.exception))
 
     def test_planning_references_validate_locally_and_in_the_dispatched_schema(self):
         from copy import deepcopy

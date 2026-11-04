@@ -16,6 +16,7 @@ import warnings
 from PIL import Image, ImageDraw, ImageFilter
 
 from .core import canonical, digest
+from . import terrain_tiles
 
 PROFILE = 'sprite-atlas-v1'
 MAX_PNG = 360_000
@@ -33,7 +34,12 @@ PLAYER_INSTRUCTION = (
     'Each named clip has zero-based frames:[indices], fps, loop and optional next (another clip or null). '
     'Nonlooping clips hold their final frame unless next is set; spec.default_animation selects startup. '
     'Bind idle/walk to movement, block unwanted attack restarts, and use next:"idle" for an attack return. '
-    'Use pivot [0.5,1] for grounded characters and flipX for a shared facing direction. '
+    'For a new side-view character declare facing:"right" or "left" for the direction painted into all frames. '
+    'Use pivot [0.5,1] and actor.draw(ctx,x,y,{facing:direction}), where direction comes from world movement or pursuit. '
+    'Legacy art can use explicit flipX after visually checking its painted direction. '
+    'Walk and run are continuous looping clips: draw contact, down, passing and up poses for each leg, in order, '
+    'with a stable foot baseline and a natural last-to-first step. Use a persistent movement state driven by game velocity. '
+    'Read the existing clip frame order, loop flags, speed and source facing before binding or reusing an atlas. '
     'Keep world movement, collision, damage and effect lifetime in gameplay code. '
     'Preserve existing game mechanics and replace the intended artwork at its existing draw site. '
     'Verify actual PNG loading, correct clips on input, completion, alignment and facing at gameplay scale. '
@@ -42,10 +48,22 @@ PLAYER_INSTRUCTION = (
     'Use kind tile with grid:[1,1] and frames:1 for an individual tile. '
     'atlas.drawTile(ctx,"grass",x,y,{scale:2}) draws a static tile at its top-left corner. '
     'atlas.drawMap(ctx,rows,x,y,{scale:2}) draws a rectangular array of tile names or zero-based cell indices; null is empty. '
+    'For generated repeating fill use seamless:true, require_alpha:false and tileset.edge_mode:"repeat". '
+    'For new connected terrain use edge_mode:"blob": kind:"tileset", grid:[8,6], frames:47, frame_size at least [16,16], '
+    'loop:false, pivot:[0,0], blend:"source-over", seamless:true, require_alpha:false, '
+    'and one logical tile such as tiles:{ground:{frame:46,solid:true}}. The host requests one opaque seamless texture '
+    'and builds all 47 compatible center, edge, cap, isolated, convex and concave cells. drawMap picks by neighbors. '
+    'Use one logical material across its surface and interior and null for empty space. Keep decorative tiles separate. '
+    'For legacy connected ground using tileset.edge_mode:"autotile" drawMap adds '
+    'surface trim, ends, undersides and inner corners at exposed neighbors of each terrain material. '
+    'Supply logical material cells, not preselected edge variants. Use drawMap with wrapX:true only for horizontally wrapping terrain. '
+    'For a hand-authored atlas, drawMap also accepts variants:{material:{mask:tileName}}. Connected neighbor bits are '
+    'N=1, E=2, S=4, W=8, NE=16, SE=32, SW=64, NW=128. Diagonal bits require both adjacent cardinal neighbors. '
     'atlas.tiles exposes named frame/solid metadata; atlas.solidAt(rows,column,row) queries declared collision hints. '
     'Tilemaps have at most 256 rows/columns and 16384 cells. Gameplay owns collision response. '
-    'For side-view platformers declare tileset.view:"side-view"; use seamless:false for sets with exposed caps and surface trim. '
-    'Plan compatible left cap, repeating middle, right cap, interior fill and underside pieces rather than a fully outlined block repeated everywhere. '
+    'For side-view platformers declare tileset.view:"side-view". '
+    'For hand-authored cap and trim atlases, use seamless:false and plan compatible left cap, repeating middle, '
+    'right cap, interior fill and underside pieces. Keep outlines on the exposed boundary. '
     'Use the same terrain layout and tile dimensions for drawing and collision; align the walkable surface with the collider. '
     'Clip partial tiles to existing platform bounds when preserving non-grid geometry; do not stretch a 22px platform to a full 48px art cell. '
     'Keep decorative layers separate from solid terrain. Verify several joined tiles and exposed ends in the actual game, not just each atlas cell. '
@@ -83,8 +101,10 @@ GENERATION_SCHEMA['properties'].update(
                 fps=dict(type='integer', minimum=1, maximum=60), loop=dict(type='boolean'),
                 next=dict(type=['string', 'null'], pattern='^[a-z][a-z0-9_-]{0,31}$')))),
     default_animation=dict(type='string', pattern='^[a-z][a-z0-9_-]{0,31}$'),
+    facing=dict(enum=['left', 'right']),
     tileset=dict(type='object', additionalProperties=False, required=['seamless', 'tiles'], properties=dict(
-        seamless=dict(type='boolean'), view=dict(enum=['top-down', 'side-view']), tiles=dict(type='object', minProperties=1, maxProperties=64,
+        seamless=dict(type='boolean'), view=dict(enum=['top-down', 'side-view']),
+        edge_mode=dict(enum=['repeat', 'autotile', 'blob']), tiles=dict(type='object', minProperties=1, maxProperties=64,
             propertyNames=dict(pattern='^[a-z][a-z0-9_-]{0,31}$'), additionalProperties=dict(
                 type='object', additionalProperties=False, required=['frame', 'solid'], properties=dict(
                     frame=dict(type='integer', minimum=0, maximum=63), solid=dict(type='boolean')))))))
@@ -110,6 +130,20 @@ def tile_prompt(spec):
     if 'tileset' not in spec and spec['kind'] != 'tile':
         return ''
     layout = spec.get('tileset', {})
+    if layout.get('edge_mode') == 'blob':
+        view = 'side-view orthographic cross-section' if layout.get('view') == 'side-view' else 'top-down orthographic'
+        return (f'\nDraw one opaque, full-bleed {view} terrain material. Match opposite edges for seamless repetition. '
+                'Spread organic detail across the material at a consistent scale. Continue the texture through all edges. '
+                'Keep silhouettes, borders, caps, gutters, horizon and surface bands out of the source texture. '
+                'Ember builds the 47 connected terrain silhouettes from this swatch.')
+    if layout.get('edge_mode'):
+        view = 'side-view orthographic platformer' if layout.get('view') == 'side-view' else 'top-down orthographic'
+        return ('\nTile materials (zero-based row-major cell indices): ' + json.dumps(tiles(spec), sort_keys=True) +
+            f'. Use {view} artwork. Each cell is a full-bleed, opaque material swatch, as if cropped from a much larger texture. '
+            'Keep the same texture density throughout each cell, extending through all four edges. '
+            'Opposite edges must repeat seamlessly horizontally and vertically. '
+            'Use no gaps, borders, highlights along the perimeter, surface trim, objects, end caps, or individual blocks. '
+            'Keep contrast and detail scale consistent at the center and the edges. ')
     if layout.get('view') == 'side-view':
         return ('\nStatic tile layout (zero-based row-major cell indices): ' + json.dumps(tiles(spec), sort_keys=True) +
             '. These cells are different terrain tiles, not animation frames. '
@@ -132,7 +166,7 @@ def tile_prompt(spec):
 
 
 def tileset_spec(name, names, *, style, tile_size=(32, 32), columns=4,
-                 solid=(), seamless=True, tool='muse_image', view=None):
+                 solid=(), seamless=True, tool='muse_image', view=None, edge_mode=None):
     """Prepare a static single tile or named tileset for the existing image handoff."""
     if (not isinstance(names, (list, tuple)) or not 1 <= len(names) <= 64 or
             any(not isinstance(n, str) for n in names) or len(set(names)) != len(names)):
@@ -143,7 +177,7 @@ def tileset_spec(name, names, *, style, tile_size=(32, 32), columns=4,
         raise ValueError('Solid tiles must name declared tiles')
     columns = min(columns, len(names))
     spec = dict(profile=PROFILE, id=name, display_name=name.replace('-', ' ').title(),
-        art_direction=style, kind='tile' if len(names) == 1 else 'tileset',
+        art_direction=style, kind='tile' if len(names) == 1 and edge_mode != 'blob' else 'tileset',
         frame_size=list(tile_size), grid=[columns, math.ceil(len(names) / columns)],
         frames=len(names), fps=1, loop=False, pivot=[0, 0], blend='source-over',
         sampling='nearest', require_alpha=False,
@@ -152,14 +186,39 @@ def tileset_spec(name, names, *, style, tile_size=(32, 32), columns=4,
             prompt='Original game terrain tiles: ' + ', '.join(names) + '.', seed=None))
     if view is not None:
         spec['tileset']['view'] = view
+    if edge_mode is not None:
+        spec['tileset']['edge_mode'] = edge_mode
+    if edge_mode == 'blob' and len(names) == 1:
+        spec.update(grid=list(terrain_tiles.GRID), frames=len(terrain_tiles.MASKS))
+        spec['tileset']['tiles'][names[0]]['frame'] = spec['frames'] - 1
     describe(spec)
     return spec
 
 
 def animation_prompt(spec):
-    if 'animations' not in spec:
-        return ''
-    return '\nAnimation layout (zero-based row-major cell indices): ' + json.dumps(spec['animations'], sort_keys=True) + '. Draw the named action in each assigned cell; keep the same character, scale and foot/pivot alignment across all actions. '
+    prompt = ''
+    if 'animations' in spec:
+        prompt = '\nAnimation layout (zero-based row-major cell indices): ' + json.dumps(spec['animations'], sort_keys=True) + '. Draw the named action in each assigned cell; keep the same character, scale and foot/pivot alignment across all actions. '
+    if 'facing' in spec:
+        prompt += f'Every pose faces screen {spec["facing"]}, including idle, travel and airborne poses. '
+        if locomotion_clips(spec):
+            prompt += ('Draw a continuous, in-place stride with alternating leg contacts and passing poses. '
+                       'Use each assigned walk/run cell for a distinct stride pose, with a steady foot baseline. '
+                       'Match the timing and spacing across the loop seam; use the same cadence and pose progression all the way through.')
+    return prompt
+
+
+def locomotion_clips(spec):
+    return [clip for name, clip in animations(spec).items() if name in ('walk', 'run')]
+
+
+def image_layout(spec):
+    """Requested source dimensions, grid and cell count. Blob output is assembled locally."""
+    width, height = spec['frame_size']
+    if spec.get('tileset', {}).get('edge_mode') == 'blob':
+        return (width, height), (1, 1), 1
+    columns, rows = spec['grid']
+    return (width * columns, height * rows), (columns, rows), spec['frames']
 
 
 def describe(spec):
@@ -167,7 +226,7 @@ def describe(spec):
               'grid', 'frames', 'fps', 'loop', 'pivot', 'blend', 'sampling',
               'require_alpha', 'production'}
     if (not isinstance(spec, dict) or not fields <= set(spec) or
-            set(spec) - fields - {'animations', 'default_animation', 'tileset'} or spec['profile'] != PROFILE):
+            set(spec) - fields - {'animations', 'default_animation', 'tileset', 'facing'} or spec['profile'] != PROFILE):
         raise ValueError('A complete sprite-atlas-v1 specification is required')
     for field, limit in [('display_name', 80), ('art_direction', 2000)]:
         if not isinstance(spec[field], str) or not 1 <= len(spec[field].strip()) <= limit:
@@ -176,6 +235,8 @@ def describe(spec):
         raise ValueError('Use a bounded lowercase asset slug')
     if spec['kind'] not in ('sprite', 'tile', 'tileset', 'background', 'vfx'):
         raise ValueError('Unsupported 2D asset kind')
+    if 'facing' in spec and (spec['kind'] != 'sprite' or spec['facing'] not in ('left', 'right')):
+        raise ValueError('Sprite facing must be left or right')
     for field, maximum in [('frame_size', 2048), ('grid', 64)]:
         value = spec[field]
         if not isinstance(value, list) or len(value) != 2 or any(type(n) is not int or not 1 <= n <= maximum for n in value):
@@ -201,18 +262,28 @@ def describe(spec):
         if spec['kind'] not in ('tile', 'tileset'):
             raise ValueError('Tile metadata requires tile or tileset artwork')
         if (not isinstance(layout, dict) or not {'seamless', 'tiles'} <= set(layout) or
-                set(layout) - {'seamless', 'tiles', 'view'} or
+                set(layout) - {'seamless', 'tiles', 'view', 'edge_mode'} or
                 ('view' in layout and layout['view'] not in ('top-down', 'side-view')) or
                 type(layout['seamless']) is not bool or not isinstance(layout['tiles'], dict) or
                 not 1 <= len(layout['tiles']) <= 64):
             raise ValueError('Declare seamless and one to 64 named tiles')
+        if 'edge_mode' in layout and (layout['edge_mode'] not in ('repeat', 'autotile', 'blob') or
+                not layout['seamless'] or spec['require_alpha'] or spec['blend'] != 'source-over'):
+            raise ValueError('Repeat and autotile materials must be opaque seamless fills using source-over')
+        if layout.get('edge_mode') == 'autotile' and min(spec['frame_size']) < 8:
+            raise ValueError('Autotile materials need cells at least 8 by 8 pixels')
         for name, tile in layout['tiles'].items():
             if (not isinstance(name, str) or not re.fullmatch('[a-z][a-z0-9_-]{0,31}', name) or
                     not isinstance(tile, dict) or set(tile) != {'frame', 'solid'} or
                     type(tile['frame']) is not int or not 0 <= tile['frame'] < spec['frames'] or
                     type(tile['solid']) is not bool):
                 raise ValueError('Each named tile requires a declared cell and boolean solid hint')
-        if (len(layout['tiles']) != spec['frames'] or
+        if layout.get('edge_mode') == 'blob':
+            if (spec['grid'] != list(terrain_tiles.GRID) or spec['frames'] != len(terrain_tiles.MASKS) or
+                    len(layout['tiles']) != 1 or next(iter(layout['tiles'].values()))['frame'] != spec['frames'] - 1 or
+                    min(spec['frame_size']) < 16):
+                raise ValueError('Blob terrain requires an 8 by 6 grid, 47 cells at least 16 px per side, and one logical tile at frame 46')
+        elif (len(layout['tiles']) != spec['frames'] or
                 {tile['frame'] for tile in layout['tiles'].values()} != set(range(spec['frames']))):
             raise ValueError('Name every declared tile cell exactly once')
     if ('tileset' in spec or spec['kind'] == 'tile') and (
@@ -236,6 +307,9 @@ def describe(spec):
         next_clip = clip.get('next')
         if next_clip is not None and (not isinstance(next_clip, str) or next_clip not in clips or clip['loop']):
             raise ValueError('Only a nonlooping animation may transition to another named animation')
+    if 'facing' in spec and any(not clip['loop'] or len(set(clip['frames'])) < 4
+                                for clip in locomotion_clips(spec)):
+        raise ValueError('Directional walk/run clips require a loop with at least four distinct pose cells')
     if 'default_animation' in spec and ('animations' not in spec or
             not isinstance(spec['default_animation'], str) or spec['default_animation'] not in clips):
         raise ValueError('Default animation must name a declared animation')
@@ -254,14 +328,15 @@ def describe(spec):
 
 def generation_request(spec):
     """Tool-ready parameters; this does not invoke a provider or authorize spending."""
-    info = describe(spec)
+    describe(spec)
     if spec['production']['method'] != 'generated':
         raise ValueError('Choose generated production for an image-tool request')
+    (width, height), (columns, rows), frames = image_layout(spec)
     prompt = (spec['production']['prompt'] + '\nArt direction: ' + spec['art_direction'] +
         '\nOriginal game art. No text, logos, labels, watermarks, borders or contact-sheet decoration. '
-        f"Export one PNG atlas exactly {info['dimensions_px'][0]}x{info['dimensions_px'][1]} pixels; "
-        f"{spec['grid'][0]} columns, {spec['grid'][1]} rows of {spec['frame_size'][0]}x{spec['frame_size'][1]} cells. "
-        f"First {spec['frames']} cells in row-major order. Consistent scale, silhouette, lighting and pivot "
+        f"Export one PNG atlas exactly {width}x{height} pixels; "
+        f"{columns} columns, {rows} rows of {spec['frame_size'][0]}x{spec['frame_size'][1]} cells. "
+        f"First {frames} cells in row-major order. Consistent scale, silhouette, lighting and pivot "
         f"{spec['pivot']}. Keep every sprite within its cell. " +
         ('True transparent background, no painted checkerboard. ' if spec['require_alpha'] else '') +
         ('Show a coherent anticipation, impact and dissipation sequence. No heat distortion.' if spec['kind'] == 'vfx' else '') +
@@ -290,7 +365,9 @@ def inspect_png(raw, spec):
     if spec['require_alpha'] and not (extrema[0] < 255 and extrema[1] > 0):
         raise ValueError('The atlas requires actual transparent and visible pixels')
     fw, fh = spec['frame_size']
+    edge_mode = spec.get('tileset', {}).get('edge_mode')
     frames = []
+    cells = []
     for index in range(spec['frames']):
         x, y = index % spec['grid'][0]*fw, index // spec['grid'][0]*fh
         cell = alpha.crop((x, y, x+fw, y+fh))
@@ -299,11 +376,40 @@ def inspect_png(raw, spec):
             raise ValueError('Every declared animation frame must contain visible pixels')
         if spec['require_alpha'] and spec['kind'] not in ('tile', 'tileset') and cell.getextrema()[0] == 255:
             raise ValueError('Every declared frame requires actual transparency')
+        if edge_mode in ('repeat', 'autotile'):
+            if cell.getextrema() != (255, 255):
+                raise ValueError(f'Terrain material {index} must be opaque across the entire cell')
+            if (rgba.crop((x, y, x+1, y+fh)).tobytes() != rgba.crop((x+fw-1, y, x+fw, y+fh)).tobytes() or
+                    rgba.crop((x, y, x+fw, y+1)).tobytes() != rgba.crop((x, y+fh-1, x+fw, y+fh)).tobytes()):
+                raise ValueError(f'Terrain material {index} has mismatched repeat edges')
+        if edge_mode == 'blob' or 'facing' in spec:
+            cells.append(rgba.crop((x, y, x+fw, y+fh)))
         frames.append(dict(index=index, rect=[x, y, fw, fh], alpha_bounds=list(bounds)))
-    return dict(profile=PROFILE, sha256=sha256(raw).hexdigest(), bytes=len(raw),
+    if edge_mode == 'blob':
+        terrain_tiles.check_joins(cells)
+        if len({cell.tobytes() for cell in cells}) != len(cells):
+            raise ValueError('Terrain blob requires distinct center, edge and corner artwork')
+    if 'facing' in spec:
+        for clip in locomotion_clips(spec):
+            poses = set()
+            for index in clip['frames']:
+                cell = cells[index]
+                # Ignore matte RGB and translation within a cell when counting poses.
+                visible = Image.new('RGBA', cell.size)
+                visible.alpha_composite(cell)
+                pose = visible.crop(visible.getbbox())
+                poses.add((pose.size, pose.tobytes()))
+            if len(poses) < 4:
+                raise ValueError('Walk/run artwork needs at least four distinct drawn poses')
+    report = dict(profile=PROFILE, sha256=sha256(raw).hexdigest(), bytes=len(raw),
                 dimensions_px=info['dimensions_px'], frames=frames,
                 transparency=extrema[0] < 255, production_sha256=digest(spec['production']),
                 basis='PNG, dimensions, frame occupancy and transparency checked. Visual quality, frame consistency and claimed provider origin require review.')
+    if edge_mode == 'blob':
+        report.update(connected_edges_matched=True, basis='47 distinct terrain cells and matching connected pixel edges checked. Review terrain shapes at game scale.')
+    elif edge_mode:
+        report.update(repeat_edges_matched=True, basis='PNG, dimensions, opacity and opposite pixel edges checked for each terrain material. Review the repeated texture at game scale.')
+    return report
 
 
 def package(raw, spec):
@@ -328,6 +434,31 @@ def write_source(output, raw, spec, request=None):
                 status='prepared', basis='Local artifact only; no game writes or asset acceptance')
 
 
+def match_repeat_edges(picture, spec):
+    """Feather opposite cell edges into each other, preserving the interior."""
+    width, height = spec['frame_size']
+    columns = spec['grid'][0]
+    for index in range(spec['frames']):
+        x, y = index % columns * width, index // columns * height
+        cell = picture.crop((x, y, x+width, y+height))
+        if cell.getchannel('A').getextrema() != (255, 255):
+            raise ValueError(f'Terrain material {index} must be opaque across the entire cell')
+        for axis, size in enumerate((width, height)):
+            depth = min(size // 2, max(1, min(16, round(size / 8))))
+            for offset in range(depth):
+                opposite = size - 1 - offset
+                if axis == 0:
+                    first, last = (offset, 0, offset+1, height), (opposite, 0, opposite+1, height)
+                else:
+                    first, last = (0, offset, width, offset+1), (0, opposite, width, opposite+1)
+                a, b = cell.crop(first), cell.crop(last)
+                mean = Image.blend(a, b, .5)
+                weight = (1 - offset / depth) ** 2
+                cell.paste(Image.blend(a, mean, weight), first)
+                cell.paste(Image.blend(b, mean, weight), last)
+        picture.paste(cell, (x, y))
+
+
 def prepare_generated_png(raw, spec):
     """Explicit Muse Image preparation: atlas sizing, magenta matte and PNG packing.
 
@@ -343,7 +474,8 @@ def prepare_generated_png(raw, spec):
         picture.load()
         original_size = list(picture.size)
         expected = info['dimensions_px']
-        if abs((picture.width / picture.height) / (expected[0] / expected[1]) - 1) > .08:
+        source_size, _, _ = image_layout(spec)
+        if abs((picture.width / picture.height) / (source_size[0] / source_size[1]) - 1) > .08:
             raise ValueError('Generated artwork has the wrong aspect ratio; the original is saved for review')
         picture = picture.convert('RGBA')
         if spec['require_alpha']:
@@ -356,7 +488,13 @@ def prepare_generated_png(raw, spec):
                     if distance < 96:
                         alpha = max(0, min(255, round((distance-24) * 255 / 72)))
                         pixels[x, y] = (r, g, b, min(a, alpha))
-        picture = picture.resize(expected, Image.Resampling.NEAREST if spec['sampling'] == 'nearest' else Image.Resampling.LANCZOS)
+        picture = picture.resize(source_size, Image.Resampling.NEAREST if spec['sampling'] == 'nearest' else Image.Resampling.LANCZOS)
+        edge_mode = spec.get('tileset', {}).get('edge_mode')
+        if edge_mode == 'blob':
+            match_repeat_edges(picture, {**spec, 'frames': 1, 'grid': [1, 1]})
+            picture = terrain_tiles.build(picture)
+        elif edge_mode:
+            match_repeat_edges(picture, spec)
         output = BytesIO(); picture.save(output, format='PNG', optimize=True)
         prepared = output.getvalue()
         quantized = False
@@ -365,10 +503,15 @@ def prepare_generated_png(raw, spec):
             output = BytesIO(); picture.save(output, format='PNG', optimize=True)
             prepared = output.getvalue(); quantized = True
     report = inspect_png(prepared, spec)
-    return prepared, dict(version=1, source_sha256=sha256(raw).hexdigest(),
+    preparation = dict(version=1, source_sha256=sha256(raw).hexdigest(),
         source_dimensions=original_size, output_sha256=report['sha256'], output_dimensions=expected,
         matte_removed=spec['require_alpha'], matte='#FF00FF' if spec['require_alpha'] else None,
         palette_quantized=quantized, basis='Scripted sizing and matte removal; inspect edges and frame consistency before acceptance')
+    if edge_mode == 'blob':
+        preparation.update(edge_mode=edge_mode, basis='One repeatable texture assembled into 47 terrain cells with verified connected edges.')
+    elif edge_mode:
+        preparation.update(edge_mode=edge_mode, basis='Opposite pixel edges matched per material. Inspect the repeated texture and connected terrain at game scale before acceptance.')
+    return prepared, preparation
 
 
 def unpack(content):

@@ -55,8 +55,8 @@ class TaskCoverageTests(unittest.TestCase):
         self.assertEqual(rows['reset']['basis'], 'declared_intent')
         self.assertEqual(rows['keyboard']['basis'], 'observed_input')
         self.assertEqual(rows['touch']['scenario_refs'], [dict(index=1, name='Touch retry', viewport='mobile')])
-        self.assertEqual(review['editor_limits'], dict(scenario_slots=2, action_budget_remaining_ms=16000,
-                                                     steps_per_scenario=16))
+        self.assertEqual(review['editor_limits'], dict(scenario_slots=2, action_budget_remaining_ms=86000,
+                                                     steps_per_scenario=32))
         packet['plan']['scenarios'][1]['coverage'].clear()
         self.assertEqual(rows['reset']['status'], 'configured')
         with self.assertRaisesRegex(ValueError, 'exact saved'):

@@ -66,13 +66,15 @@ def html(files):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--tiles', action='store_true', help='Rehearse the static tile workshop and tilemap APIs')
+    parser.add_argument('--tiles', action='store_true', help='Rehearse the tile workshop, repeat edges and autotiling')
     args = parser.parse_args(argv)
     runtime = polish_runtime.discover(ROOT, fingerprints=False)
     output = ROOT / ('.harness/tile-checks' if args.tiles else '.harness/sprite-checks') / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:6])
     output.mkdir(parents=True)
     isolated = output / 'fixture'; (isolated / 'examples').mkdir(parents=True); (isolated / 'examples/product_demo.py').touch()
     spec, raw = tile_fixture() if args.tiles else fixture()
+    if args.tiles:
+        spec['tileset']['edge_mode'] = 'autotile'
     source = isolated / '.harness/asset-source/character'; asset_2d.write_source(source, raw, spec)
     ref = asset_library.register(isolated, source)
     app = App(isolated); app.start('SYNTHETIC sprite rehearsal', chat_only=True)

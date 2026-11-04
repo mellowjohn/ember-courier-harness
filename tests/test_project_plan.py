@@ -68,6 +68,40 @@ class ProjectPlanTests(unittest.TestCase):
         self.assertEqual(state['build']['requests'], [])
         self.assertEqual(state['requests'][0]['origin'], 'project_plan')
 
+    def test_retry_recovers_a_saved_plan_with_unspecified_artwork_without_dispatch(self):
+        from ember_harness.core import digest
+        from ember_harness.muse_chat import MODEL
+        from test_muse_chat import wire_reply
+
+        turn = 'synthetic-recover-plan'
+        ask = 'Prepare the plan for approval'
+        failure = "Muse returned an invalid structured reply: {'scope': {'asset_budget': {}}}"
+        with patch('ember_harness.session_chat.run_muse', side_effect=ValueError(failure)):
+            with self.assertRaisesRegex(ValueError, 'invalid structured reply'):
+                self.app.chat(ask, turn)
+        self.document['scope']['asset_budget'] = {}
+        wire = wire_reply(dict(message='The plan is ready for review.', build=None, plan=self.document), chat_build.CHAT_SCHEMA)
+        capture = dict(model=MODEL, exit_code=0, response=None, response_error=failure,
+                       events=[dict(payload_type='run.terminal.completed',
+                                    payload=dict(terminal='completed', text=json.dumps(wire)))])
+        capture['capture_sha256'] = digest(capture)
+        captures = self.folder / 'muse-captures'
+        captures.mkdir(exist_ok=True)
+        saved_capture = captures / (turn + '.json')
+        saved_capture.write_text(json.dumps(capture), encoding='utf-8')
+        before = saved_capture.read_bytes()
+
+        with patch('ember_harness.session_chat.run_muse') as provider, redirect_stdout(io.StringIO()):
+            recovered = self.app.chat(ask, turn)
+            self.assertEqual(self.app.chat(ask, turn), recovered)
+        provider.assert_not_called()
+        self.assertEqual(saved_capture.read_bytes(), before)
+        pending = project_plan.status(self.root, self.folder)
+        self.assertIsNone(pending['approved'])
+        self.assertEqual(pending['pending']['payload']['body']['project_plan']['document'], self.document)
+        self.assertEqual(recovered['messages'][-1]['plan_ref'], pending['pending']['ref'])
+        self.assertFalse(chat_build.project(self.root, self.folder).exists())
+
     def test_builds_share_the_approved_root_inherit_art_and_export_verified_versions(self):
         plan_ref = self.approve(); first = self.apply_build()
         second = self.apply_build(turn='project-build-0002', html=HTML.replace('Deliver', 'Deliver now'))
@@ -205,12 +239,13 @@ class ProjectPlanTests(unittest.TestCase):
         self.assertEqual(len(project_plan.requests(self.folder)), 1)
 
     def test_chat_receives_frozen_project_task_and_cannot_claim_completion(self):
+        self.document['scope']['out_of_scope'].append('Generated artwork')
         plan_ref = self.approve()
         def model(root, folder, prompt, turn, **kw):
             data = json.loads(prompt.split('\n',1)[1]); saved = data['project_plan']
             self.assertEqual(saved['binding']['ref'], plan_ref)
             self.assertEqual(saved['selected_task'], 'task-1')
-            self.assertEqual(saved['document']['scope']['out_of_scope'], ['Combat','Multiplayer'])
+            self.assertEqual(saved['document']['scope']['out_of_scope'], ['Combat','Multiplayer','Generated artwork'])
             return dict(response=json.dumps(dict(message='SYNTHETIC proposal; not tested', build=dict(title='Task one', summary='Courier', files=[dict(path='index.html',content=HTML)]))))
         with patch('ember_harness.session_chat.run_muse', side_effect=model), redirect_stdout(io.StringIO()):
             self.app.chat('Work on the active task', 'planned-chat-turn-0001')
@@ -219,6 +254,7 @@ class ProjectPlanTests(unittest.TestCase):
         self.assertFalse(chat_build.project(self.root,self.folder).exists())
 
     def test_plan_start_generates_once_with_saved_building_status_and_exact_review(self):
+        self.document['scope']['out_of_scope'].append('Generated artwork')
         ref = self.approve()
         def model(root, folder, prompt, turn, **kw):
             data = json.loads(prompt.split('\n', 1)[1])
@@ -228,6 +264,7 @@ class ProjectPlanTests(unittest.TestCase):
             self.assertEqual(activity['kind'], 'plan_build')
             self.assertEqual(activity['state'], 'active')
             self.assertEqual(activity['plan_start']['title'], self.document['scope']['features'][0])
+            self.assertEqual(kw['execution']['profile'], 'deep')
             return dict(response=json.dumps(dict(message='SYNTHETIC first task ready for review',
                 build=dict(title='First task', summary='Courier loop', files=[dict(path='index.html', content=HTML)]))))
         with patch('ember_harness.session_chat.run_muse', side_effect=model) as muse, redirect_stdout(io.StringIO()):
@@ -254,6 +291,19 @@ class ProjectPlanTests(unittest.TestCase):
             muse.assert_not_called()
         self.assertEqual(session_chat.transcript(self.folder), [])
 
+    def test_first_visual_build_stops_if_correction_still_omits_artwork(self):
+        ref = self.approve()
+        code_only = dict(message='SYNTHETIC missing artwork', build=dict(title='First task', summary='Courier loop',
+            files=[dict(path='index.html', content=HTML)]))
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(code_only))) as muse, \
+                patch('ember_harness.muse_image.generate') as images:
+            with self.assertRaisesRegex(ValueError, 'did not connect the artwork'):
+                self.app.start_plan_build(self.sid, ref)
+        self.assertEqual(muse.call_count, 2)
+        images.assert_not_called()
+        self.assertFalse(chat_build.list_requests(self.folder))
+        self.assertFalse(chat_build.project(self.root, self.folder).exists())
+
     def test_failed_plan_start_can_retry_without_duplicate_turns_or_losing_approval(self):
         ref = self.approve()
         with patch('ember_harness.session_chat.run_muse', side_effect=ValueError('SYNTHETIC model unavailable')):
@@ -265,6 +315,21 @@ class ProjectPlanTests(unittest.TestCase):
             self.app.start_plan_build(self.sid, ref)
         self.assertEqual(len(session_chat.transcript(self.folder)), 2)
         self.assertEqual(session_chat.activity(self.folder)['kind'], 'plan_build')
+
+    def test_new_reply_to_failed_plan_build_keeps_approved_task_and_is_idempotent(self):
+        ref = self.approve()
+        retry_id = 'fresh-plan-build-0001'
+        with patch('ember_harness.session_chat.run_muse', side_effect=ValueError('SYNTHETIC interrupted')):
+            with self.assertRaisesRegex(ValueError, 'interrupted'):
+                self.app.start_plan_build(self.sid, ref)
+        with patch('ember_harness.session_chat.run_muse', return_value=dict(response='SYNTHETIC reply')) as muse:
+            first = self.app.start_plan_build(self.sid, ref, retry_id=retry_id)
+            self.assertEqual(self.app.start_plan_build(self.sid, ref, retry_id=retry_id), first)
+            self.assertEqual(muse.call_count, 1)
+            self.assertEqual(muse.call_args.args[3], retry_id)
+        original, retry, _ = first['messages']
+        self.assertEqual(retry['plan_start'], original['plan_start'])
+        self.assertEqual(retry['text'], original['text'])
 
     def test_plan_revoked_between_start_and_context_stops_before_model_call(self):
         ref = self.approve()
@@ -372,6 +437,7 @@ class ProjectPlanTests(unittest.TestCase):
         self.assertFalse(chat_build.list_requests(self.folder))
 
     def test_retry_preserves_selected_task_even_if_selection_changes(self):
+        self.document['scope']['out_of_scope'].append('Generated artwork')
         plan_ref=self.approve()
         with patch('ember_harness.session_chat.run_muse',side_effect=ValueError('SYNTHETIC interrupted reply')):
             with self.assertRaises(ValueError):self.app.chat('Implement selected task','task-context-retry-0001')

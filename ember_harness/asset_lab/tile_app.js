@@ -15,10 +15,15 @@
       for(let i=0;i<s.frames;i++) atlas.drawTile(ctx,i,20+i%s.grid[0]*w*scale,45+Math.floor(i/s.grid[0])*h*scale,{scale});
       const count=repeat.checked?4:1, previewScale=fit(Math.min(380/(count*w),210/(count*h)));
       ctx.fillText(repeat.checked?'Repeat · inspect opposite edges':'Selected tile',470,28);
-      atlas.drawMap(ctx,Array.from({length:count},()=>Array(count).fill(menu.value)),470,45,{scale:previewScale});
-      ctx.fillText('Sample map · placement of declared cells',20,310);
-      const rows=Array.from({length:4},(_,r)=>Array.from({length:12},(_,c)=>names[(r+c)%names.length]));
-      atlas.drawMap(ctx,rows,20,330,{scale:Math.min(3,840/(12*w),170/(4*h))});
+      for(let r=0;r<count;r++) for(let c=0;c<count;c++) {
+        atlas.drawTile(ctx,menu.value,470+c*w*previewScale,45+r*h*previewScale,{scale:previewScale});
+      }
+      const connected=['autotile','blob'].includes(s.tileset?.edge_mode);
+      ctx.fillText(connected?'Autotile preview · ledge, ends, inner corners and fill':'Sample map · placement of declared cells',20,310);
+      const rows=connected
+        ? ['####........','######..####','######..#..#','#########..#'].map(row=>Array.from(row,cell=>cell==='#'?menu.value:null))
+        : Array.from({length:4},(_,r)=>Array.from({length:12},(_,c)=>names[(r+c)%names.length]));
+      atlas.drawMap(ctx,rows,20,330,{scale:fit(Math.min(3,840/(12*w),170/(4*h)))});
       const selected=atlas.tiles[menu.value];
       document.querySelector('#status').textContent=`${s.frames} tiles · ${w} × ${h} px · ${menu.value} · Cell ${selected.frame} · ${selected.solid?'Solid':'Passable'}`;
       document.querySelector('#repeat-state').textContent=repeat.checked?'Repeated 4 × 4':'Single tile';

@@ -16,7 +16,7 @@ import test_gameplay as dom
 import test_mechanic_workflow as flows
 import test_task_run as tasks
 import test_polish as overnight
-from quality_fixture import assessments, comparison, review_sheets
+from quality_fixture import aspect_captures, assessments, comparison
 from ember_harness import chat_build, gameplay, mechanic_recipes as recipes, mechanic_workflow, polish, polish_runtime, project_plan, task_run
 from ember_harness.recovery import atomic_json, read_json
 
@@ -51,10 +51,9 @@ class Observations:
             views.append(dict(name=view, loaded=True, observations=[], after=dict(overflow=False),
                 screenshot=view+'.png', sha256=polish_runtime.file_digest(output/(view+'.png')),
                 before_screenshot=view+'-before.png', before_sha256=polish_runtime.file_digest(output/(view+'-before.png'))))
-        if data.get('review_sheets'):
-            review_sheets(output, views)
         report = dict(complete=True, input_sha256=polish_runtime.file_digest(source), viewports=views,
                       gameplay=dom.result(data['gameplay_plan']))
+        aspect_captures(data, output, report)
         if data.get('mechanic_binding'):
             report['mechanics'] = self.raw(data['mechanic_binding']['configuration'])
         if self.mutate:

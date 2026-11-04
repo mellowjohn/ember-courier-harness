@@ -13,8 +13,7 @@ def policy(frozen, base):
     count = sprite_project.MAX_ATLASES
     title = next(t['title'] for t in frozen['tasks'] if t['id'] == frozen['selected_task'])
     explicit = re.search(r'\b(generat\w*|artwork|sprites?|backgrounds?|tiles?|tilesets?|tilemaps?)\b', title, re.I)
-    exclusions = ' '.join(scope['out_of_scope'])
-    if re.search(r'\b(?:no generated (?:art(?:work)?|assets|images)|(?:procedural|text)[ -]only)\b', exclusions, re.I):
+    if sprite_project.excludes_generated_artwork(scope['out_of_scope']):
         return None
     if (any(i['path'] in ('asset.js', sprite_project.ASSETS_FILE) for i in base['files'])
             or (base['files'] and not explicit)):

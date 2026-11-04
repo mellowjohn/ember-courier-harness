@@ -20,11 +20,11 @@ No administrator access, terminal commands or environment activation are needed
 after Python is installed. **Setup Ember.cmd** also works on its own for setup
 or repairs.
 
-**AI chat requires a separately installed, signed-in Muse Code CLI and your own
-authorized credits.** Ember does not include free credits. The current Muse
-integration targets Windows. You can open the app and inspect local work without
-Muse, but new AI replies need it. The repository's $150 promotional-credit ceiling
-is Johnathan's allowance, not a credit grant to other users.
+**AI chat uses your own Muse Code account.** Install Muse Code on Windows, sign
+in with your subscribed Meta account, then open **Muse settings** in Ember to
+check your subscription. If you have your own Model API promotional credits,
+you can select that connection separately. You can open Ember and inspect local
+work before connecting. See the [setup guide](docs/INSTALL.md#enable-ai-chat).
 
 **Automated gameplay checks are optional:** install [Node.js LTS](https://nodejs.org/en/download),
 then run `& ".\Setup Ember.cmd" --browser` from PowerShell in the Ember folder to
@@ -168,7 +168,7 @@ These features use optional Node, Playwright and Chromium tooling; [setup instru
 
 Choose a projects folder when creating a session; Ember remembers it after restart. **Project folder → Save approved project as…** prepares a reviewed copy in another location. Sessions, approvals, captures and evidence stay under ignored **`.harness/`** paths; project files use their saved location. See [local project locations](docs/LOCAL_UI.md). Game previews use an opaque-origin frame with blocked network access. ZIP exports contain verified game files and a source manifest, without private session history or credentials.
 
-Live Muse requests share Johnathan's authorized **$150 total promotional-credit ceiling**, with bounded reservations, conservative holds for uncertain usage, and no cash fallback or automatic top-up. Running saved gameplay checks, trying proposals, restoring versions and exporting ZIPs do not call Muse. See [models and credits](docs/MODELS_AND_CREDITS.md).
+Live requests use the connection selected in **Muse settings**. Ember keeps a shared local $150 safety ceiling with bounded reservations and conservative holds for uncertain usage. Your subscription allowance and promotional balance are managed by Meta. Running saved gameplay checks, trying proposals, restoring versions and exporting ZIPs do not call Muse. See [models and credits](docs/MODELS_AND_CREDITS.md).
 
 ## Verify the project
 
@@ -211,7 +211,7 @@ Run `.\.venv\Scripts\python.exe examples/muse_review_demo.py` for optional revie
 
 ## Start here
 
-- **Local workflow app:** run `.\.venv\Scripts\python.exe -m ember_harness.local_ui`, then open the printed private link. Chat with Muse using the authorized hackathon credits, reopen named sessions, resume checkpointed workflows after a stopped worker, request browser prototypes with inline diff approval, and review sample-workflow approvals in chat. See [`docs/LOCAL_UI.md`](docs/LOCAL_UI.md).
+- **Local workflow app:** run `.\.venv\Scripts\python.exe -m ember_harness.local_ui`, then open the printed private link. Chat with Muse using your own connection, reopen named sessions, resume checkpointed workflows after a stopped worker, request browser prototypes with inline diff approval, and review sample-workflow approvals in chat. See [`docs/LOCAL_UI.md`](docs/LOCAL_UI.md).
 
 - **Complete product demonstration:** [`docs/PRODUCT_DEMO.md`](docs/PRODUCT_DEMO.md). Run `.\.venv\Scripts\python.exe examples/product_demo.py` for one shared scope, selected and accepted asset, intake, amended fix, actual regression, local commit and clean verification.
 - **Concept selection and asset ingest:** [`docs/concepts/SELECTION_AND_INGEST.md`](docs/concepts/SELECTION_AND_INGEST.md). Run `.\.venv\Scripts\python.exe examples/asset_demo.py` for the CLI end-to-end demonstration with original PNG fixtures and simulated owner approvals.

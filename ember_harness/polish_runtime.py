@@ -106,6 +106,7 @@ def validate(runtime):
 
 
 def inspect(runtime, source, output, *, check):
+    from . import gameplay
     validate(runtime)
     output = Path(output)
     report = output / 'report.json'
@@ -113,13 +114,16 @@ def inspect(runtime, source, output, *, check):
         return verified_report(source, output)
     if output.exists() and any(output.iterdir()):
         raise ValueError('An interrupted browser capture needs inspection; completed candidates remain available')
+    plan = read_json(source).get('gameplay_plan')
+    action_seconds = gameplay.action_cost_ms(gameplay.validate(plan)) / 1000 if plan is not None else 0
     env = dict(os.environ, EMBER_PLAYWRIGHT_MODULE=runtime['module'], EMBER_BROWSER_EXECUTABLE=runtime['browser'])
     output.mkdir(parents=True, exist_ok=True)
     with (output / 'browser.log').open('wb') as log:
         process = subprocess.Popen([runtime['node'], runtime['driver'], str(source), str(output)],
             env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        deadline = time.monotonic() + 55
+        # Keep the existing allowance for Chromium startup, screenshots and layout checks.
+        deadline = time.monotonic() + 55 + max(0, action_seconds - 20)
         try:
             while process.poll() is None:
                 check()

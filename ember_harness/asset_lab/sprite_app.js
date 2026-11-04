@@ -9,7 +9,8 @@
   document.querySelector('#description').textContent = s.art_direction;
   EmberSprites.load(EMBER_ASSET).then(atlas => {
     const player = atlas.createPlayer(), names = Object.keys(atlas.animations);
-    let last = null, x = 210, facingLeft = false;
+    const stride = names.includes('walk') ? 'walk' : names.includes('run') ? 'run' : null;
+    let last = null, x = 210, facingLeft = s.facing === 'left';
     for (const name of names) {
       const option = document.createElement('option'); option.value = name; option.textContent = name; menu.append(option);
     }
@@ -55,14 +56,15 @@
         const clip = atlas.animations[player.animation], actionLocked = !clip.loop && !player.completed;
         if (direction && !actionLocked) {
           x = Math.max(85, Math.min(335, x + direction * 160 * dt)); facingLeft = direction < 0;
-          if (Object.hasOwn(atlas.animations, 'walk')) player.play('walk');
-        } else if (!direction && player.animation === 'walk' && Object.hasOwn(atlas.animations, 'idle')) player.play('idle');
+          if (stride) player.play(stride);
+        } else if (!direction && player.animation === stride && Object.hasOwn(atlas.animations, 'idle')) player.play('idle');
         player.update(dt);
       }
       const [w, h] = s.frame_size;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      player.draw(ctx, x, 280, {scale: Math.min(1, 160 / w, 160 / h), flipX: facingLeft});
-      player.draw(ctx, 600, 280, {scale: Math.min(3, 330 / w, 260 / h), flipX: facingLeft});
+      const orientation = s.facing ? {facing: facingLeft ? 'left' : 'right'} : {flipX: facingLeft};
+      player.draw(ctx, x, 280, {scale: Math.min(1, 160 / w, 160 / h), ...orientation});
+      player.draw(ctx, 600, 280, {scale: Math.min(3, 330 / w, 260 / h), ...orientation});
       ctx.fillStyle = '#c4d6e4'; ctx.font = '16px system-ui';
       ctx.fillText('Gameplay scale', 140, 380); ctx.fillText('Enlarged inspection', 520, 380);
       status.textContent = `Frame ${player.frame + 1} / ${s.frames} · ${atlas.animations[player.animation].fps} fps · ${s.blend}`;

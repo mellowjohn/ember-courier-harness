@@ -13,7 +13,7 @@ BRIEF_SCHEMA = {
     'properties': {
         'game_concept': TEXT, 'core_loop': TEXT, 'features': TEXTS,
         'out_of_scope': TEXTS, 'done_criteria': TEXTS,
-        'asset_budget': {'type': 'object', 'minProperties': 1, 'maxProperties': 20,
+        'asset_budget': {'type': 'object', 'maxProperties': 20,
                          'propertyNames': TEXT,
                          'additionalProperties': {'type': 'integer', 'minimum': 0}},
     },

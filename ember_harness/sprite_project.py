@@ -84,7 +84,9 @@ INSTRUCTION = (
     'and use its artwork in the game; do not leave planned entities unconnected or draw their art as placeholders. '
     'const hero=scene.createEntity("hero"); use that literal entity ID in its declared binding.file. '
     'Bind hero.update(dtSeconds,{moving:Math.abs(vx)>0.01,grounded,dead:hp<=0},["attack"]) to real game state and edge-triggered events. '
-    'hero.draw(ctx,x,y,{scale:1,flipX:vx<0}) draws the actual bound atlas. Spawn independent instances with createEntity(id). '
+    'hero.draw(ctx,x,y,{scale:1,facing:direction}) draws the bound directional atlas. Retain the last facing when stopped. '
+    'Compare source facing to world velocity or chase target. In a scrolling runner, both runner and pursuing enemy face along the course. '
+    'Spawn independent instances with createEntity(id). '
     'hero.state,frame,completed,entityId,assetRef and scene.diagnostics() expose observed animation state and draw counts. '
     'update returns named marker events once per state entry, including entityId and sequence; apply gameplay damage only once for a hit marker. '
     'State machine: {initial,signals:{moving:{type:"boolean",default:false}},states:{idle:{clip:"idle",priority:0,interruptible:true,'
@@ -92,14 +94,31 @@ INSTRUCTION = (
     'Use only declared signals and real clips. Higher target priority can interrupt a locked action; lower priority cannot. '
     'Terminal states ignore transitions until explicit reset for a real respawn. Same-state requests never restart attacks. '
     'on_complete names a state after a nonlooping clip; the machine owns transitions and ignores per-clip next. '
+    'Before implementing, read each bound atlas specification for source facing, frame indices, playback speed and loop flags. '
+    'Use one looping walk/run clip per sustained movement state, with several distinct stride poses. '
+    'Use separate states only for actual gameplay changes such as jumping or stopping. '
+    'Avoid unconditional or competing transitions while moving and never reset the locomotion clip every tick. '
+    'Check multiple successive rendered poses and the loop seam while holding movement in the browser. Check the runner and pursuer face the course. '
+    'A terminal state requires a nonlooping clip. If no suitable clip is available, let the game own the game-over '
+    'state and stop updating the sprite there instead of assigning a looping clip to a terminal state. '
     'Markers use clip-local frame indices. Declare jump/fall/landing only when the game has those mechanics; '
     'death should be terminal with highest priority, hurt should interrupt ordinary motion, and attacks should lock appropriately. '
+    'Use entity.reset() on respawn/restart to leave terminal states. The entity wrapper does not expose play(); drive '
+    'machines through update signals/events. For on-demand animation, create or reset the effect when triggered, '
+    'then update(dtSeconds) and draw it on each active frame. '
     'A static entity may use machine:null with required_clips:["default"] for legacy single frames. '
+    'Discrete props such as obstacles can share a static tile or tileset atlas with machine:null and required_clips:["default"]. '
+    'Draw each prop variant by name with drawTile; keep its collision in the game code. '
     'Terrain tiles use role:tileset, kind:tile or tileset, required_clips:["default"], machine:null. '
     'Declare tileset:{seamless:true,tiles:{grass:{frame:0,solid:false},wall:{frame:1,solid:true}}} in generation, '
     'with loop:false, pivot:[0,0], and no animations; tile cells are static terrain variants. '
     'Side-view platformers require tileset.view:"side-view", not overhead terrain. '
-    'For a platform edge set use seamless:false and plan left/middle/right surfaces, interior fill and exposed underside/corner pieces as needed. '
+    'Use edge_mode:"blob" for new connected terrain or when replacing visibly tiled ground. The host turns one opaque swatch '
+    'into 47 edge-compatible shape variants; use the logical tile name for all connected ground and null for gaps. '
+    'Reuse a terrain atlas only when its camera view, adjacency and visual seams match the current level. '
+    'If the existing atlas repeats outlined blocks or lacks needed corners, generate a replacement rather than reassigning the same cells. '
+    'Render a representative map with a long center run, isolated pieces, both platform ends and a concave corner before approval. '
+    'For standalone repeating textures without trim, use tileset.edge_mode:"repeat" with the same flags. '
     'Internal joins must not repeat a complete outline around every cell. Derive rendered terrain and collision from the same layout; '
     'preserve existing platform bounds when replacing artwork and clip any partial cells. '
     'const terrain=scene.createEntity("terrain"); terrain.drawMap(ctx,rows,x,y,{scale:2}) renders tile-name/index rows with null empty cells. '
@@ -165,11 +184,14 @@ def validate_plan(plan):
 
 def validate_entity_asset(entity, spec):
     asset_2d.describe(spec)
-    kinds={'background':('background',),'tileset':('tile','tileset'),'effect':('vfx','sprite')}
+    tile_kinds=('tile','tileset')
+    kinds={'background':('background',),'tileset':tile_kinds,'prop':('sprite',*tile_kinds),'effect':('vfx','sprite')}
     allowed=kinds.get(entity['role'],('sprite',))
     if spec['kind'] not in allowed: raise ValueError('Artwork kind does not match entity role: '+entity['id'])
     if entity['role'] == 'tileset' and (entity['machine'] is not None or entity['required_clips'] != ['default']):
         raise ValueError('Terrain requires static default cells without an animation state machine')
+    if entity['role'] == 'prop' and spec['kind'] in tile_kinds and (entity['machine'] is not None or entity['required_clips'] != ['default']):
+        raise ValueError('Tile props require static default cells without an animation state machine')
     missing=set(entity['required_clips'])-set(asset_2d.animations(spec))
     if missing: raise ValueError(entity['id']+' needs missing clips: '+', '.join(sorted(missing)))
     validate_machine(entity['machine'],spec)
@@ -313,7 +335,15 @@ def context(root,folder,files):
 
 def requirements(text):
     """Grounded planning hints, not authority to add mechanics or spend credits."""
-    groups=[(r'\b(move|movement|walk|run|courier|platformer)\b',['idle','walk'],'Movement'),
+    walk = r'\bwalk(?:s|ing)?\b'
+    run = r'\b(?:runners?|runs|running|auto[ -]?run(?:s|ning)?|sprint(?:s|ing)?)\b|\brun (?:cycle|animation|clip|stride)\b'
+    running = bool(re.search(run, text, re.I))
+    movement = ['idle']
+    if not running or re.search(walk, text, re.I):
+        movement.append('walk')
+    if running:
+        movement.append('run')
+    groups=[(rf'\b(?:move|movement|run|courier|platformer)\b|{walk}|{run}',movement,'Movement'),
             (r'\b(jump|jumping|platformer|airborne)\b',['jump','fall'],'Airborne movement'),
             (r'\b(combat|attack|fight|fighting|damage)\b',['attack','hurt','death'],'Combat'),
             (r'\b(projectile|fireball|bullet)\b',['travel','impact'],'Projectiles'),
@@ -321,9 +351,15 @@ def requirements(text):
     return [dict(reason=reason,clips=clips) for pattern,clips,reason in groups if re.search(pattern,text,re.I)]
 
 
+def excludes_generated_artwork(exclusions):
+    return any(re.search(r'\b(?:no (?:AI[- ])?generated (?:art(?:work)?|assets|images)|(?:procedural|text)[ -]only)\b', text, re.I)
+               or re.fullmatch(r'(?:AI[- ]|image[- ])?generated (?:art(?:work)?|assets|images)', text.strip(), re.I)
+               for text in exclusions)
+
+
 def prepare(root,folder,response,snapshot,build,basis,turn_id,*,budget=None,progress=None,project_binding=None,generate=None):
     """Resolve a complete plan before proposing any game writes; replay generation by stable ID."""
-    from . import asset_library,muse_image
+    from . import asset_library,game_audio,muse_image
     Draft202012Validator(RESPONSE_SCHEMA).validate(response)
     plan=deepcopy(validate_plan(response['plan']))
     current=load_draft(folder)
@@ -331,6 +367,11 @@ def prepare(root,folder,response,snapshot,build,basis,turn_id,*,budget=None,prog
         raise ValueError('Sprite plan changed; prepare a fresh revision')
     # Validate every reuse and generation before spending on any entity.
     for e in plan['entities']:
+        binding = e['binding']
+        if response['intent'] == 'implement' and binding and binding['file'] not in basis:
+            # A new file has no approved draw snippet to replace. The literal
+            # createEntity call in the proposed file is still checked below.
+            binding['replace'] = ''
         if e['asset_ref']: validate_entity_asset(e,asset_library.select(root,snapshot,e['asset_ref'])[1])
         elif response['intent']=='implement' and not e['generation']: raise ValueError('Choose artwork for '+e['id'])
         if response['intent']=='implement' and e['role'] in ('player','enemy','npc') and len(e['required_clips'])>1 and e['machine'] is None:
@@ -348,6 +389,7 @@ def prepare(root,folder,response,snapshot,build,basis,turn_id,*,budget=None,prog
     # Preflight draw replacements and required source bindings before dispatching images.
     files={i['path']:i['content'] for i in build['files']}
     check_bindings(plan,files,basis)
+    files=game_audio.attach(files,basis)
     from . import chat_build
     names=set(files)|set(basis)&set(chat_build.PROTECTED_FILES)|{ASSETS_FILE,PLAN_FILE,'sprite-player.js'}
     if len(names)>chat_build.MAX_FILES: raise ValueError('Sprite scene exceeds the eight-file game limit')

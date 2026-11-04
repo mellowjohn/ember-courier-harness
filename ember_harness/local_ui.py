@@ -8,6 +8,7 @@ from pathlib import Path
 import secrets
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -17,13 +18,13 @@ from urllib.parse import urlsplit, parse_qs
 from . import Harness
 from .owner_review import load_request, decide
 from .recovery import Recovery, exclusive, worker_active, read_json
-from .session_chat import transcript, send, activity as chat_activity, MUSE_UNAVAILABLE
+from .session_chat import transcript, send, activity as chat_activity
 from .muse_chat import installed_binary, CreditLedger
 from . import chat_build, playtests, project_versions, project_brief, browser_checks, polish, polish_runtime, gameplay, asset_library, project_locations, project_plan
 from . import task_run, task_coverage, asset_run, findings, workspace, project_handoff
 from . import mechanic_workflow
 from . import git_task, git_automation
-from . import muse_image, asset_2d
+from . import muse_image, muse_settings, asset_2d
 from . import proposal_quality
 
 
@@ -170,16 +171,17 @@ class App:
                          files=[dict(path=k, content=v) for k,v in saved['files'].items()]))
                 return dict(session_id=self.session['id'], request_ref=ref, project=str(chat_build.project(self.root, target)))
 
-    def chat(self, text, turn_id):
+    def chat(self, text, turn_id, *, session_id=None):
         with self.lock:
             if not self.session:
                 raise ValueError('Create or select a session first')
-            session = dict(self.session)
-            folder = self.sessions_dir / session['id']
+            if session_id is not None and self.session['id'] != session_id:
+                raise ValueError('The open session changed. Reopen the intended session and send your message again.')
+            folder = self.sessions_dir / self.session['id']
         messages = send(folder, text, turn_id, 'muse', root=self.root)
         return dict(messages=messages)
 
-    def start_plan_build(self, session_id, plan_ref):
+    def start_plan_build(self, session_id, plan_ref, *, retry_id=None):
         with self.lock:
             if not self.session or self.session['id'] != session_id:
                 raise ValueError('Reopen the intended session before starting its build')
@@ -188,7 +190,19 @@ class App:
             if not plan['active'] or plan['approved']['ref'] != plan_ref:
                 raise ValueError('Reopen the active approved project plan before starting its build')
             turn_id = 'plan-build-' + plan_ref[:40]
-            previous = next((m for m in transcript(folder) if m['id'] == turn_id), None)
+            messages = transcript(folder)
+            previous = next((m for m in messages if m['id'] == turn_id), None)
+            if retry_id is not None:
+                if previous is None:
+                    raise ValueError('Start the approved plan build first')
+                start = previous['plan_start']
+                latest = next(m for m in reversed(messages) if m.get('plan_start') == start)
+                replay = next((m for m in messages if m['id'] == retry_id), None)
+                if replay is not None and replay.get('plan_start') != start:
+                    raise ValueError('Message ID already belongs to another request')
+                if replay is None and latest.get('status') != 'failed':
+                    raise ValueError('A new build reply can only retry a failed plan build')
+                turn_id = retry_id
             task = next(t for t in plan['tasks'] if t['id'] == plan['selected_task'])
             start = previous['plan_start'] if previous else dict(plan_ref=plan_ref, task_id=task['id'], title=task['title'])
             text = previous['text'] if previous else (
@@ -434,7 +448,7 @@ class App:
             result = dict(status=worker['status'], session=self.session,
                 exit_code=code, log=log[-40000:], requests=[], audit=[], report=None,
                 recovery_available=False, recovery_step=None, messages=[],
-                models=dict(local=False, muse=bool(installed_binary()), muse_reason=MUSE_UNAVAILABLE),
+                models=dict(local=False, muse=bool(installed_binary()), billing_mode=muse_settings.mode(self.root)),
                 image_generation=muse_image.status(self.root),
                 credit_budget=CreditLedger(self.root).summary(),
                 project_settings=dict(parent=project_locations.default_parent(self.root)),
@@ -994,6 +1008,16 @@ def server(app, port=0):
                     result = {'status': 'started'}
                 elif self.path == '/api/project-folder-picker':
                     result = app.pick_project_parent(body.get('parent'))
+                elif self.path == '/api/muse-settings':
+                    result = muse_settings.save(app.root, body.get('mode'),
+                                                no_paid_fallback=body.get('no_paid_fallback'))
+                elif self.path == '/api/muse-settings/check':
+                    binary = installed_binary()
+                    if not binary:
+                        raise ValueError('Install Muse Code and sign in to your subscribed Meta account first.')
+                    with tempfile.TemporaryDirectory() as scratch:
+                        muse_settings.subscription_environment(binary, scratch)
+                    result = {'status': 'available'}
                 elif self.path == '/api/project-copy':
                     result = app.copy_project(body['session_id'], body['current_ref'], body['name'], body['project_parent'])
                 elif self.path == '/api/workspace':
@@ -1005,9 +1029,9 @@ def server(app, port=0):
                 elif self.path == '/api/asset-update':
                     result = app.review_asset_update(body['session_id'], body['asset_ref'], body['current_ref'])
                 elif self.path == '/api/chat':
-                    result = app.chat(body['text'], body['id'])
+                    result = app.chat(body['text'], body['id'], session_id=body.get('session_id'))
                 elif self.path == '/api/plan-build':
-                    result = app.start_plan_build(body['session_id'], body['plan_ref'])
+                    result = app.start_plan_build(body['session_id'], body['plan_ref'], retry_id=body.get('retry_id'))
                 elif self.path == '/api/build-resume':
                     result = app.resume_build(body['ref'])
                 elif self.path == '/api/request-changes':

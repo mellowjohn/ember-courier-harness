@@ -83,6 +83,35 @@ module.exports = async function checkLibrary(page, view) {
   let resumePolling;
   const pollingGate=new Promise(resolve=>{resumePolling=resolve});
   await page.route('**/api/state', async route => { await pollingGate; await route.continue(); });
+  await page.evaluate(()=>{
+    const message={id:'synthetic-plan-draft',role:'assistant',model:'Muse',created_at:new Date().toISOString()};
+    const text=[
+      'Here is a first draft for Courier Dash.', '',
+      'Concept: Carry a parcel across a windy island.', '',
+      '**Core loop:** Pick up the parcel, dodge gusts, reach the lighthouse.', '',
+      '### Controls / platform [Proposed]', 'Keyboard or touch.', '',
+      'First playable:', '- One island route', '- A delivery and restart screen', '',
+      'Success criteria: The player can complete a delivery.', '',
+      'This is just a draft. Tell me what you would change. <img src=x>'
+    ].join('\n');
+    renderChat({...lastState,messages:[{...message,id:'plain-reply',text:'What kind of game would you like to make?'},{...message,text}]});
+  });
+  const draft=page.locator('.message.plan-draft');
+  await draft.getByRole('heading',{name:'Game plan draft',exact:true}).waitFor();
+  assert.deepEqual(await draft.locator('h4').allTextContents(),['Concept','Core loop','Controls / platform','First playable','Success criteria']);
+  assert.deepEqual(await draft.getByRole('listitem').allTextContents(),['One island route','A delivery and restart screen']);
+  assert.equal(await draft.locator('.draft-note').textContent(),'[Proposed]');
+  assert((await draft.locator('.draft-closing').textContent()).includes('<img src=x>'));
+  assert.equal(await draft.locator('img, button').count(),0);
+  await page.locator('.message.assistant:not(.plan-draft)').getByText('What kind of game would you like to make?',{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('.draft-heading').getBoundingClientRect().top>=document.querySelector('#conversation-history').getBoundingClientRect().top);
+  for (const width of [1500,390]) {
+    await page.setViewportSize({width,height:900});
+    assert(await draft.evaluate(node=>node.scrollWidth<=node.clientWidth));
+    await page.locator('#chat').screenshot({path:path.join(process.env.EMBER_BROWSER_OUTPUT,'plan-draft-'+width+'.png')});
+  }
+  await page.setViewportSize({width:1500,height:1000});
+  await page.evaluate(()=>renderChat(lastState));
   // A real-length task with asset references stays compact on desktop/mobile.
   await page.evaluate(()=>{
     const title='Complete first playable SNOWBALL SHOWDOWN duel in one snowy town square dusk arena reusing '+
@@ -166,6 +195,28 @@ module.exports = async function checkLibrary(page, view) {
   assert.equal(await page.locator('#review .artwork-preview').count(),0);
   assert.deepEqual(await page.locator('#agent-progress [data-kind="source"] .agent-file').allTextContents(),['index.html','game.js']);
   assert.deepEqual(await page.locator('#agent-progress [data-kind="edits"] .agent-file').allTextContents(),['game.js']);
+  await page.evaluate(()=>{
+    diffReviewState.chat_activity={...diffReviewState.chat_activity,phase:'receiving',file_changes:[
+      {path:'game.js',new:false,added:1,removed:1,lines:['@@ -1 +1 @@','-flipX:true','+flipX:false']},
+      {path:'style.css',new:true,added:1,removed:0,lines:['+body {}']},
+    ]};
+    renderAgentActivity(diffReviewState);
+  });
+  const liveDiff=page.getByRole('region',{name:'Draft file changes'});
+  const editedFile=liveDiff.locator('details[data-diff-path="game.js"]');
+  assert.deepEqual(await liveDiff.locator('summary .agent-diff-kind').allTextContents(),['Edited','New']);
+  assert.deepEqual(await liveDiff.locator('summary .agent-diff-added').allTextContents(),['+1','+1']);
+  assert.deepEqual(await liveDiff.locator('summary .agent-diff-removed').allTextContents(),['-1','-0']);
+  await editedFile.locator('summary').click();
+  await editedFile.locator('pre .agent-diff-removed').getByText('-flipX:true',{exact:true}).waitFor();
+  await page.evaluate(()=>{
+    diffReviewState.chat_activity.file_changes_exact=true;
+    diffReviewState.chat_activity.phase='visual_review';
+    renderAgentActivity(diffReviewState);
+  });
+  const proposedFile=page.getByRole('region',{name:'Proposed file changes'}).locator('details[data-diff-path="game.js"]');
+  assert.equal(await proposedFile.evaluate(node=>node.open),true);
+  await proposedFile.locator('pre .agent-diff-added').getByText('+flipX:false',{exact:true}).waitFor();
   await page.evaluate(()=>{
     diffReviewState.chat_activity={...diffReviewState.chat_activity,state:'complete',phase:'awaiting_review'};
     diffReviewState.build.quality_check={...diffReviewState.build.quality_check,status:'needs_changes',issues:['Facing fix is not proven.']};

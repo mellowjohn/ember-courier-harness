@@ -59,6 +59,25 @@ class TileTests(unittest.TestCase):
         content = asset_2d.package(self.raw, self.spec)
         self.assertEqual(asset_2d.unpack(content)[1]['tileset'], self.spec['tileset'])
 
+    def test_blob_source_builds_and_checks_47_connected_cells(self):
+        spec = asset_2d.tileset_spec('blob-test', ['ground'], style='Weathered mossy rock',
+            edge_mode='blob', tile_size=(32, 24), solid=['ground'], view='side-view')
+        request = asset_2d.generation_request(spec)
+        self.assertEqual(muse_image.parameters(request)['size'], '32x24')
+        self.assertEqual(spec['tileset']['tiles']['ground']['frame'], 46)
+        stream = BytesIO()
+        Image.new('RGB', (32, 24), '#596a47').save(stream, 'PNG')
+        raw, preparation = asset_2d.prepare_generated_png(stream.getvalue(), spec)
+        self.assertEqual(preparation['output_dimensions'], [256, 144])
+        self.assertTrue(asset_2d.unpack(asset_2d.package(raw, spec))[2]['connected_edges_matched'])
+        # Mask 1 joins to its north. Damage that boundary while preserving dimensions and occupancy.
+        picture = Image.open(BytesIO(raw)).convert('RGBA')
+        picture.putpixel((48, 0), (255, 0, 0, 255))
+        stream = BytesIO()
+        picture.save(stream, 'PNG')
+        with self.assertRaisesRegex(ValueError, 'mismatched connected edge'):
+            asset_2d.inspect_png(stream.getvalue(), spec)
+
     def test_single_tile_cli_and_unchanged_request_ingest(self):
         request_path = self.root / 'tile-request.json'
         with redirect_stdout(StringIO()):
@@ -97,6 +116,46 @@ class TileTests(unittest.TestCase):
         for view in ('isometric',None,[],{}):
             changed=deepcopy(spec);changed['tileset']['view']=view
             with self.subTest(view=view),self.assertRaises(ValueError):asset_2d.describe(changed)
+
+    def test_autotile_preparation_matches_opposite_edges_per_material(self):
+        spec = deepcopy(self.spec)
+        spec['tileset'].update(edge_mode='autotile', view='side-view')
+        spec['production']['prompt'] = 'Original mossy soil and stone materials'
+        wire = wire_reply(spec, asset_2d.GENERATION_SCHEMA)
+        Draft202012Validator(structured_schema(asset_2d.GENERATION_SCHEMA)).validate(wire)
+        self.assertEqual(decode_structured(wire, asset_2d.GENERATION_SCHEMA), spec)
+        request = asset_2d.generation_request(spec)
+        self.assertIn('opaque material swatch', muse_image.parameters(request)['prompt'])
+
+        def png(image):
+            output = BytesIO()
+            image.save(output, format='PNG')
+            return output.getvalue()
+
+        with Image.open(BytesIO(self.raw)) as original:
+            picture = original.convert('RGBA')
+        for index in range(4):
+            x, y = index % 2 * 16, index // 2 * 16
+            picture.paste((12, 30, 40, 255), (x, y, x+2, y+16))
+            picture.paste((92, 150, 200, 255), (x, y, x+16, y+1))
+        raw = png(picture)
+        with self.assertRaisesRegex(ValueError, 'mismatched repeat edges'):
+            asset_2d.package(raw, spec)
+        prepared, report = asset_2d.prepare_generated_png(raw, spec)
+        self.assertEqual(report['edge_mode'], 'autotile')
+        restored, _, packaged_report = asset_2d.unpack(asset_2d.package(prepared, spec))
+        self.assertEqual(restored, prepared)
+        self.assertTrue(packaged_report['repeat_edges_matched'])
+        with Image.open(BytesIO(prepared)) as output:
+            for y in (0, 16):
+                for x in (0, 16):
+                    self.assertEqual(output.crop((x, y, x+1, y+16)).tobytes(), output.crop((x+15, y, x+16, y+16)).tobytes())
+                    self.assertEqual(output.crop((x, y, x+16, y+1)).tobytes(), output.crop((x, y+15, x+16, y+16)).tobytes())
+                    self.assertEqual(output.getpixel((x+7, y+7)), picture.getpixel((x+7, y+7)))
+            self.assertNotEqual(output.getpixel((1, 7)), picture.getpixel((1, 7)))
+        picture.putpixel((0, 0), (0, 0, 0, 0))
+        with self.assertRaisesRegex(ValueError, 'opaque'):
+            asset_2d.prepare_generated_png(png(picture), spec)
 
     def test_side_view_cli_and_legacy_requests_keep_explicit_projection(self):
         path=self.root/'platform-request.json'
@@ -173,10 +232,12 @@ class TileTests(unittest.TestCase):
         self.assertEqual(next(f['content'] for f in preserved['files'] if f['path']=='asset.js'), files['asset.js'])
 
     def test_generated_entity_plan_transport_integration_and_exact_export(self):
+        self.spec['tileset'].update(edge_mode='autotile', view='side-view')
         entity = dict(id='terrain', role='tileset', purpose='Terrain map', activation='startup',
             required_clips=['default'], machine=None, generation=self.spec, asset_ref=None,
             binding=dict(file='app.js', replace=''))
-        response = dict(intent='implement', expected_revision=0, plan=dict(version=1, entities=[entity]))
+        obstacle = dict(entity, id='obstacles', role='prop', purpose='Individually placed obstacles')
+        response = dict(intent='implement', expected_revision=0, plan=dict(version=1, entities=[entity, obstacle]))
         wire = wire_reply(response, sprite_project.RESPONSE_SCHEMA)
         Draft202012Validator(structured_schema(sprite_project.RESPONSE_SCHEMA)).validate(wire)
         self.assertEqual(decode_structured(wire, sprite_project.RESPONSE_SCHEMA), response)
@@ -184,7 +245,13 @@ class TileTests(unittest.TestCase):
         app = App(self.root); app.start('SYNTHETIC tile entity', chat_only=True)
         folder = app.sessions_dir / app.session['id']
         files = {'index.html':'<html><body><canvas id="map"></canvas><script src="app.js"></script></body></html>',
-            'app.js':"EmberSprites.createScene().then(scene=>{const terrain=scene.createEntity('terrain');terrain.drawMap(document.querySelector('canvas').getContext('2d'),[['grass','wall']]);});"}
+            'app.js':"""EmberSprites.createScene().then(scene => {
+                const ctx = document.querySelector('canvas').getContext('2d');
+                const terrain = scene.createEntity('terrain');
+                terrain.drawMap(ctx, [['grass', 'grass', null, 'grass'], ['grass', 'wall', 'wall', 'grass']]);
+                const obstacles = scene.createEntity('obstacles');
+                obstacles.drawTile(ctx, 'wall', 64, 0);
+            });"""}
         build = dict(title='Tile entity', summary='Synthetic terrain map', files=[dict(path=k,content=v) for k,v in files.items()])
         calls = []
         def generate(root, session, turn, request, **kwargs):
@@ -194,6 +261,8 @@ class TileTests(unittest.TestCase):
             'synthetic-tile-entity-12345678', generate=generate)
         self.assertEqual(len(calls), 1)
         self.assertEqual(saved['plan']['entities'][0]['asset_ref'], ref)
+        self.assertEqual(saved['plan']['entities'][1]['asset_ref'], ref)
+        self.assertEqual(saved['plan']['entities'][1]['role'], 'prop')
         with redirect_stdout(StringIO()):
             request = chat_build.propose_build(self.root, folder, 'tile-entity', 'Synthetic tile integration', prepared)
             app.respond(request, 'approve', 'SYNTHETIC TEST: accept exact terrain entity')

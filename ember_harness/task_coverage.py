@@ -1,8 +1,7 @@
 """Advisory coverage inventory, not semantic verification or action authority."""
-from . import gameplay
+from . import chat_build, gameplay
 from .core import digest
 
-ASSERTIONS = ('visible', 'hidden', 'text', 'contains', 'number_at_least')
 LABELS = dict(discoverability='Discover how to start', success='Reach the intended outcome',
               failure='Handle an unsuccessful attempt', reset='Restart from a known state',
               repeated_play='Play again after a restart', keyboard='Keyboard interaction',
@@ -46,7 +45,7 @@ def analyze(task_title, brief, saved_plan):
                 viewport = 'desktop' if path == 'keyboard' else 'mobile'
                 # A key/tap placed after every assertion does not check its result.
                 configured = scenario['viewport'] == viewport and any(
-                    step['action'] in actions and any(later['action'] in ASSERTIONS
+                    step['action'] in actions and any(later['action'] in gameplay.ASSERTIONS
                         for later in scenario['steps'][step_index + 1:])
                     for step_index, step in enumerate(scenario['steps']))
             if configured:
@@ -55,8 +54,6 @@ def analyze(task_title, brief, saved_plan):
                           scenario_refs=refs,
                           basis='declared_intent' if path in gameplay.COVERAGE_PATHS else 'observed_input',
                           relevance='owner_review', suggestion=SUGGESTIONS[path]))
-    cost = sum(step['ms'] if step['action'] in ('wait', 'hold') else 1000
-               for scenario in plan['scenarios'] for step in scenario['steps'])
     fields = brief.get('fields', {}) if isinstance(brief, dict) else {}
     return dict(version=1, task_expectation=task_title,
                 controls_guidance=fields.get('controls', ''),
@@ -72,7 +69,8 @@ def analyze(task_title, brief, saved_plan):
                 unsupported=['Independent physics and scoring verification',
                              'Complete accessibility coverage', 'Human comfort, feel and fun'],
                 editor_limits=dict(scenario_slots=4-len(plan['scenarios']),
-                                   action_budget_remaining_ms=20000-cost, steps_per_scenario=16),
+                                   action_budget_remaining_ms=gameplay.ACTION_BUDGET_MS-gameplay.action_cost_ms(plan),
+                                   steps_per_scenario=chat_build.MAX_GAMEPLAY_STEPS),
                 guidance='Review relevance for this task. Edit and save the existing gameplay plan before '
                          'preparing a new run; changes do not alter a frozen run. Every configured '
                          'scenario remains required, including reset, repeated play and mobile checks.')

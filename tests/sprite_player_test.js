@@ -34,6 +34,13 @@ const spec = {profile:'sprite-atlas-v1', frame_size:[32,32], grid:[4,2], frames:
   a.draw(ctx,100,200,{scale:2,flipX:true});
   assert.deepEqual(calls,[['save'],['translate',100,200],['scale',-1,1],['draw',96,32,32,32,-16,-64,64,64],['restore']]);
   assert.equal(ctx.imageSmoothingEnabled,false); assert.equal(ctx.globalCompositeOperation,'lighter');
+  const leftSource = (await EmberSprites.load({spec:{...spec,facing:'left'},png_base64:'fixture'})).createPlayer();
+  calls.length = 0;
+  leftSource.draw(ctx,0,0,{facing:'left'});
+  leftSource.draw(ctx,0,0,{facing:'right'});
+  assert.deepEqual(calls.filter(c=>c[0]==='scale'),[['scale',1,1],['scale',-1,1]]);
+  assert.throws(()=>leftSource.draw(ctx,0,0,{facing:'right',flipX:false}),/Directional drawing/);
+  assert.throws(()=>a.draw(ctx,0,0,{facing:'right'}),/Directional drawing/);
   ctx.drawImage = () => {throw Error('draw failure');};
   assert.throws(() => a.draw(ctx,0,0),/draw failure/); assert.deepEqual(calls.at(-1),['restore']);
   const legacySpec = {...spec}; delete legacySpec.animations; delete legacySpec.default_animation;

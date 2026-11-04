@@ -27,7 +27,7 @@ used to bypass it.
    permissions were introduced needs a separately reviewed amendment or renewal.
 2. Save gameplay checks demonstrating the problem. The same frozen plan must
    fail on the starting build and pass on the proposed repair. Existing limits
-   remain four scenarios, sixteen steps per scenario and a twenty-second action
+   are four scenarios, 32 steps per scenario and a 90-second action
    budget.
 3. Prepare exact source changes in the Git repair tools. Review the changed
    file diff, source origin, complete proposed bytes, frozen checks and worker

@@ -96,7 +96,7 @@ def prepare(root, folder, goal, rounds=2, hours=8, credits=25):
                                       write=[(work / area).as_posix() + '/**' for area in ('candidates', 'calls', 'captures')])
         scope['inputs'] = [dict(name='baseline', path=baseline.as_posix(), sha256=polish_runtime.file_digest(baseline)),
                            dict(name='browser_driver', path=runtime['driver'], sha256=runtime['hashes']['driver'])]
-        for name in ('polish.py', 'chat_build.py', 'polish_runtime.py', 'muse_chat.py', 'gameplay.py'):
+        for name in ('polish.py', 'chat_build.py', 'polish_runtime.py', 'muse_chat.py', 'muse_settings.py', 'gameplay.py'):
             source = Path(__file__).with_name(name)
             scope['inputs'].append(dict(name='host_' + name.replace('.', '_'), path=source.as_posix(),
                                         sha256=polish_runtime.file_digest(source)))

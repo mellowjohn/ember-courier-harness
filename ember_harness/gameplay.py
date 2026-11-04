@@ -11,6 +11,7 @@ from .recovery import atomic_json, exclusive, read_json
 
 KEYS = ('ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter', 'Escape', 'a', 'd', 'w', 's', 'r')
 COVERAGE_PATHS = ('discoverability', 'success', 'failure', 'reset', 'repeated_play')
+ACTION_BUDGET_MS = 90_000
 SELECTOR = r'(?:[a-z][a-z0-9-]*)?(?:#[a-zA-Z_][a-zA-Z0-9_-]*|\[data-testid="[a-zA-Z0-9 _-]+"\])?'
 SPRITE_NAME = r'[a-z][a-z0-9_-]{0,31}'
 ACTIONS = {action: {'action', *fields} for action, fields in chat_build.CHECK_ACTION_FIELDS.items()}
@@ -19,19 +20,24 @@ LIMIT = ('Fixed Chromium actions and DOM assertions only; game code can influenc
          'Passing these checks does not prove game rules, canvas-only scores, fun or human acceptance.')
 
 
+def action_cost_ms(plan):
+    return sum(step['ms'] if step['action'] in ('wait', 'hold') else
+               2000 if step['action'] == 'sprite_state' and step['frames'] > 1 else 1000
+               for scenario in plan['scenarios'] for step in scenario['steps'])
+
+
 def validate(plan):
     if (not isinstance(plan, dict) or set(plan) != {'title', 'scenarios'} or
             not isinstance(plan['title'], str) or not 1 <= len(plan['title'].strip()) <= 120 or
             not isinstance(plan['scenarios'], list) or len(plan['scenarios']) > 4):
         raise ValueError('Use a gameplay plan title and at most four scenarios')
-    cost = 0
     for scenario in plan['scenarios']:
         if (not isinstance(scenario, dict) or not {'name', 'viewport', 'steps'} <= set(scenario) or
                 set(scenario) - {'name', 'viewport', 'steps', 'coverage'} or
                 not isinstance(scenario['name'], str) or not 1 <= len(scenario['name'].strip()) <= 120 or
                 scenario['viewport'] not in ('desktop', 'mobile') or not isinstance(scenario['steps'], list) or
-                not 1 <= len(scenario['steps']) <= 16):
-            raise ValueError('Each scenario needs a name, desktop/mobile, and 1–16 steps')
+                not 1 <= len(scenario['steps']) <= chat_build.MAX_GAMEPLAY_STEPS):
+            raise ValueError(f'Each scenario needs a name, desktop/mobile, and 1–{chat_build.MAX_GAMEPLAY_STEPS} steps')
         coverage = scenario.get('coverage', [])
         if (not isinstance(coverage, list) or len(coverage) > len(COVERAGE_PATHS) or
                 any(not isinstance(path, str) or path not in COVERAGE_PATHS for path in coverage) or
@@ -63,12 +69,11 @@ def validate(plan):
                     type(step['frames']) is not int or step['frames'] not in (1, 2)):
                 raise ValueError('Choose a sprite entity, its expected state, and one or two distinct drawn frames')
             assertions += action in ASSERTIONS
-            cost += (step['ms'] if action in ('wait', 'hold') else
-                     2000 if action == 'sprite_state' and step['frames'] == 2 else 1000)
         if not assertions:
             raise ValueError('Each scenario needs at least one observable assertion')
-    if cost > 20000:
-        raise ValueError('Gameplay plan exceeds its 20-second action budget; use fewer steps or shorter waits')
+    if action_cost_ms(plan) > ACTION_BUDGET_MS:
+        raise ValueError(f'Gameplay plan exceeds its {ACTION_BUDGET_MS // 1000}-second action budget; '
+                         'use fewer steps or shorter waits')
     return deepcopy(plan)
 
 

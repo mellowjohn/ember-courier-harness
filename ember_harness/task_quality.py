@@ -133,7 +133,9 @@ def prepare(plan):
                  expectation='Preserve existing behavior and respect the approved exclusions and constraints. Asset counts are planning estimates, not limits.',
                  context=dict(exclusions=scope['out_of_scope'])),
             dict(id='presentation', method='visual',
-                 expectation='The selected task is readable, has clear interaction feedback and follows the approved art direction on desktop and touch.',
+                 expectation='The selected task is readable and follows the approved art direction on desktop and touch. '
+                 'Judge character, scenery and effects together in play for coherent style, lighting, scale and contact with the world. '
+                 'Artwork loading or sharing a color alone does not establish visual fit.',
                  context=design['art_direction'])]
     for index, scenario in enumerate(plan['gameplay_plan']['plan']['scenarios']):
         rows.append(dict(id='gameplay-' + str(index + 1), method='gameplay',

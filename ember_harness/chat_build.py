@@ -5,12 +5,13 @@ from difflib import unified_diff
 from hashlib import sha256
 from html.parser import HTMLParser
 from base64 import b64encode
+import json
 import os
 from pathlib import Path
 import re
 import tempfile
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, ValidationError
 
 from .core import Harness, digest, timestamp, SCHEMA
 from .owner_review import OwnerReview, decide, load_request, validate_history
@@ -137,6 +138,7 @@ CHAT_SCHEMA = {
 }
 
 # Give the provider the same action shapes the fixed runner accepts.
+MAX_GAMEPLAY_STEPS = 32
 CHECK_SELECTOR = dict(type='string', minLength=1, maxLength=160)
 CHECK_KEY = dict(type='string', minLength=1, maxLength=16)
 CHECK_MS = dict(type='integer', minimum=1, maximum=2000)
@@ -160,7 +162,7 @@ CHECKS_SCHEMA = dict(type='object',additionalProperties=False,required=['title',
     title=dict(type='string',minLength=1,maxLength=120),
     scenarios=dict(type='array',minItems=1,maxItems=4,items=dict(type='object',additionalProperties=False,
         required=['name','viewport','steps'],properties=dict(name=dict(type='string',minLength=1,maxLength=120),
-            viewport=dict(enum=['desktop','mobile']),steps=dict(type='array',minItems=1,maxItems=16,items=CHECK_STEP_SCHEMA))))))
+            viewport=dict(enum=['desktop','mobile']),steps=dict(type='array',minItems=1,maxItems=MAX_GAMEPLAY_STEPS,items=CHECK_STEP_SCHEMA))))))
 CHAT_SCHEMA['properties']['gameplay_checks'] = dict(anyOf=[CHECKS_SCHEMA,dict(type='null')])
 
 
@@ -284,6 +286,96 @@ def materialize_build(build, base):
     files.update({item['path']: item['content'] for item in additions})
     return dict(title=build['title'], summary=build['summary'],
                 files=[dict(path=name, content=content) for name, content in sorted(files.items())])
+
+
+def file_changes(base, files):
+    """Bounded, display-only line diffs. Exact approval uses the full build diff."""
+    changes = []
+    for name, content in sorted(files.items()):
+        if name in base and base[name] == content:
+            continue
+        before = base.get(name, '')
+        patch = iter(unified_diff(before.splitlines(keepends=True), content.splitlines(keepends=True)))
+        next(patch, None)
+        next(patch, None)
+        added = removed = 0
+        lines = []
+        truncated = False
+        for line in patch:
+            added += line.startswith('+')
+            removed += line.startswith('-')
+            if name in PROTECTED_FILES:
+                continue
+            line = line.rstrip('\r\n')
+            truncated |= len(lines) >= 60 or len(line) > 240
+            if len(lines) < 60:
+                lines.append(line[:240] + ('…' if len(line) > 240 else ''))
+        changes.append(dict(path=name, new=name not in base, added=added, removed=removed,
+                            lines=lines, truncated=truncated))
+    return changes
+
+
+def streamed_file_changes(text, base):
+    """Read closed file/edit objects from a possibly unfinished structured reply."""
+    decoder = json.JSONDecoder()
+    whitespace = re.compile(r'[ \t\r\n]*')
+
+    def skip(index):
+        return whitespace.match(text, index).end()
+
+    def fields(index):
+        if text[index:index + 1] != '{':
+            return
+        index = skip(index + 1)
+        while text[index:index + 1] == '"':
+            key, end = decoder.raw_decode(text, index)
+            colon = skip(end)
+            if text[colon:colon + 1] != ':':
+                return
+            value = skip(colon + 1)
+            yield key, value
+            _, end = decoder.raw_decode(text, value)
+            comma = skip(end)
+            if text[comma:comma + 1] != ',':
+                return
+            index = skip(comma + 1)
+
+    def rows(index, limit):
+        if text[index:index + 1] != '[':
+            return
+        index = skip(index + 1)
+        for _ in range(limit):
+            if text[index:index + 1] != '{':
+                return
+            row, end = decoder.raw_decode(text, index)
+            yield row
+            comma = skip(end)
+            if text[comma:comma + 1] != ',':
+                return
+            index = skip(comma + 1)
+
+    build = dict(title='Draft', summary='Preview')
+    try:
+        start = next((value for key, value in fields(skip(0)) if key == 'build'), None)
+        if start is None:
+            return []
+        for key, value in fields(start):
+            if key in ('files', 'edits'):
+                completed = []
+                for row in rows(value, MAX_FILES if key == 'files' else 64):
+                    if (row.get('path') not in PROTECTED_FILES and
+                            all(isinstance(field, str) and len(field.encode('utf-8')) <= 65536 for field in row.values())):
+                        completed.append(row)
+                        build[key] = completed
+    except (ValueError, RecursionError):
+        pass  # A token or file object may still be arriving.
+    try:
+        if 'files' not in build and 'edits' not in build:
+            return []
+        materialized = materialize_build(build, base)
+        return file_changes(base, {row['path']: row['content'] for row in materialized['files']})
+    except (ValueError, ValidationError):
+        return []
 
 
 def validate_files(files, *, empty=False):
