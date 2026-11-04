@@ -45,6 +45,26 @@ def wire_reply(value, schema):
 
 
 class MuseChatTests(unittest.TestCase):
+    def test_gameplay_steps_have_exact_provider_fields(self):
+        from jsonschema import Draft202012Validator
+        from ember_harness import chat_build, gameplay
+
+        plan = dict(title='Check a drawn wizard', scenarios=[dict(name='Idle', viewport='desktop', steps=[
+            dict(action='sprite_state', entity='wizard-hero', value='idle', frames=2),
+        ])])
+        reply = dict(message='Draft the wizard', build=None, gameplay_checks=plan)
+        wire = wire_reply(reply, chat_build.CHAT_SCHEMA)
+        schema = Draft202012Validator(structured_schema(chat_build.CHAT_SCHEMA))
+        schema.validate(wire)
+        self.assertEqual(gameplay.validate(decode_structured(wire, chat_build.CHAT_SCHEMA)['gameplay_checks']), plan)
+
+        step = wire['gameplay_checks']['scenarios'][0]['steps'][0]
+        step['selector'] = '#game'
+        self.assertFalse(schema.is_valid(wire))
+        del step['selector']
+        del step['frames']
+        self.assertFalse(schema.is_valid(wire))
+
     def test_sprite_chat_depth_and_native_markers_fit_provider_limit(self):
         from copy import deepcopy
         from jsonschema import Draft202012Validator, ValidationError

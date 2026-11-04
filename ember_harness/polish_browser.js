@@ -19,6 +19,32 @@ async function openGame(browser,name){
   await page.waitForTimeout(500);
   return {context,page,frame,errors};
 }
+async function checkSpriteState(game,step){
+  const read=()=>game.frame.locator('body').evaluate((_,id)=>{
+    const entity=globalThis.EMBER_SPRITE_PLAN?.entities?.find(e=>e.id===id);
+    return entity?(globalThis.EmberSprites?.diagnostics?.()||[]).filter(i=>i.entityId===id&&i.assetRef===entity.asset_ref):[];
+  },step.entity);
+  const previous=new Map((await read()).map(i=>[i.instanceId,i.draws]));
+  const frames=new Map();
+  const deadline=Date.now()+(step.frames>1?1800:800);
+  let observed='no new draw for the bound atlas';
+  while(Date.now()<deadline){
+    for(const row of await read()){
+      if(row.draws<=(previous.get(row.instanceId)||0))continue;
+      previous.set(row.instanceId,row.draws);
+      const state=row.drawnState??row.state,frame=row.drawnFrame??row.frame;
+      if(!Number.isInteger(frame))continue;
+      const seen=frames.get(row.instanceId)||new Set();
+      if(state===step.value)seen.add(frame);
+      else seen.clear();
+      frames.set(row.instanceId,seen);
+      observed=state+' drew frame '+frame+(seen.size?' ('+seen.size+' distinct)':'');
+      if(seen.size>=step.frames)return step.entity+' · '+step.value+' drew frames '+[...seen].join(', ');
+    }
+    await game.page.waitForTimeout(25);
+  }
+  throw Error(step.entity+' expected '+step.value+' with '+step.frames+' distinct drawn frame(s); observed '+observed);
+}
 async function gameplay(browser){
   const plan=input.gameplay_plan;
   if(!plan?.scenarios?.length)return null;
@@ -46,6 +72,7 @@ async function gameplay(browser){
             try{await game.page.waitForTimeout(step.ms)}finally{await game.page.keyboard.up(step.key)}
           }
           else if(step.action==='wait')await game.page.waitForTimeout(step.ms);
+          else if(step.action==='sprite_state')observed=await checkSpriteState(game,step);
           else {
             const deadline=Date.now()+800;
             while(true){
@@ -147,9 +174,15 @@ async function aspectCaptures(page,body,name){
       const initial=path.join(output,name+'-before.png');
       await page.screenshot({path:initial,animations:'disabled'});
       const steps=[];
-      const button=frame.locator('button:visible:enabled').first();
+      const start=frame.locator('button[data-ember-play]:visible:enabled, button#start-btn:visible:enabled');
+      const hasStart=await start.count()===1;
+      const button=hasStart?start:frame.locator('button:visible:enabled').first();
       if(await button.count()){
-        try{await button.click({timeout:1500});steps.push('Clicked first visible enabled button')}catch{observations.push('First button could not be clicked')}
+        try{
+          if(hasStart&&name==='mobile')await button.tap({timeout:1500});
+          else await button.click({timeout:1500});
+          steps.push(hasStart?(name==='mobile'?'Tapped start button':'Clicked start button'):'Clicked first visible enabled button');
+        }catch{observations.push(hasStart?'Start button could not be activated':'First button could not be clicked')}
       }
       const action=path.join(output,name+'-action.png');
       for(const key of ['ArrowLeft','ArrowUp','ArrowRight','ArrowDown','Space','a','d']){

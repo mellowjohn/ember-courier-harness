@@ -196,19 +196,20 @@
       const atlas=atlases.get(entity.asset_ref),instanceId=id+'/'+(++serial);
       const actor=entity.machine?createMachine(atlas,entity.machine,{entityId:id,assetRef:entity.asset_ref,instanceId}):atlas.createPlayer(entity.required_clips[0],{followNext:false});
       let draws=0,updates=0,disposed=false;
+      let drawnState=null,drawnFrame=null;
       const record={entityId:id,assetRef:entity.asset_ref,instanceId};
       const wrapped={...record,
         tiles:atlas.tiles,
         get state(){return actor.state??actor.animation;},get frame(){return actor.frame;},get completed(){return actor.completed;},
         update(...args){if(disposed)throw new Error('Sprite instance was disposed.');updates++;return actor.update(...args);},
-        draw(...args){if(disposed)throw new Error('Sprite instance was disposed.');actor.draw(...args);draws++;},
+        draw(...args){if(disposed)throw new Error('Sprite instance was disposed.');actor.draw(...args);draws++;drawnState=wrapped.state;drawnFrame=wrapped.frame;},
         drawTile(...args){if(disposed)throw new Error('Sprite instance was disposed.');atlas.drawTile(...args);draws++;},
         drawMap(...args){if(disposed)throw new Error('Sprite instance was disposed.');const count=atlas.drawMap(...args);draws+=count;return count;},
         solidAt(...args){if(disposed)throw new Error('Sprite instance was disposed.');return atlas.solidAt(...args);},
         reset(...args){if(disposed)throw new Error('Sprite instance was disposed.');if(actor.reset)actor.reset(...args);else actor.play(actor.animation,{restart:true});return wrapped;},
         dispose(){disposed=true;instances.delete(instanceId);}
       };
-      instances.set(instanceId,()=>({...record,state:wrapped.state,frame:wrapped.frame,completed:wrapped.completed,draws,updates}));
+      instances.set(instanceId,()=>({...record,state:wrapped.state,frame:wrapped.frame,completed:wrapped.completed,draws,updates,drawnState,drawnFrame}));
       return wrapped;
     }
     const scene=Object.freeze({createEntity,diagnostics:()=>[...instances.values()].map(read=>read())});

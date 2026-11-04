@@ -12,14 +12,9 @@ from .recovery import atomic_json, exclusive, read_json
 KEYS = ('ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter', 'Escape', 'a', 'd', 'w', 's', 'r')
 COVERAGE_PATHS = ('discoverability', 'success', 'failure', 'reset', 'repeated_play')
 SELECTOR = r'(?:[a-z][a-z0-9-]*)?(?:#[a-zA-Z_][a-zA-Z0-9_-]*|\[data-testid="[a-zA-Z0-9 _-]+"\])?'
-ACTIONS = {
-    'click': {'action', 'selector'}, 'tap': {'action', 'selector'},
-    'press': {'action', 'key'}, 'wait': {'action', 'ms'},
-    'hold': {'action', 'key', 'ms'},
-    'visible': {'action', 'selector'}, 'hidden': {'action', 'selector'},
-    'text': {'action', 'selector', 'value'}, 'contains': {'action', 'selector', 'value'},
-    'number_at_least': {'action', 'selector', 'value'},
-}
+SPRITE_NAME = r'[a-z][a-z0-9_-]{0,31}'
+ACTIONS = {action: {'action', *fields} for action, fields in chat_build.CHECK_ACTION_FIELDS.items()}
+ASSERTIONS = ('visible', 'hidden', 'text', 'contains', 'number_at_least', 'sprite_state')
 LIMIT = ('Fixed Chromium actions and DOM assertions only; game code can influence observable state. '
          'Passing these checks does not prove game rules, canvas-only scores, fun or human acceptance.')
 
@@ -63,8 +58,13 @@ def validate(plan):
             if action == 'number_at_least' and (type(step['value']) not in (int, float) or
                     not math.isfinite(step['value']) or abs(step['value']) > 1_000_000):
                 raise ValueError('Expected score must be a finite number within one million')
-            assertions += action in ('visible', 'hidden', 'text', 'contains', 'number_at_least')
-            cost += step['ms'] if action in ('wait','hold') else 1000
+            if action == 'sprite_state' and (
+                    any(not isinstance(step[key], str) or not re.fullmatch(SPRITE_NAME, step[key]) for key in ('entity', 'value')) or
+                    type(step['frames']) is not int or step['frames'] not in (1, 2)):
+                raise ValueError('Choose a sprite entity, its expected state, and one or two distinct drawn frames')
+            assertions += action in ASSERTIONS
+            cost += (step['ms'] if action in ('wait', 'hold') else
+                     2000 if action == 'sprite_state' and step['frames'] == 2 else 1000)
         if not assertions:
             raise ValueError('Each scenario needs at least one observable assertion')
     if cost > 20000:

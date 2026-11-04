@@ -70,6 +70,7 @@ GAME_UI_INSTRUCTION = (
     'center it within the viewport with deliberate letterboxing, while keeping HUD and controls reachable. '
     'Support 16:9, 16:10, 4:3, 21:9, portrait phones and short phone landscape layouts. '
     'Mark the primary stage with data-ember-game-stage for browser inspection. '
+    'Mark the title screen Start button with data-ember-play so the browser captures actual gameplay. '
     'Before coding, choose the essential player information, its anchors within the game viewport, '
     'and a small visual vocabulary drawn from the approved game art: palette, type, shapes, borders and icon treatment. '
     'Describe those placement and style choices briefly in the build summary. '
@@ -135,11 +136,26 @@ CHAT_SCHEMA = {
                    'build': {'anyOf': [PROPOSAL_SCHEMA, {'type': 'null'}]}},
 }
 
-# The fixed runner validates exact action fields and its total time budget in gameplay.validate.
-CHECK_STEP_SCHEMA = dict(type='object',additionalProperties=False,required=['action'],properties=dict(
-    action=dict(type='string',minLength=1,maxLength=24),selector=dict(type='string',maxLength=160),
-    key=dict(type='string',maxLength=16),ms=dict(type='integer',minimum=1,maximum=2000),
-    value=dict(anyOf=[dict(type='string',maxLength=200),dict(type='number')])))
+# Give the provider the same action shapes the fixed runner accepts.
+CHECK_SELECTOR = dict(type='string', minLength=1, maxLength=160)
+CHECK_KEY = dict(type='string', minLength=1, maxLength=16)
+CHECK_MS = dict(type='integer', minimum=1, maximum=2000)
+CHECK_TEXT = dict(type='string', minLength=1, maxLength=200)
+CHECK_ACTION_FIELDS = {
+    **{action: dict(selector=CHECK_SELECTOR) for action in ('click', 'tap', 'visible', 'hidden')},
+    'press': dict(key=CHECK_KEY),
+    'wait': dict(ms=CHECK_MS),
+    'hold': dict(key=CHECK_KEY, ms=CHECK_MS),
+    **{action: dict(selector=CHECK_SELECTOR, value=CHECK_TEXT) for action in ('text', 'contains')},
+    'number_at_least': dict(selector=CHECK_SELECTOR, value=dict(type='number')),
+    'sprite_state': dict(entity=sprite_project.NAME, value=sprite_project.NAME,
+                         frames=dict(type='integer', minimum=1, maximum=2)),
+}
+CHECK_STEP_SCHEMA = dict(anyOf=[
+    dict(type='object', additionalProperties=False, required=['action', *fields],
+         properties=dict(action=dict(enum=[action]), **fields))
+    for action, fields in CHECK_ACTION_FIELDS.items()
+])
 CHECKS_SCHEMA = dict(type='object',additionalProperties=False,required=['title','scenarios'],properties=dict(
     title=dict(type='string',minLength=1,maxLength=120),
     scenarios=dict(type='array',minItems=1,maxItems=4,items=dict(type='object',additionalProperties=False,
