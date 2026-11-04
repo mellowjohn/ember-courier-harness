@@ -12,7 +12,7 @@ from .recovery import atomic_json, exclusive, read_json
 KEYS = ('ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Space', 'Enter', 'Escape', 'a', 'd', 'w', 's', 'r')
 COVERAGE_PATHS = ('discoverability', 'success', 'failure', 'reset', 'repeated_play')
 ACTION_BUDGET_MS = 90_000
-SELECTOR = r'(?:[a-z][a-z0-9-]*)?(?:#[a-zA-Z_][a-zA-Z0-9_-]*|\[data-testid="[a-zA-Z0-9 _-]+"\])?'
+SELECTOR = r'(?:[a-z][a-z0-9-]*)?(?:#[a-zA-Z_][a-zA-Z0-9_-]*|\[data-testid="[a-zA-Z0-9 _-]+"\]|\[data-ember-play\])?'
 SPRITE_NAME = r'[a-z][a-z0-9_-]{0,31}'
 ACTIONS = {action: {'action', *fields} for action, fields in chat_build.CHECK_ACTION_FIELDS.items()}
 ASSERTIONS = ('visible', 'hidden', 'text', 'contains', 'number_at_least', 'sprite_state')
@@ -52,7 +52,7 @@ def validate(plan):
                 raise ValueError('Use only fixed gameplay actions and their declared fields')
             if 'selector' in step and (not isinstance(step['selector'], str) or not step['selector'] or
                     len(step['selector']) > 160 or not re.fullmatch(SELECTOR, step['selector'])):
-                raise ValueError('Choose a simple tag, #id or [data-testid="name"] target')
+                raise ValueError('Choose a simple tag, #id, [data-testid="name"] or [data-ember-play] target')
             if action in ('press','hold') and step['key'] not in KEYS:
                 raise ValueError('Choose a supported gameplay key')
             if action == 'tap' and scenario['viewport'] != 'mobile':

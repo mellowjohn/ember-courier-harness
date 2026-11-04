@@ -67,6 +67,8 @@ class GameplayTests(unittest.TestCase):
 
     def test_rejects_executable_selectors_unsupported_steps_and_unbounded_plans(self):
         invalid = [dict(action='evaluate', script='approve()'), dict(action='click', selector='body >> text=Approve'),
+                   dict(action='click', selector='[data-ember-play] button'),
+                   dict(action='click', selector='[data-other]'),
                    dict(action='press', key='Control+L'), dict(action='wait', ms=True), dict(action='wait', ms=2001),
                    dict(action='number_at_least', selector='#score', value=math.nan), dict(action='tap', selector='canvas'),
                    dict(action='visible', selector='*'), dict(action='text', selector='#score', value='x'*201)]
@@ -83,6 +85,13 @@ class GameplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'budget'):
             self.save(plan)
         self.assertEqual(gameplay.load(self.folder)['revision'], 0)
+
+    def test_accepts_the_ember_start_marker(self):
+        plan = deepcopy(PLAN)
+        for selector in ('[data-ember-play]', 'button[data-ember-play]'):
+            with self.subTest(selector=selector):
+                plan['scenarios'][0]['steps'][0]['selector'] = selector
+                self.assertEqual(gameplay.validate(plan), plan)
 
     def test_accepts_longer_desktop_and_touch_playthroughs(self):
         from jsonschema import Draft202012Validator

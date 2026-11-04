@@ -14,6 +14,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SessionChatTests(unittest.TestCase):
+    def test_muse_gameplay_checks_accept_dom_space_key(self):
+        scratch = ROOT / '.harness/test-temp'
+        scratch.mkdir(parents=True, exist_ok=True)
+        checks = dict(title='Jump', scenarios=[dict(name='Keyboard', viewport='desktop', steps=[
+            dict(action='press', key=' '),
+            dict(action='hold', key=' ', ms=100),
+            dict(action='contains', selector='#jump-count', value='Jumps: 1'),
+        ])])
+        reply = dict(message='Jump checks are ready.', build=None, gameplay_checks=checks)
+        with tempfile.TemporaryDirectory(dir=scratch) as folder:
+            with patch('ember_harness.session_chat.run_muse', return_value=dict(response=json.dumps(reply))):
+                messages = send(folder, 'Check the jump controls', 'jump-key-regression', 'muse', root=ROOT)
+        self.assertEqual(messages[0]['status'], 'complete')
+        self.assertEqual(messages[1]['text'], reply['message'])
+
     def test_muse_turn_is_saved_and_idempotent_after_restart(self):
         scratch = ROOT / '.harness/test-temp'
         scratch.mkdir(parents=True, exist_ok=True)

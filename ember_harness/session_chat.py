@@ -587,6 +587,11 @@ def send(folder, text, turn_id, provider, *, root, proposal_context=None, playte
                     progress('validating')
                 reply = result['message']
                 if result.get('gameplay_checks') is not None:
+                    # DOM KeyboardEvent.key uses a literal space, while Playwright uses Space.
+                    for scenario in result['gameplay_checks']['scenarios']:
+                        for step in scenario['steps']:
+                            if step.get('key') == ' ':
+                                step['key'] = 'Space'
                     gameplay.validate(result['gameplay_checks'])
                 brief_updates = result.get('brief_updates')
                 plan_document = result.get('plan')
