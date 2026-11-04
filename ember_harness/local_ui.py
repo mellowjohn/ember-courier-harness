@@ -902,6 +902,7 @@ def server(app, port=0):
             # Only these public UI resources are served without the private API token.
             ui_resources = {'/ui-library.css': ('ui_library.css', 'text/css; charset=utf-8'),
                             '/voice-input.js': ('voice_input.js', 'text/javascript; charset=utf-8'),
+                            '/preview-document.js': ('preview_document.js', 'text/javascript; charset=utf-8'),
                             '/ui-library.js': ('ui_library.js', 'text/javascript; charset=utf-8')}
             if url.path in ui_resources:
                 if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}':

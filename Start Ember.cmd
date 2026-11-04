@@ -16,14 +16,14 @@ if defined VIRTUAL_ENV if exist "%VIRTUAL_ENV%\Scripts\python.exe" (
     goto check_python
 )
 if exist "%~dp0Setup Ember.cmd" goto setup
-py -3.12 -c "import sys; from importlib.util import find_spec; sys.exit(0 if sys.version_info >= (3,12) and all(find_spec(n) for n in ('ember_harness','jsonschema','PIL')) else 1)" >nul 2>&1
+py -3.12 -c "import sys; from importlib.util import find_spec; from importlib.metadata import version; sys.exit(0 if sys.version_info >= (3,12) and all(find_spec(n) for n in ('ember_harness','jsonschema','PIL')) and int(version('Pillow').split('.')[0]) == 13 else 1)" >nul 2>&1
 if errorlevel 1 goto setup
 py -3.12 -u -m ember_harness.local_ui %ember_browser% %*
 goto stopped
 :project_python
 set "ember_python=%~dp0.venv\Scripts\python.exe"
 :check_python
-"%ember_python%" -c "import sys; from importlib.util import find_spec; sys.exit(0 if sys.version_info >= (3,12) and all(find_spec(n) for n in ('ember_harness','jsonschema','PIL')) else 1)" >nul 2>&1
+"%ember_python%" -c "import sys; from importlib.util import find_spec; from importlib.metadata import version; sys.exit(0 if sys.version_info >= (3,12) and all(find_spec(n) for n in ('ember_harness','jsonschema','PIL')) and int(version('Pillow').split('.')[0]) == 13 else 1)" >nul 2>&1
 if errorlevel 1 goto setup
 "%ember_python%" -u -m ember_harness.local_ui %ember_browser% %*
 goto stopped

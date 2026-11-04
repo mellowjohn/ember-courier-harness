@@ -1,22 +1,23 @@
 // Inspect the actual scene passed to Three.js while operating a sandboxed proposal.
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE);
+const {previewDocument,blockPeerConnections,inspectionBrowserOptions}=require('../ember_harness/preview_document.js');
 const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),output=process.argv[3];
 const config=input.interaction||{pivot_node:'LidPivot',axis:'x',open_angle_rad:-1.85,collision_node:'COLLISION_Chest',passage:false};
-const policy="default-src 'none';script-src 'unsafe-inline' data:;style-src 'unsafe-inline' data:;img-src data:;connect-src 'none';object-src 'none'";
 const observe=`<script>(()=>{const T=Ember3D.THREE;class ObservedRenderer extends T.WebGLRenderer{constructor(options){super(options);const original=this.render;this.render=function(scene,camera){globalThis.__observedScene=scene;return original.call(this,scene,camera);};}}globalThis.Ember3D={...Ember3D,THREE:{...T,WebGLRenderer:ObservedRenderer}};})();</script>`;
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
-  const browser=await chromium.launch({headless:true,executablePath:process.env.EMBER_BROWSER_EXECUTABLE});
+  const browser=await chromium.launch(inspectionBrowserOptions(process.env.EMBER_BROWSER_EXECUTABLE));
   const results=[];
   try{
     for(const mobile of [false,true]){
-      const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:900},hasTouch:mobile,isMobile:mobile,serviceWorkers:'block'});
+      const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:900},hasTouch:mobile,isMobile:mobile,serviceWorkers:'block',offline:true});
+      await context.addInitScript(blockPeerConnections);
       const page=await context.newPage(),errors=[],requests=[];
       page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/^https?:/.test(r.url()))requests.push(r.url());});
       await context.route('**/*',r=>r.abort());
       await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><iframe sandbox="allow-scripts" style="width:100vw;height:100vh;border:0"></iframe><style>body{margin:0}</style>');
-      await page.locator('iframe').evaluate((frame,html)=>frame.srcdoc=html,'<meta http-equiv="Content-Security-Policy" content="'+policy+'">'+input.html.replace('</script>','</script>'+observe));
+      await page.locator('iframe').evaluate((frame,html)=>frame.srcdoc=html,previewDocument(input.html.replace('</script>','</script>'+observe)));
       const frame=page.frameLocator('iframe');await frame.locator('#load-state').filter({hasText:'Asset ready'}).waitFor({timeout:15000});
       await page.waitForTimeout(100);
       const initial=await frame.locator('body').evaluate((_,c)=>{

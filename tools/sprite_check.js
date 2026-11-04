@@ -1,21 +1,22 @@
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
 const {chromium} = require(process.env.EMBER_PLAYWRIGHT_MODULE);
+const {previewDocument,blockPeerConnections,inspectionBrowserOptions} = require('../ember_harness/preview_document.js');
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')), output = process.argv[3];
-const policy = "default-src 'none';script-src 'unsafe-inline' data:;style-src 'unsafe-inline' data:;img-src data:;connect-src 'none';object-src 'none'";
 (async () => {
-  const browser = await chromium.launch({headless:true, executablePath:process.env.EMBER_BROWSER_EXECUTABLE});
+  const browser = await chromium.launch(inspectionBrowserOptions(process.env.EMBER_BROWSER_EXECUTABLE));
   const results = [];
   try {
     if(input.variant==='review')results.push(await require('./sprite_scene_check.js').checkReview(browser,output));
     else for (const stage of ['preview','exported']) for (const mobile of [false, true]) {
       const html=input[stage];
-      const context = await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:1000},hasTouch:mobile,isMobile:mobile,serviceWorkers:'block'});
+      const context = await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:1000},hasTouch:mobile,isMobile:mobile,serviceWorkers:'block',offline:true});
+      await context.addInitScript(blockPeerConnections);
       const page = await context.newPage(), errors = [], requests = [];
       page.on('pageerror', e => errors.push(e.message));
       page.on('request', r => {if (/^https?:/.test(r.url())) requests.push(r.url());});
       await context.route('**/*', r => r.abort());
       await page.setContent('<meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0}iframe{border:0;width:100vw;height:100vh}</style><iframe sandbox="allow-scripts"></iframe>');
-      await page.locator('iframe').evaluate((frame, source) => frame.srcdoc=source, '<meta http-equiv="Content-Security-Policy" content="'+policy+'">'+html);
+      await page.locator('iframe').evaluate((frame, source) => frame.srcdoc=source, previewDocument(html));
       const frame = page.frameLocator('iframe'), state = frame.locator('#animation-state');
       if(input.variant==='tiles'){
         results.push(await checkTiles({page,frame,stage,mobile,errors,requests}));

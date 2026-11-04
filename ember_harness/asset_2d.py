@@ -353,11 +353,11 @@ def inspect_png(raw, spec):
         raise ValueError('PNG exceeds the 360000 byte package budget')
     with warnings.catch_warnings():
         warnings.simplefilter('error', Image.DecompressionBombWarning)
-        with Image.open(BytesIO(raw)) as image:
+        with Image.open(BytesIO(raw), formats=['PNG']) as image:
             if image.format != 'PNG' or list(image.size) != info['dimensions_px'] or getattr(image, 'n_frames', 1) != 1:
                 raise ValueError('Use a single PNG with the exact declared atlas dimensions')
             image.verify()
-        with Image.open(BytesIO(raw)) as image:
+        with Image.open(BytesIO(raw), formats=['PNG']) as image:
             image.load()
             rgba = image.convert('RGBA')
     alpha = rgba.getchannel('A')
@@ -468,7 +468,7 @@ def prepare_generated_png(raw, spec):
     info = describe(spec)
     if not isinstance(raw, bytes) or not 1 <= len(raw) <= 12 * 1024 * 1024:
         raise ValueError('Muse Image source exceeds the preparation limit')
-    with Image.open(BytesIO(raw)) as picture:
+    with Image.open(BytesIO(raw), formats=['PNG']) as picture:
         if picture.format != 'PNG' or picture.width * picture.height > 16_777_216 or getattr(picture, 'n_frames', 1) != 1:
             raise ValueError('Muse Image must return one bounded PNG')
         picture.load()

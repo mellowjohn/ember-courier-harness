@@ -8,7 +8,7 @@ version = "0.1.0"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = ["jsonschema>=4.26,<5", "Pillow>=12.1,<13"]
+dependencies = ["jsonschema>=4.26,<5", "Pillow>=13,<14"]
 
 [project.scripts]
 contract-lock = "ember_harness.contract_lock:main"
@@ -18,4 +18,4 @@ ember-ui = "ember_harness.local_ui:main"
 include = ["ember_harness*"]
 
 [tool.setuptools.package-data]
-ember_harness = ["schema/*.json", "ui.html", "ui_library.css", "ui_library.js", "voice_input.js", "polish_browser.js", "asset_lab/*.html", "asset_lab/*.css", "asset_lab/*.js", "mechanics/*.html", "mechanics/*.css", "mechanics/*.js"]
+ember_harness = ["schema/*.json", "ui.html", "ui_library.css", "ui_library.js", "voice_input.js", "polish_browser.js", "preview_document.js", "asset_lab/*.html", "asset_lab/*.css", "asset_lab/*.js", "mechanics/*.html", "mechanics/*.css", "mechanics/*.js"]

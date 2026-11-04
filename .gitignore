@@ -6,3 +6,13 @@ __pycache__/
 .harness/
 build/
 dist/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.netrc
+.pypirc
+auth.json

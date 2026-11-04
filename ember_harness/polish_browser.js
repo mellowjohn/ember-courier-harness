@@ -1,9 +1,9 @@
 // Fixed host runner. Generated source executes only in an opaque, network-blocked frame.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {chromium}=require(process.env.EMBER_PLAYWRIGHT_MODULE);
+const {previewDocument,blockPeerConnections,inspectionBrowserOptions}=require('./preview_document.js');
 const input=JSON.parse(fs.readFileSync(process.argv[2],'utf8')),output=process.argv[3];
 const hash=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
-const policy="default-src 'none';script-src 'unsafe-inline' data:;style-src 'unsafe-inline' data:;img-src data:;connect-src 'none';frame-src 'none';object-src 'none';base-uri 'none';form-action 'none'";
 function observePlayers(players){
   const expected=new Map(players.map(row=>[row.id,row.asset_ref]));
   const seen=new Set(),lastSample=new Map();
@@ -86,7 +86,8 @@ async function startControl(frame){
 }
 async function openGame(browser,name){
   const mobile=name==='mobile',context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1100,height:740},
-    hasTouch:mobile,isMobile:mobile,serviceWorkers:'block',acceptDownloads:false});
+    hasTouch:mobile,isMobile:mobile,serviceWorkers:'block',acceptDownloads:false,offline:true});
+  await context.addInitScript(blockPeerConnections);
   await context.route('**/*',route=>route.abort());
   const page=await context.newPage(),errors=[];
   page.setDefaultTimeout(1000);
@@ -95,7 +96,7 @@ async function openGame(browser,name){
   page.on('console',message=>{if(message.type()==='error')observe(message.text())});
   await page.setContent('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0"><iframe title="polish candidate" sandbox="allow-scripts" referrerpolicy="no-referrer" style="width:100vw;height:100vh;border:0"></iframe></body></html>');
   const probe=input.players?.length?'<script>('+observePlayers.toString()+')('+JSON.stringify(input.players)+');</script>':'';
-  await page.locator('iframe').evaluate((frame,html)=>{frame.srcdoc=html},'<meta http-equiv="Content-Security-Policy" content="'+policy+'">'+probe+input.html);
+  await page.locator('iframe').evaluate((frame,html)=>{frame.srcdoc=html},previewDocument(probe+input.html));
   const frame=page.frameLocator('iframe');await frame.locator('body').waitFor({state:'attached'});
   await page.waitForTimeout(500);
   return {context,page,frame,errors};
@@ -244,7 +245,7 @@ async function aspectCaptures(page,body,name){
 }
 (async()=>{
   fs.mkdirSync(output,{recursive:true});
-  const browser=await chromium.launch({headless:true,executablePath:process.env.EMBER_BROWSER_EXECUTABLE});
+  const browser=await chromium.launch(inspectionBrowserOptions(process.env.EMBER_BROWSER_EXECUTABLE));
   const results=[],ratios=[];
   try{
     for(const name of ['desktop','mobile']){

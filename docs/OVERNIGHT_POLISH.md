@@ -72,7 +72,8 @@ worker never creates or approves additional contracts or amendments. Its approva
 mode remains `each`; the approved write/compute classes do not require a separate
 decision for every iteration. Asset acceptance, bug closure, arbitrary shell
 commands, deletion, Git operations, publishing and engine work are not granted.
-Generated game code runs inside an opaque frame with blocked network access.
+Generated game code runs in an opaque frame in a sandboxed, offline Chromium
+context. The runner blocks browser requests and disables WebRTC in every frame.
 
 Run settings, source snapshot, host workflow code, art direction and runtime identities are bound to
 the reviewed packet. Existing project file names are preserved; new files and

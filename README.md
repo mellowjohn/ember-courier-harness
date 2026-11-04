@@ -166,7 +166,7 @@ These features use optional Node, Playwright and Chromium tooling; [setup instru
 
 ## Local data and credit limits
 
-Choose a projects folder when creating a session; Ember remembers it after restart. **Project folder → Save approved project as…** prepares a reviewed copy in another location. Sessions, approvals, captures and evidence stay under ignored **`.harness/`** paths; project files use their saved location. See [local project locations](docs/LOCAL_UI.md). Game previews use an opaque-origin frame with blocked network access. ZIP exports contain verified game files and a source manifest, without private session history or credentials.
+Choose a projects folder when creating a session; Ember remembers it after restart. **Project folder → Save approved project as…** prepares a reviewed copy in another location. Sessions, approvals, captures and evidence stay under ignored **`.harness/`** paths; project files use their saved location. See [local project locations](docs/LOCAL_UI.md). Game previews isolate project scripts from the app and its private API. ZIP exports contain verified game files and a source manifest, without private session history or credentials. See [preview restrictions](docs/CHAT_BUILDS.md).
 
 Live requests use the connection selected in **Muse settings**. Ember keeps a shared local $150 safety ceiling with bounded reservations and conservative holds for uncertain usage. Your subscription allowance and promotional balance are managed by Meta. Running saved gameplay checks, trying proposals, restoring versions and exporting ZIPs do not call Muse. See [models and credits](docs/MODELS_AND_CREDITS.md).
 

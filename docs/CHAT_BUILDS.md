@@ -147,10 +147,12 @@ and an elapsed timer. Asset reference IDs are omitted from that display. Expand
 timestamped history; polling preserves the expanded view.
 
 After approval and completion, **Open prototype preview** renders the verified
-`index.html` in an iframe with scripts allowed, an opaque origin, and a restrictive
-content policy blocking network access and external resources. Previewing does
-not expose the parent chat or its private API token to generated code. Reviewed
-local scripts and styles are embedded as data URLs; no file server is exposed.
+`index.html` in an iframe with scripts allowed and an opaque origin. The preview
+isolates project code from the parent chat, its storage and the private API token.
+Its content policy restricts external resources, and the game frame disables
+WebRTC. Browser previews can still have network paths through nested documents,
+so use trusted project code when you need to keep project data private. Reviewed
+local scripts and styles are embedded as data URLs.
 The preview opens the index page only. Modules, dynamic imports, local fetches,
 CSS imports, multipage navigation and packages are outside this build target.
 

@@ -4,6 +4,18 @@ const path = require('node:path');
 
 module.exports = async function checkLibrary(page, view) {
   await page.locator('#chat-send:not([disabled])').waitFor();
+  await page.evaluate(() => {
+    const frame = prototypeFrame(document.body, 'Preview isolation test');
+    frame.id = 'preview-isolation-test';
+    frame.srcdoc = previewDocument(`<body><script>
+      let canReadApp = true;
+      try { void parent.sessionStorage.length; } catch { canReadApp = false; }
+      document.body.dataset.isolated = String(!canReadApp && typeof RTCPeerConnection === 'undefined' &&
+        !Object.getOwnPropertyDescriptor(window, 'RTCPeerConnection').configurable);
+    </script></body>`);
+  });
+  await page.frameLocator('#preview-isolation-test').locator('body[data-isolated=true]').waitFor({state:'attached'});
+  await page.locator('#preview-isolation-test').evaluate(frame => frame.remove());
   assert.equal(await page.locator('#conversation-history #known-assets').count(), 0);
   await view('assets');
   assert.equal(await page.locator('#workspace-tools #known-assets').count(), 1);

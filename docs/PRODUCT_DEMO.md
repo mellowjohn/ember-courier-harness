@@ -98,7 +98,7 @@ Prepare dependency wheels for the same Python version and platform used for
 the check (this download needs network access):
 
 ```powershell
-py -3.12 -m pip download --only-binary=:all: --dest .harness/clean-install-wheelhouse "jsonschema>=4.26,<5" "Pillow>=12.1,<13" "setuptools>=68"
+py -3.12 -m pip download --only-binary=:all: --dest .harness/clean-install-wheelhouse "jsonschema>=4.26,<5" "Pillow>=13,<14" "setuptools>=77"
 py -3.12 tools/clean_install_check.py --wheelhouse .harness/clean-install-wheelhouse
 ```
 

@@ -31,6 +31,7 @@ def check_install(root):
          'from ember_harness.local_ui import App, server; '
          'from importlib.resources import files; '
          'assert files("ember_harness").joinpath("ui.html").is_file(); '
+         'assert files("ember_harness").joinpath("preview_document.js").is_file(); '
          'print("Ember app: ready")'], root)
     run([python, '-c',
          'from ember_harness.muse_chat import installed_binary; '

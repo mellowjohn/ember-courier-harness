@@ -511,7 +511,7 @@ def run_request(root, folder, captures, prompt, request_id, *, binary, output_sc
         raw = Path(value).read_bytes()
         if len(pictures) >= 4 or len(raw) > 4 * 1024 * 1024:
             raise ValueError('At most four bounded PNG screenshots may be attached')
-        with Image.open(io.BytesIO(raw)) as picture:
+        with Image.open(io.BytesIO(raw), formats=['PNG']) as picture:
             if picture.format != 'PNG' or picture.width * picture.height > 4_000_000:
                 raise ValueError('A bounded PNG screenshot is required')
             picture.verify()

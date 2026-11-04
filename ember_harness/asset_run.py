@@ -253,9 +253,9 @@ class Worker(task_run.Worker):
             artifacts=self.produce(slug,row['design'],'concepts/'+slug)
             output=self.work/'concepts'/slug/'export'
             for kind,y in [('hero',0),('impact',250)]:
-                with Image.open(output/(kind+'.png')) as image:
+                with Image.open(output/(kind+'.png'), formats=['PNG']) as image:
                     image.verify()
-                with Image.open(output/(kind+'.png')) as image:
+                with Image.open(output/(kind+'.png'), formats=['PNG']) as image:
                     board.paste(image.convert('RGB').resize((332,250)),((i-1)*342,y))
             x=(i-1)*342;draw.text((x+8,516),row['title'],fill='white')
             for n,color in enumerate(row['design']['palette']): draw.rectangle((x+8+n*105,548,x+105+n*105,585),fill=color)

@@ -147,11 +147,11 @@ class Assets:
                 raise ValueError('candidate differs from manifest hash')
             with warnings.catch_warnings():
                 warnings.simplefilter('error', Image.DecompressionBombWarning)
-                with Image.open(BytesIO(data)) as image:
+                with Image.open(BytesIO(data), formats=['PNG']) as image:
                     if image.format != 'PNG' or image.width * image.height > 16_777_216 or getattr(image, 'n_frames', 1) != 1:
                         raise ValueError('single PNG within pixel limit required')
                     image.verify()
-                with Image.open(BytesIO(data)) as image:
+                with Image.open(BytesIO(data), formats=['PNG']) as image:
                     image.load()
                     if v.get('target') and list(image.size) != v['target']:
                         raise ValueError('candidate dimensions differ from declared target')

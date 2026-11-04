@@ -30,7 +30,7 @@
 @media(max-width:620px){.brief-grid{grid-template-columns:minmax(0,1fr)}.heading>div{max-width:100%}.heading .actions{margin-top:5px}.heading .button{font-size:11px}.conversation-scroll{padding:16px}.conversation-heading{padding:14px 16px}.preview-column iframe{height:360px!important}.composer select{max-width:140px}.game-toolbar .button{font-size:11px}.playtest-area .button{margin-right:0}#workspace-tools .button{max-width:100%;white-space:normal}.tool-heading .button{font-size:12px;padding:7px}}
 .voice-input{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.voice-input small{flex:1;min-width:160px;font-size:11px}.voice-input.listening .voice-button{border-color:var(--accent);color:var(--accent)}.fix-steps{list-style:none;padding:0;margin:18px 0;display:grid;gap:10px}.fix-steps li{display:flex;gap:10px;align-items:center;color:var(--ink-muted);font-size:12px}.fix-steps li::before{content:'';width:9px;height:9px;border-radius:50%;border:1px solid #69816f;flex:none}.fix-steps li[data-state=done]::before{background:#8cc59d;border-color:#8cc59d}.fix-steps li[data-state=current]{color:var(--accent-soft)}.fix-steps li[data-state=current]::before{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px #f4af7318}.fix-evidence{border-left:2px solid #668b70;padding-left:12px;font-size:12px}.fix-evidence p{margin:5px 0}
 .topbar-actions{display:flex;align-items:center;gap:10px}.topbar-actions .button{padding:5px 9px}.muse-confirm{display:flex;align-items:flex-start;gap:8px}.muse-confirm input{width:auto;margin-top:4px}
-</style><link rel="stylesheet" href="/ui-library.css"><script src="/ui-library.js"></script><script src="/voice-input.js"></script></head><body>
+</style><link rel="stylesheet" href="/ui-library.css"><script src="/ui-library.js"></script><script src="/voice-input.js"></script><script src="/preview-document.js"></script></head><body>
 <div class="layout"><aside class="sidebar" aria-label="Sessions">
 <div class="logo"><span class="mark" aria-hidden="true">◈</span><div><strong>Ember Harness</strong><small>GAME CREATION STUDIO</small></div></div>
 <button id="new-session" class="new-button primary" disabled><span aria-hidden="true">＋</span>New session</button>
@@ -1736,7 +1736,6 @@ window.addEventListener('message', event=>{
   state.observations.push({kind:data.kind,message:data.message.slice(0,300)});
   state.observed.textContent=state.observations.map(item=>item.message).join('\n');
 });
-function previewDocument(html){return '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\' data:; style-src \'unsafe-inline\' data:; img-src data:; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'">'+html;}
 function prototypeFrame(parent,title){
   const frame=el('iframe',undefined,parent);frame.title=title;frame.setAttribute('sandbox','allow-scripts');
   frame.referrerPolicy='no-referrer';frame.style.cssText='width:100%;height:480px;border:1px solid #49604e;border-radius:8px;margin-top:20px;background:white';
